@@ -198,21 +198,6 @@ export default function HomePage() {
             </Reveal>
           </div>
         </div>
-
-        {/* marquee strip */}
-        <div className="relative border-y border-slate-100 bg-white/60 overflow-hidden">
-          <div className="flex gap-12 py-3 animate-marquee whitespace-nowrap">
-            {[...Array(2)].map((_, k) => (
-              <div key={k} className="flex gap-12 shrink-0">
-                {['Amazon', 'Flipkart', 'Myntra', 'Nykaa', 'Swiggy', 'Zomato', 'BookMyShow', 'MakeMyTrip', 'Netflix', 'Uber'].map((b) => (
-                  <span key={b} className="font-display text-lg font-bold text-slate-300 tracking-tight">
-                    {b}
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
       </section>
 
       {/* ===== OCCASIONS SLIDER ===== */}

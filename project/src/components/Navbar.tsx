@@ -287,19 +287,19 @@ export default function Navbar() {
           {/* Search (desktop) */}
           <form
             onSubmit={submitSearch}
-            className="hidden md:flex items-center flex-1 max-w-xs relative"
+            className="hidden md:flex items-center flex-1 max-w-2xl relative ml-2"
           >
-            <Search className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400" />
+            <Search className="pointer-events-none absolute left-4 h-4 w-4 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search brands…"
-              className="w-full rounded-full border border-slate-200 bg-white/80 pl-9 pr-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none transition"
+              className="w-full rounded-full border border-slate-200 bg-white/80 pl-11 pr-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none transition"
             />
           </form>
 
           {/* Desktop nav */}
-          <div className="hidden lg:flex items-center gap-1">
+          <div className="hidden lg:flex items-center gap-1 shrink-0">
             {navLinks.map((l) => (
               <NavLink
                 key={l.to}
