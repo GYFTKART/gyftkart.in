@@ -1,0 +1,497 @@
+import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import {
+  Search,
+  Sparkles,
+  Gift,
+  Cake,
+  Heart,
+  PartyPopper,
+  Star,
+  ShieldCheck,
+  Zap,
+  Clock,
+  ArrowRight,
+  TrendingUp,
+  Quote,
+  Smartphone,
+  CreditCard,
+  Mail,
+} from 'lucide-react';
+import Reveal from '@/components/Reveal';
+import CategorySlider from '@/components/CategorySlider';
+import BrandCard from '@/components/BrandCard';
+import { useBrands } from '@/lib/useBrands';
+import { useToast } from '@/components/Toast';
+
+const occasions = [
+  { name: 'Birthday', icon: Cake, color: 'from-pink-500 to-rose-600', search: 'Birthday' },
+  { name: 'Wedding', icon: Heart, color: 'from-rose-500 to-red-600', search: 'Wedding' },
+  { name: 'Festivals', icon: PartyPopper, color: 'from-amber-500 to-orange-600', search: 'Festival' },
+  { name: 'Anniversary', icon: Heart, color: 'from-fuchsia-500 to-purple-600', search: 'Anniversary' },
+  { name: 'Thank You', icon: Sparkles, color: 'from-brand-500 to-brand-700', search: 'Thank You' },
+  { name: 'Congrats', icon: PartyPopper, color: 'from-emerald-500 to-teal-600', search: 'Congrats' },
+];
+
+const features = [
+  { icon: Zap, title: 'Instant delivery', text: 'Gift cards land in the recipient inbox within seconds of checkout.' },
+  { icon: ShieldCheck, title: '100% secure', text: 'Bank-grade encryption and a verified payment gateway on every order.' },
+  { icon: CreditCard, title: '200+ brands', text: 'From Amazon to Nykaa — one marketplace, every favourite brand.' },
+  { icon: Smartphone, title: 'Shop on the go', text: 'A gorgeous mobile-first experience that works on any device.' },
+];
+
+const steps = [
+  { icon: Search, title: 'Pick a brand', text: 'Browse 200+ premium brands and pick the one they love.' },
+  { icon: Gift, title: 'Customise it', text: 'Choose an amount, add a recipient and write a personal note.' },
+  { icon: CreditCard, title: 'Pay securely', text: 'Checkout in seconds with our Razorpay-style secure gateway.' },
+  { icon: Mail, title: 'Send instantly', text: 'The gift card lands in their inbox the moment you pay.' },
+];
+
+const testimonials = [
+  { name: 'Aarav Mehta', role: 'Bengaluru', text: 'Sent an Amazon gift card to my sister in 30 seconds. The personalisation and animations felt so premium!' },
+  { name: 'Priya Nair', role: 'Mumbai', text: 'I use GyftKart for every birthday in the family. The occasion themes are beautiful and delivery is instant.' },
+  { name: 'Rohan Gupta', role: 'Delhi', text: 'Corporate gifting for 120 employees was effortless. Bulk orders, branded cards, done in a day.' },
+];
+
+const stats = [
+  { value: '200+', label: 'Top brands' },
+  { value: '4.9', label: 'Avg. rating' },
+  { value: '5M+', label: 'Gift cards sent' },
+  { value: '24/7', label: 'Support' },
+];
+
+export default function HomePage() {
+  const { brands, loading } = useBrands();
+  const navigate = useNavigate();
+  const { push } = useToast();
+  const [query, setQuery] = useState('');
+
+  const trending = brands.filter((b) => b.trending).slice(0, 8);
+  const popular = brands.slice(0, 12);
+
+  const onSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) {
+      push('Type a brand name to search', 'info');
+      return;
+    }
+    navigate(`/brands?q=${encodeURIComponent(query.trim())}`);
+  };
+
+  return (
+    <div className="pt-16">
+      {/* ===== HERO ===== */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 via-white to-white">
+        <div className="absolute inset-0 bg-grid opacity-60 pointer-events-none" />
+        <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full bg-brand-300/30 blur-3xl pointer-events-none" />
+        <div className="absolute top-20 -right-24 h-96 w-96 rounded-full bg-gold-200/40 blur-3xl pointer-events-none" />
+
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-16 pb-20 lg:pt-24">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Left copy */}
+            <Reveal>
+              <span className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/70 px-4 py-1.5 text-xs font-semibold text-brand-700 shadow-soft">
+                <Sparkles className="h-3.5 w-3.5" />
+                India's premium gift card marketplace
+              </span>
+              <h1 className="mt-5 font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.05] text-slate-900">
+                The perfect gift,<br />
+                <span className="text-gradient">delivered in seconds.</span>
+              </h1>
+              <p className="mt-5 text-lg text-slate-600 max-w-lg leading-relaxed">
+                Send personalised e-gift cards from 200+ top brands. Pick an amount,
+                add a message, and make someone's day — for birthdays, weddings,
+                festivals and everything in between.
+              </p>
+
+              {/* Search */}
+              <form
+                onSubmit={onSearch}
+                className="mt-7 flex items-center gap-2 rounded-2xl bg-white p-2 shadow-card border border-slate-100 max-w-lg"
+              >
+                <Search className="ml-2 h-5 w-5 text-slate-400 shrink-0" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search Amazon, Myntra, Swiggy…"
+                  className="flex-1 bg-transparent text-sm sm:text-base text-slate-700 placeholder:text-slate-400 outline-none py-2"
+                />
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 px-4 sm:px-5 py-2.5 text-sm font-semibold text-white hover:shadow-glow-sm transition-shadow"
+                >
+                  Search <ArrowRight className="h-4 w-4" />
+                </button>
+              </form>
+
+              {/* quick chips */}
+              <div className="mt-4 flex flex-wrap gap-2">
+                {['Amazon', 'Flipkart', 'Myntra', 'Nykaa', 'Swiggy'].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => navigate(`/brands?q=${encodeURIComponent(q)}`)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:text-brand-700 transition-colors"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+
+              {/* stats */}
+              <div className="mt-9 grid grid-cols-4 gap-3 max-w-lg">
+                {stats.map((s) => (
+                  <div key={s.label} className="text-center sm:text-left">
+                    <p className="font-display text-xl sm:text-2xl font-extrabold text-slate-900">
+                      {s.value}
+                    </p>
+                    <p className="text-[11px] sm:text-xs text-slate-500">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+
+            {/* Right visual */}
+            <Reveal delay={150} className="relative">
+              <div className="relative mx-auto max-w-md">
+                {/* main gift card */}
+                <div className="relative rounded-[28px] bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 p-7 shadow-glow text-white overflow-hidden animate-float">
+                  <div className="absolute -top-16 -right-16 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+                  <div className="absolute -bottom-20 -left-10 h-48 w-48 rounded-full bg-gold-300/20 blur-3xl" />
+                  <div className="relative flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/15 rounded-full px-3 py-1">
+                      <Gift className="h-3.5 w-3.5" /> GyftKart Card
+                    </span>
+                    <span className="font-display text-sm font-bold tracking-wider">GYFTKART</span>
+                  </div>
+                  <div className="relative mt-10">
+                    <p className="text-white/70 text-xs">Value</p>
+                    <p className="font-display text-4xl font-extrabold">₹2,500</p>
+                  </div>
+                  <div className="relative mt-8 flex items-center justify-between text-sm">
+                    <span className="font-mono tracking-widest text-white/80">•••• 4291</span>
+                    <span className="font-semibold">Valid 12 mo</span>
+                  </div>
+                </div>
+
+                {/* floating mini card */}
+                <div className="absolute -bottom-8 -left-6 w-40 rounded-2xl bg-gradient-to-br from-gold-400 to-gold-600 p-4 text-gold-950 shadow-card animate-float-rev rotate-[-6deg]">
+                  <p className="text-[10px] font-bold uppercase tracking-wider">Myntra</p>
+                  <p className="font-display text-xl font-extrabold mt-1">₹1,000</p>
+                  <div className="mt-2 h-1.5 w-full rounded-full bg-gold-900/30" />
+                </div>
+
+                {/* floating badge */}
+                <div className="absolute -top-5 -right-3 rounded-2xl bg-white px-3 py-2 shadow-card animate-float rotate-[5deg]">
+                  <p className="flex items-center gap-1 text-xs font-bold text-emerald-600">
+                    <Zap className="h-3.5 w-3.5" /> Delivered!
+                  </p>
+                  <p className="text-[10px] text-slate-400">in 2.4 seconds</p>
+                </div>
+
+                {/* floating stars */}
+                <div className="absolute top-1/2 -right-8 hidden sm:flex flex-col gap-1 text-gold-500 animate-float">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star key={i} className="h-4 w-4 fill-gold-400" />
+                  ))}
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+
+        {/* marquee strip */}
+        <div className="relative border-y border-slate-100 bg-white/60 overflow-hidden">
+          <div className="flex gap-12 py-3 animate-marquee whitespace-nowrap">
+            {[...Array(2)].map((_, k) => (
+              <div key={k} className="flex gap-12 shrink-0">
+                {['Amazon', 'Flipkart', 'Myntra', 'Nykaa', 'Swiggy', 'Zomato', 'BookMyShow', 'MakeMyTrip', 'Netflix', 'Uber'].map((b) => (
+                  <span key={b} className="font-display text-lg font-bold text-slate-300 tracking-tight">
+                    {b}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== OCCASIONS SLIDER ===== */}
+      <section className="pt-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="text-center max-w-2xl mx-auto">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-700">
+              <Sparkles className="h-3.5 w-3.5" /> Shop by occasion
+            </span>
+            <h2 className="mt-3 font-display text-3xl sm:text-4xl font-bold text-slate-900">
+              For every celebration
+            </h2>
+            <p className="mt-2 text-slate-500">
+              Beautifully themed gift cards for the moments that matter most.
+            </p>
+          </Reveal>
+        </div>
+
+        <div className="mt-8">
+          <CategorySlider
+            title=""
+            subtitle=""
+            icon={null}
+          >
+            {occasions.map((o) => (
+              <Link
+                key={o.name}
+                to={`/brands?occasion=${encodeURIComponent(o.search)}`}
+                className={`group relative block w-60 h-44 rounded-3xl bg-gradient-to-br ${o.color} p-6 text-white shadow-card hover:shadow-card-hover hover:-translate-y-1.5 transition-all duration-500 overflow-hidden`}
+              >
+                <div className="absolute -top-8 -right-8 h-24 w-24 rounded-full bg-white/15 blur-2xl group-hover:scale-150 transition-transform duration-700" />
+                <o.icon className="h-9 w-9 drop-shadow" />
+                <div className="absolute bottom-5 left-5 right-5">
+                  <p className="font-display text-2xl font-extrabold">{o.name}</p>
+                  <p className="text-sm text-white/80 mt-0.5 flex items-center gap-1">
+                    Explore cards <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </CategorySlider>
+        </div>
+      </section>
+
+      {/* ===== TRENDING BRANDS ===== */}
+      <section className="py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+            <div className="flex items-center gap-3">
+              <span className="grid place-items-center h-12 w-12 rounded-2xl bg-brand-100 text-brand-700">
+                <TrendingUp className="h-6 w-6" />
+              </span>
+              <div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-gold-100 px-3 py-0.5 text-[11px] font-bold text-gold-700">
+                  <Sparkles className="h-3 w-3" /> Hot right now
+                </span>
+                <h2 className="mt-1.5 font-display text-3xl sm:text-4xl font-bold text-slate-900">
+                  Trending brands
+                </h2>
+              </div>
+            </div>
+            <Link
+              to="/brands"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-800 group"
+            >
+              View all brands
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </Link>
+          </Reveal>
+
+          {loading ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="rounded-3xl overflow-hidden border border-slate-100">
+                  <div className="h-44 shimmer" />
+                  <div className="p-4 space-y-2">
+                    <div className="h-4 w-20 shimmer rounded" />
+                    <div className="h-6 w-28 shimmer rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+              {trending.map((brand, i) => (
+                <Reveal key={brand.id} delay={i * 60}>
+                  <BrandCard brand={brand} />
+                </Reveal>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ===== FEATURES ===== */}
+      <section className="py-12 bg-gradient-to-b from-white to-brand-50/50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {features.map((f, i) => (
+              <Reveal key={f.title} delay={i * 80}>
+                <div className="group h-full rounded-3xl border border-slate-100 bg-white p-6 shadow-soft hover:shadow-card hover:-translate-y-1 transition-all duration-400">
+                  <span className="grid place-items-center h-12 w-12 rounded-2xl bg-brand-600 text-white shadow-glow-sm group-hover:scale-110 transition-transform">
+                    <f.icon className="h-6 w-6" />
+                  </span>
+                  <h3 className="mt-4 font-display text-lg font-bold text-slate-900">{f.title}</h3>
+                  <p className="mt-1.5 text-sm text-slate-500 leading-relaxed">{f.text}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== POPULAR BRANDS STRIP ===== */}
+      <section className="py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="text-center max-w-2xl mx-auto mb-10">
+            <h2 className="font-display text-3xl sm:text-4xl font-bold text-slate-900">
+              More brands you'll love
+            </h2>
+            <p className="mt-2 text-slate-500">
+              Browse the full catalogue — shopping, fashion, food, travel and more.
+            </p>
+          </Reveal>
+
+          {loading ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="h-24 rounded-2xl shimmer" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+              {popular.map((b, i) => (
+                <Reveal key={b.id} delay={i * 40}>
+                  <Link
+                    to={`/brand/${b.slug}`}
+                    className="group flex flex-col items-center justify-center gap-2 rounded-2xl border border-slate-100 bg-white p-4 h-24 shadow-soft hover:shadow-card hover:border-brand-200 transition-all duration-300"
+                  >
+                    <span
+                      className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-display font-extrabold text-xs shadow-soft transition-transform group-hover:scale-110"
+                      style={{ background: `linear-gradient(135deg, ${b.color}, ${b.color2})` }}
+                    >
+                      {b.name.slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-600 group-hover:text-brand-700 text-center leading-tight">
+                      {b.name}
+                    </span>
+                  </Link>
+                </Reveal>
+              ))}
+            </div>
+          )}
+          <div className="mt-8 text-center">
+            <Link
+              to="/brands"
+              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
+            >
+              Explore all brands <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== HOW IT WORKS ===== */}
+      <section className="py-16 bg-brand-950 text-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-grid opacity-[0.08] pointer-events-none" />
+        <div className="absolute -top-24 right-10 h-72 w-72 rounded-full bg-brand-600/40 blur-3xl pointer-events-none" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="text-center max-w-2xl mx-auto mb-12">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-brand-200">
+              <Clock className="h-3.5 w-3.5" /> Takes under a minute
+            </span>
+            <h2 className="mt-3 font-display text-3xl sm:text-4xl font-bold">
+              Gifting, made effortless
+            </h2>
+            <p className="mt-2 text-brand-200">
+              Four simple steps from thought to thoughtful.
+            </p>
+          </Reveal>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {steps.map((s, i) => (
+              <Reveal key={s.title} delay={i * 90}>
+                <div className="relative rounded-3xl bg-white/5 border border-white/10 p-6 backdrop-blur-sm h-full">
+                  <span className="absolute -top-3 -right-3 grid place-items-center h-8 w-8 rounded-full bg-gold-400 text-gold-950 font-display font-extrabold text-sm">
+                    {i + 1}
+                  </span>
+                  <span className="grid place-items-center h-12 w-12 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-glow-sm">
+                    <s.icon className="h-6 w-6" />
+                  </span>
+                  <h3 className="mt-4 font-display text-lg font-bold">{s.title}</h3>
+                  <p className="mt-1.5 text-sm text-brand-200 leading-relaxed">{s.text}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== TESTIMONIALS ===== */}
+      <section className="py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="text-center max-w-2xl mx-auto mb-10">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gold-100 px-3 py-1 text-xs font-bold text-gold-700">
+              <Star className="h-3.5 w-3.5 fill-gold-500 text-gold-500" /> Loved by givers
+            </span>
+            <h2 className="mt-3 font-display text-3xl sm:text-4xl font-bold text-slate-900">
+              What our customers say
+            </h2>
+          </Reveal>
+
+          <div className="grid md:grid-cols-3 gap-5">
+            {testimonials.map((t, i) => (
+              <Reveal key={t.name} delay={i * 90}>
+                <figure className="h-full rounded-3xl border border-slate-100 bg-white p-6 shadow-soft hover:shadow-card transition-shadow">
+                  <Quote className="h-8 w-8 text-brand-200" />
+                  <blockquote className="mt-3 text-sm text-slate-700 leading-relaxed">
+                    "{t.text}"
+                  </blockquote>
+                  <div className="mt-5 flex items-center gap-3">
+                    <span className="grid place-items-center h-11 w-11 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white font-display font-bold">
+                      {t.name.charAt(0)}
+                    </span>
+                    <figcaption>
+                      <p className="font-semibold text-slate-900 text-sm">{t.name}</p>
+                      <p className="text-xs text-slate-500">{t.role}</p>
+                    </figcaption>
+                    <span className="ml-auto flex gap-0.5 text-gold-500">
+                      {Array.from({ length: 5 }).map((_, k) => (
+                        <Star key={k} className="h-3.5 w-3.5 fill-gold-400" />
+                      ))}
+                    </span>
+                  </div>
+                </figure>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== CTA ===== */}
+      <section className="py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="relative overflow-hidden rounded-[36px] bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 px-6 py-14 sm:px-14 sm:py-20 text-white text-center shadow-glow">
+              <div className="absolute inset-0 bg-grid opacity-[0.12] pointer-events-none" />
+              <div className="absolute -top-20 -left-10 h-60 w-60 rounded-full bg-gold-300/20 blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-24 -right-10 h-72 w-72 rounded-full bg-brand-400/30 blur-3xl pointer-events-none" />
+              <div className="relative">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-1.5 text-xs font-semibold">
+                  <Gift className="h-4 w-4" /> Ready when you are
+                </span>
+                <h2 className="mt-5 font-display text-3xl sm:text-5xl font-extrabold leading-tight max-w-3xl mx-auto">
+                  Make someone's day with a gift they actually want.
+                </h2>
+                <p className="mt-4 text-brand-100 max-w-xl mx-auto">
+                  No more last-minute panic. Pick a brand, personalise it, and send a
+                  beautiful e-gift card in under 60 seconds.
+                </p>
+                <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                  <Link
+                    to="/brands"
+                    className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-bold text-brand-700 hover:bg-brand-50 transition-colors shadow-card"
+                  >
+                    Start gifting <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    to="/corporate"
+                    className="inline-flex items-center gap-2 rounded-full bg-white/10 border border-white/30 px-6 py-3.5 text-sm font-bold text-white hover:bg-white/20 transition-colors"
+                  >
+                    Corporate gifting
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+    </div>
+  );
+}

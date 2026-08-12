@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-white text-slate-800 font-sans antialiased;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3, h4, h5 {
+    @apply font-display;
+    letter-spacing: -0.02em;
+  }
+  ::selection {
+    @apply bg-brand-300/60 text-brand-950;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(120deg, #7e22ce, #a855f7, #c084fc, #7e22ce);
+    background-size: 220% 220%;
+    animation: gradient 8s ease infinite;
+  }
+
+  .bg-grid {
+    background-image: linear-gradient(to right, rgba(147, 51, 234, 0.07) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(147, 51, 234, 0.07) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+  }
+
+  .glass-dark {
+    background: rgba(30, 12, 51, 0.55);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(243, 232, 255, 0.4) 0px,
+      rgba(243, 232, 255, 0.9) 200px,
+      rgba(243, 232, 255, 0.4) 400px
+    );
+    background-size: 700px 100%;
+    @apply animate-shimmer;
+  }
+
+  .scroll-snap-x {
+    scroll-snap-type: x mandatory;
+  }
+  .snap-start {
+    scroll-snap-align: start;
+  }
+
+  .card-3d {
+    transform-style: preserve-3d;
+    perspective: 1000px;
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #f5f3ff;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #c084fc, #9333ea);
+  border-radius: 999px;
+  border: 2px solid #f5f3ff;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #a855f7, #7e22ce);
+}

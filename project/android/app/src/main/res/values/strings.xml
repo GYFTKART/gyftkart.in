@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GyftKart</string>
+    <string name="title_activity_main">GyftKart</string>
+    <string name="package_name">com.gyftkart.app</string>
+    <string name="custom_url_scheme">com.gyftkart.app</string>
+</resources>
