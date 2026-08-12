@@ -4,6 +4,7 @@ import { CartProvider } from '@/context/CartContext';
 import { CustomerAuthProvider } from '@/context/CustomerAuthContext';
 import { ToastProvider } from '@/components/Toast';
 import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthContext';
+import { useAuth } from '@/context/CustomerAuthContext';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import HomePage from '@/pages/HomePage';
@@ -34,6 +35,14 @@ function ProtectedAdminRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+// Guards customer-only pages (like /dashboard). Unauthenticated visitors
+// are bounced to the homepage instead of seeing the protected page.
+function ProtectedCustomerRoute({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
+  if (!session) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   const { pathname } = useLocation();
   const isAdmin = pathname.startsWith('/admin');
@@ -61,7 +70,14 @@ export default function App() {
               <Route path="/brands" element={<BrandsPage />} />
               <Route path="/brand/:slug" element={<BrandProductPage />} />
               <Route path="/corporate" element={<CorporatePage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedCustomerRoute>
+                    <DashboardPage />
+                  </ProtectedCustomerRoute>
+                }
+              />
               <Route path="/cart" element={<CartPage />} />
               <Route path="/checkout" element={<CheckoutPage />} />
               <Route path="/profile" element={<ProfilePage />} />

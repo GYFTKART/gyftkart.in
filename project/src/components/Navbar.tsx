@@ -30,13 +30,11 @@ import { useAuth } from '@/context/CustomerAuthContext';
 const navLinks = [
   { to: '/brands', label: 'Brands' },
   { to: '/corporate', label: 'Corporate' },
-  { to: '/dashboard', label: 'Dashboard' },
 ];
 
 const navIcons: Record<string, typeof Gift> = {
   '/brands': Search,
   '/corporate': Building2,
-  '/dashboard': LayoutDashboard,
 };
 
 type AuthMode = 'login' | 'signup' | 'forgot';
@@ -243,6 +241,12 @@ export default function Navbar() {
     setForgotSent(true);
   };
 
+  const goToDashboard = () => {
+    setUserMenuOpen(false);
+    setMobileOpen(false);
+    navigate('/dashboard');
+  };
+
   const goToProfile = () => {
     setUserMenuOpen(false);
     setMobileOpen(false);
@@ -344,18 +348,25 @@ export default function Navbar() {
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-card animate-pop">
                     <button
+                      onClick={goToDashboard}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <LayoutDashboard className="h-4 w-4" />
+                      Dashboard
+                    </button>
+                    <button
                       onClick={goToProfile}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                     >
                       <UserCircle className="h-4 w-4" />
-                      My Account
+                      Profile
                     </button>
                     <button
                       onClick={goToOrders}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                     >
                       <Package className="h-4 w-4" />
-                      My Orders
+                      Orders
                     </button>
                     <button
                       onClick={handleLogout}
@@ -391,13 +402,6 @@ export default function Navbar() {
                 </span>
               )}
             </button>
-            <Link
-              to="/brands"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-glow-sm hover:shadow-glow transition-shadow"
-            >
-              <Sparkles className="h-4 w-4" />
-              Send a gift
-            </Link>
             <button
               onClick={() => setMobileOpen((v) => !v)}
               className="lg:hidden grid place-items-center h-10 w-10 rounded-full hover:bg-brand-50 text-slate-700 transition-colors"
@@ -459,18 +463,25 @@ export default function Navbar() {
                 </div>
               </div>
               <button
+                onClick={goToDashboard}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Dashboard
+              </button>
+              <button
                 onClick={goToProfile}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 <UserCircle className="h-4 w-4" />
-                My Account
+                Profile
               </button>
               <button
                 onClick={goToOrders}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 <Package className="h-4 w-4" />
-                My Orders
+                Orders
               </button>
               <button
                 onClick={() => {
@@ -501,15 +512,6 @@ export default function Navbar() {
               </button>
             </div>
           )}
-
-          <Link
-            to="/brands"
-            onClick={() => setMobileOpen(false)}
-            className="mt-2 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-3 text-sm font-semibold text-white"
-          >
-            <Sparkles className="h-4 w-4" />
-            Send a gift
-          </Link>
         </div>
       </div>
 
