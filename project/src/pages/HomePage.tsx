@@ -17,7 +17,6 @@ import {
   Smartphone,
   CreditCard,
   Mail,
-  SlidersHorizontal,
   ShoppingBag,
   ChevronLeft,
   ChevronRight,
@@ -92,20 +91,8 @@ export default function HomePage() {
       <HeroBanner />
 
       {/* ===== SHOP BY CATEGORY ===== */}
-      <section className="py-16 bg-gradient-to-b from-brand-50/40 to-white">
+      <section className="pt-4 pb-16 bg-gradient-to-b from-brand-50/40 to-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Reveal className="text-center max-w-2xl mx-auto mb-8">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-700">
-              <SlidersHorizontal className="h-3.5 w-3.5" /> Shop by category
-            </span>
-            <h2 className="mt-3 font-display text-3xl sm:text-4xl font-bold text-slate-900">
-              Find gift cards by category
-            </h2>
-            <p className="mt-2 text-slate-500">
-              Filter by what they love — from shopping to travel.
-            </p>
-          </Reveal>
-
           {/* Category pills */}
           <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
             {brandCategories.map((c) => {
