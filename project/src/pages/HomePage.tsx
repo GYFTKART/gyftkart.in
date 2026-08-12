@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useMemo, useRef, useState } from 'react';
 import {
   Search,
@@ -25,8 +25,8 @@ import {
 import Reveal from '@/components/Reveal';
 import CategorySlider from '@/components/CategorySlider';
 import BrandCard from '@/components/BrandCard';
+import HeroBanner from '@/components/HeroBanner';
 import { useBrands } from '@/lib/useBrands';
-import { useToast } from '@/components/Toast';
 import { getCategoryIcon } from '@/lib/categoryIcons';
 
 const brandCategories = ['All', 'Shopping', 'Fashion', 'Beauty', 'Food & Dining', 'Travel', 'Entertainment', 'Trending'];
@@ -60,18 +60,8 @@ const testimonials = [
   { name: 'Rohan Gupta', role: 'Delhi', text: 'Corporate gifting for 120 employees was effortless. Bulk orders, branded cards, done in a day.' },
 ];
 
-const stats = [
-  { value: '200+', label: 'Top brands' },
-  { value: '4.9', label: 'Avg. rating' },
-  { value: '5M+', label: 'Gift cards sent' },
-  { value: '24/7', label: 'Support' },
-];
-
 export default function HomePage() {
   const { brands, loading } = useBrands();
-  const navigate = useNavigate();
-  const { push } = useToast();
-  const [query, setQuery] = useState('');
 
   const trending = brands.filter((b) => b.trending).slice(0, 8);
   const popular = brands.slice(0, 12);
@@ -96,136 +86,10 @@ export default function HomePage() {
     el.scrollBy({ left: dir * (el.clientWidth * 0.8), behavior: 'smooth' });
   };
 
-  const onSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) {
-      push('Type a brand name to search', 'info');
-      return;
-    }
-    navigate(`/brands?q=${encodeURIComponent(query.trim())}`);
-  };
-
   return (
     <div className="pt-16">
-      {/* ===== HERO ===== */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 via-white to-white">
-        <div className="absolute inset-0 bg-grid opacity-60 pointer-events-none" />
-        <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full bg-brand-300/30 blur-3xl pointer-events-none" />
-        <div className="absolute top-20 -right-24 h-96 w-96 rounded-full bg-gold-200/40 blur-3xl pointer-events-none" />
-
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-16 pb-20 lg:pt-24">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left copy */}
-            <Reveal>
-              <span className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/70 px-4 py-1.5 text-xs font-semibold text-brand-700 shadow-soft">
-                <Sparkles className="h-3.5 w-3.5" />
-                India's premium gift card marketplace
-              </span>
-              <h1 className="mt-5 font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.05] text-slate-900">
-                The perfect gift,<br />
-                <span className="text-gradient">delivered in seconds.</span>
-              </h1>
-              <p className="mt-5 text-lg text-slate-600 max-w-lg leading-relaxed">
-                Send personalised e-gift cards from 200+ top brands. Pick an amount,
-                add a message, and make someone's day — for birthdays, weddings,
-                festivals and everything in between.
-              </p>
-
-              {/* Search */}
-              <form
-                onSubmit={onSearch}
-                className="mt-7 flex items-center gap-2 rounded-2xl bg-white p-2 shadow-card border border-slate-100 max-w-lg"
-              >
-                <Search className="ml-2 h-5 w-5 text-slate-400 shrink-0" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search Amazon, Myntra, Swiggy…"
-                  className="flex-1 bg-transparent text-sm sm:text-base text-slate-700 placeholder:text-slate-400 outline-none py-2"
-                />
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 px-4 sm:px-5 py-2.5 text-sm font-semibold text-white hover:shadow-glow-sm transition-shadow"
-                >
-                  Search <ArrowRight className="h-4 w-4" />
-                </button>
-              </form>
-
-              {/* quick chips */}
-              <div className="mt-4 flex flex-wrap gap-2">
-                {['Amazon', 'Flipkart', 'Myntra', 'Nykaa', 'Swiggy'].map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => navigate(`/brands?q=${encodeURIComponent(q)}`)}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:text-brand-700 transition-colors"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-
-              {/* stats */}
-              <div className="mt-9 grid grid-cols-4 gap-3 max-w-lg">
-                {stats.map((s) => (
-                  <div key={s.label} className="text-center sm:text-left">
-                    <p className="font-display text-xl sm:text-2xl font-extrabold text-slate-900">
-                      {s.value}
-                    </p>
-                    <p className="text-[11px] sm:text-xs text-slate-500">{s.label}</p>
-                  </div>
-                ))}
-              </div>
-            </Reveal>
-
-            {/* Right visual */}
-            <Reveal delay={150} className="relative">
-              <div className="relative mx-auto max-w-md">
-                {/* main gift card */}
-                <div className="relative rounded-[28px] bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 p-7 shadow-glow text-white overflow-hidden animate-float">
-                  <div className="absolute -top-16 -right-16 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
-                  <div className="absolute -bottom-20 -left-10 h-48 w-48 rounded-full bg-gold-300/20 blur-3xl" />
-                  <div className="relative flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/15 rounded-full px-3 py-1">
-                      <Gift className="h-3.5 w-3.5" /> GyftKart Card
-                    </span>
-                    <span className="font-display text-sm font-bold tracking-wider">GYFTKART</span>
-                  </div>
-                  <div className="relative mt-10">
-                    <p className="text-white/70 text-xs">Value</p>
-                    <p className="font-display text-4xl font-extrabold">₹2,500</p>
-                  </div>
-                  <div className="relative mt-8 flex items-center justify-between text-sm">
-                    <span className="font-mono tracking-widest text-white/80">•••• 4291</span>
-                    <span className="font-semibold">Valid 12 mo</span>
-                  </div>
-                </div>
-
-                {/* floating mini card */}
-                <div className="absolute -bottom-8 -left-6 w-40 rounded-2xl bg-gradient-to-br from-gold-400 to-gold-600 p-4 text-gold-950 shadow-card animate-float-rev rotate-[-6deg]">
-                  <p className="text-[10px] font-bold uppercase tracking-wider">Myntra</p>
-                  <p className="font-display text-xl font-extrabold mt-1">₹1,000</p>
-                  <div className="mt-2 h-1.5 w-full rounded-full bg-gold-900/30" />
-                </div>
-
-                {/* floating badge */}
-                <div className="absolute -top-5 -right-3 rounded-2xl bg-white px-3 py-2 shadow-card animate-float rotate-[5deg]">
-                  <p className="flex items-center gap-1 text-xs font-bold text-emerald-600">
-                    <Zap className="h-3.5 w-3.5" /> Delivered!
-                  </p>
-                  <p className="text-[10px] text-slate-400">in 2.4 seconds</p>
-                </div>
-
-                {/* floating stars */}
-                <div className="absolute top-1/2 -right-8 hidden sm:flex flex-col gap-1 text-gold-500 animate-float">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-gold-400" />
-                  ))}
-                </div>
-              </div>
-            </Reveal>
-          </div>
-        </div>
-      </section>
+      {/* ===== HERO BANNER ===== */}
+      <HeroBanner />
 
       {/* ===== SHOP BY CATEGORY ===== */}
       <section className="py-16 bg-gradient-to-b from-brand-50/40 to-white">
