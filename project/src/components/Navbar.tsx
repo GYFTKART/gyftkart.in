@@ -28,14 +28,12 @@ import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/CustomerAuthContext';
 
 const navLinks = [
-  { to: '/', label: 'Home' },
   { to: '/brands', label: 'Brands' },
   { to: '/corporate', label: 'Corporate' },
   { to: '/dashboard', label: 'Dashboard' },
 ];
 
 const navIcons: Record<string, typeof Gift> = {
-  '/': Gift,
   '/brands': Search,
   '/corporate': Building2,
   '/dashboard': LayoutDashboard,
@@ -276,15 +274,25 @@ export default function Navbar() {
       <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2.5 group shrink-0" onClick={() => setMobileOpen(false)}>
-            <span className="relative grid place-items-center h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glow-sm transition-transform group-hover:scale-105">
-              <Gift className="h-5 w-5" />
-              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-gold-400 ring-2 ring-white animate-pulse-glow" />
-            </span>
+          <Link to="/" className="flex items-center shrink-0" onClick={() => setMobileOpen(false)}>
             <span className="font-display text-xl font-extrabold tracking-tight text-slate-900">
               Gyft<span className="text-gradient">Kart</span>
             </span>
           </Link>
+
+          {/* Search (desktop) */}
+          <form
+            onSubmit={submitSearch}
+            className="hidden md:flex items-center flex-1 max-w-xs relative"
+          >
+            <Search className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search brands…"
+              className="w-full rounded-full border border-slate-200 bg-white/80 pl-9 pr-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none transition"
+            />
+          </form>
 
           {/* Desktop nav */}
           <div className="hidden lg:flex items-center gap-1">
@@ -292,7 +300,6 @@ export default function Navbar() {
               <NavLink
                 key={l.to}
                 to={l.to}
-                end={l.to === '/'}
                 className={({ isActive }) =>
                   `relative px-4 py-2 text-sm font-semibold rounded-full transition-colors ${
                     isActive
@@ -312,20 +319,6 @@ export default function Navbar() {
               </NavLink>
             ))}
           </div>
-
-          {/* Search (desktop) */}
-          <form
-            onSubmit={submitSearch}
-            className="hidden md:flex items-center flex-1 max-w-xs relative"
-          >
-            <Search className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search brands…"
-              className="w-full rounded-full border border-slate-200 bg-white/80 pl-9 pr-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none transition"
-            />
-          </form>
 
           {/* Right actions */}
           <div className="flex items-center gap-1.5">
@@ -439,7 +432,6 @@ export default function Navbar() {
                 <NavLink
                   key={l.to}
                   to={l.to}
-                  end={l.to === '/'}
                   onClick={() => setMobileOpen(false)}
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
