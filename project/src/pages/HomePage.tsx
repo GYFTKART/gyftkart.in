@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Search,
   Sparkles,
@@ -17,12 +17,17 @@ import {
   Smartphone,
   CreditCard,
   Mail,
+  SlidersHorizontal,
+  ShoppingBag,
 } from 'lucide-react';
 import Reveal from '@/components/Reveal';
 import CategorySlider from '@/components/CategorySlider';
 import BrandCard from '@/components/BrandCard';
 import { useBrands } from '@/lib/useBrands';
 import { useToast } from '@/components/Toast';
+import { getCategoryIcon } from '@/lib/categoryIcons';
+
+const brandCategories = ['All', 'Shopping', 'Fashion', 'Beauty', 'Food & Dining', 'Travel', 'Entertainment', 'Trending'];
 
 const occasions = [
   { name: 'Birthday', icon: Cake, color: 'from-pink-500 to-rose-600', search: 'Birthday' },
@@ -68,6 +73,14 @@ export default function HomePage() {
 
   const trending = brands.filter((b) => b.trending).slice(0, 8);
   const popular = brands.slice(0, 12);
+
+  const [activeCategory, setActiveCategory] = useState('All');
+  const filteredBrands = useMemo(() => {
+    let list = brands;
+    if (activeCategory === 'Trending') list = list.filter((b) => b.trending);
+    else if (activeCategory !== 'All') list = list.filter((b) => b.category === activeCategory);
+    return list.slice(0, 8);
+  }, [brands, activeCategory]);
 
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,6 +302,81 @@ export default function HomePage() {
               ))}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* ===== SHOP BY CATEGORY ===== */}
+      <section className="py-16 bg-gradient-to-b from-brand-50/40 to-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="text-center max-w-2xl mx-auto mb-8">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-700">
+              <SlidersHorizontal className="h-3.5 w-3.5" /> Shop by category
+            </span>
+            <h2 className="mt-3 font-display text-3xl sm:text-4xl font-bold text-slate-900">
+              Find gift cards by category
+            </h2>
+            <p className="mt-2 text-slate-500">
+              Filter by what they love — from shopping to travel.
+            </p>
+          </Reveal>
+
+          {/* Category pills */}
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
+            {brandCategories.map((c) => {
+              const Icon = c === 'All' ? ShoppingBag : c === 'Trending' ? TrendingUp : getCategoryIcon(c);
+              const active = activeCategory === c;
+              return (
+                <button
+                  key={c}
+                  onClick={() => setActiveCategory(c)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
+                    active
+                      ? 'bg-brand-600 text-white shadow-glow-sm'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-700'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Filtered brand cards */}
+          {loading ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="rounded-3xl overflow-hidden border border-slate-100">
+                  <div className="h-44 shimmer" />
+                  <div className="p-4 space-y-2">
+                    <div className="h-4 w-20 shimmer rounded" />
+                    <div className="h-6 w-28 shimmer rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredBrands.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-slate-500">No brands found in this category yet.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+              {filteredBrands.map((brand, i) => (
+                <Reveal key={brand.id} delay={i * 60}>
+                  <BrandCard brand={brand} />
+                </Reveal>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-10 text-center">
+            <Link
+              to="/brands"
+              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
+            >
+              Explore all brands <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </section>
 
