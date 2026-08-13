@@ -6,8 +6,8 @@ import { ArrowUpRight } from 'lucide-react';
 // with a left text column (headline + subtext + circular-arrow CTA) and,
 // on the right, a self-contained rounded product-image card that carries
 // its own background color. Swap `imageUrl` for real creative in
-// /public/images/banners — autoplay, dots, and the cross-fade transition
-// all work as-is regardless of what image is dropped in.
+// /public/images/banners — autoplay, dots, and the slide transition all
+// work as-is regardless of what image is dropped in.
 interface BannerSlide {
   id: string;
   titleHead: string; // first headline line, rendered in black
@@ -60,21 +60,29 @@ const slides: BannerSlide[] = [
 ];
 
 const AUTOPLAY_MS = 5000;
+const TRANSITION_MS = 600;
 
 export default function HeroBanner() {
-  // Pure cross-fade carousel: every slide is mounted at all times as an
-  // `absolute inset-0` layer. Nothing is conditionally rendered and no
-  // slide is ever keyed off `activeIndex`, so React never unmounts or
-  // remounts a slide when the active one changes — only each layer's
-  // opacity/z-index/pointer-events flip, which is a pure CSS transition
-  // and can never produce a 1-frame "everything disappears" flash.
-  const [activeIndex, setActiveIndex] = useState(0);
+  // True infinite loop, sliding version: render
+  // [lastSlideClone, ...slides, firstSlideClone] as one flex "track".
+  // `index` always moves in one direction (1..N are the real slides);
+  // after a transition lands on a clone at either end, we jump instantly
+  // (transition disabled for one frame) to the matching real slide at the
+  // opposite end. Because the clone and the real slide are visually
+  // identical, that jump is invisible and motion never reverses — the
+  // active slide always glides in from the right on auto-play.
+  const extendedSlides = [slides[slides.length - 1], ...slides, slides[0]];
+  const lastIndex = extendedSlides.length - 1;
+
+  const [index, setIndex] = useState(1);
+  const [withTransition, setWithTransition] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startAutoplay = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      setActiveIndex((i) => (i + 1) % slides.length);
+      setIndex((i) => i + 1);
     }, AUTOPLAY_MS);
   };
 
@@ -82,12 +90,44 @@ export default function HeroBanner() {
     startAutoplay();
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // After every index change, if we've landed on a lead/trail clone, wait
+  // for the transition to finish then snap (no animation) to the matching
+  // real slide at the far end.
+  useEffect(() => {
+    if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
+    if (index === lastIndex) {
+      snapTimerRef.current = setTimeout(() => {
+        setWithTransition(false);
+        setIndex(1);
+      }, TRANSITION_MS);
+    } else if (index === 0) {
+      snapTimerRef.current = setTimeout(() => {
+        setWithTransition(false);
+        setIndex(lastIndex - 1);
+      }, TRANSITION_MS);
+    }
+    return () => {
+      if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
+
+  // Re-enable the transition on the next frame after a transitionless snap.
+  useEffect(() => {
+    if (withTransition) return;
+    const raf = requestAnimationFrame(() => setWithTransition(true));
+    return () => cancelAnimationFrame(raf);
+  }, [withTransition]);
+
+  const activeDotIndex = ((index - 1) % slides.length + slides.length) % slides.length;
+
   const goTo = (i: number) => {
-    setActiveIndex(i);
+    setIndex(i + 1);
     // Restart the timer on manual navigation so a queued auto-advance
     // doesn't fire a moment after the user just picked a slide.
     startAutoplay();
@@ -97,25 +137,36 @@ export default function HeroBanner() {
     <section className="pt-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/*
-          Strictly fixed height across breakpoints (not aspect-ratio) so
-          the box itself never resizes as slides cross-fade — that's what
-          keeps the transition butter-smooth with no layout jump.
+          Explicit fixed pixel height at every breakpoint (NOT
+          aspect-ratio) — the viewport's box never has to be recalculated
+          as slides change or images load, which is what removes the
+          jump/layout-shift.
         */}
         <div
           className="relative w-full h-[340px] sm:h-[380px] md:h-[420px] overflow-hidden rounded-3xl select-none"
           style={{ backgroundColor: PAGE_CREAM }}
         >
-          {slides.map((slide, i) => {
-            const active = i === activeIndex;
-            return (
+          {/*
+            The track: a single flex row holding every slide (clones
+            included) side by side, all mounted at once. Sliding is done
+            purely by translating this row with a GPU-accelerated
+            transform — no slide is ever unmounted/remounted and nothing
+            is keyed off `index`, so there's no flash between slides.
+          */}
+          <div
+            className="flex h-full w-full will-change-transform transform-gpu"
+            style={{
+              transform: `translateX(${-index * 100}%)`,
+              transition: withTransition ? `transform ${TRANSITION_MS}ms ease-out` : 'none',
+            }}
+          >
+            {extendedSlides.map((slide, i) => (
               <div
-                key={slide.id}
-                className={`absolute inset-0 flex items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 transition-opacity duration-700 ease-in-out ${
-                  active ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'
-                }`}
-                aria-hidden={!active}
+                key={`${slide.id}-${i}`}
+                className="flex h-full w-full flex-shrink-0 items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8"
+                aria-hidden={i !== index}
               >
-                {/* Left text column — ~55-60% width */}
+                {/* Left text column — fixed width share, height comes from the fixed-height parent */}
                 <div className="flex h-full w-[56%] sm:w-[58%] flex-shrink-0 flex-col justify-center gap-2.5 sm:gap-3.5 pl-2 sm:pl-4 lg:pl-8">
                   <div className="leading-[1.05]">
                     <p className="font-display font-extrabold text-2xl sm:text-4xl lg:text-5xl text-slate-900">
@@ -133,7 +184,7 @@ export default function HeroBanner() {
                   </p>
                   <Link
                     to={slide.buttonLink}
-                    tabIndex={active ? 0 : -1}
+                    tabIndex={i === index ? 0 : -1}
                     className="group mt-1 inline-flex w-fit items-center gap-2.5 sm:gap-3"
                   >
                     <span
@@ -148,9 +199,9 @@ export default function HeroBanner() {
                   </Link>
                 </div>
 
-                {/* Right product-image card — fixed height, own rounded card + backdrop color */}
+                {/* Right product-image card — explicit fixed height, no aspect-ratio reflow */}
                 <div
-                  className="relative h-[220px] sm:h-[280px] w-[44%] sm:w-[42%] flex-shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl"
+                  className="relative h-[220px] sm:h-[280px] md:h-[320px] w-[44%] sm:w-[42%] flex-shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl"
                   style={{ backgroundColor: slide.panelBg }}
                 >
                   <img
@@ -158,20 +209,20 @@ export default function HeroBanner() {
                     alt={slide.imageAlt}
                     width={960}
                     height={380}
-                    className="h-full w-full object-contain"
-                    loading={i === 0 ? 'eager' : 'lazy'}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    loading={i === 1 ? 'eager' : 'lazy'}
                     draggable={false}
                   />
                 </div>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
 
         {/* Navigation dots — left-aligned under the text column, dash style */}
         <div className="mt-3 sm:mt-4 flex items-center gap-1.5 pl-2 sm:pl-4 lg:pl-8">
           {slides.map((slide, i) => {
-            const active = i === activeIndex;
+            const active = i === activeDotIndex;
             return (
               <button
                 key={slide.id}
