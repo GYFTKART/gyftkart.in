@@ -19,6 +19,7 @@ import AdminLoginPage from '@/pages/AdminLoginPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import ProfilePage from './pages/ProfilePage';
 import OrdersPage from '@/pages/OrdersPage';
+import ContactUs from '@/pages/ContactUs';
 
 
 function ScrollToTop() {
@@ -82,6 +83,7 @@ export default function App() {
               <Route path="/checkout" element={<CheckoutPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/orders" element={<OrdersPage />} />
+              <Route path="/contact-us" element={<ContactUs />} />
 
 
               {/* Admin */}
