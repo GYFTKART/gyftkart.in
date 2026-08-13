@@ -101,6 +101,30 @@ function useDragScrollCarousel(itemCount: number) {
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Wheel passthrough: this row can only scroll horizontally, so by
+  // default Chrome/Edge/Firefox will silently redirect a plain vertical
+  // mouse-wheel gesture into this element's horizontal scrollLeft
+  // instead of letting it bubble up to scroll the page — this is native
+  // browser scroll-chaining behavior, not something any onWheel handler
+  // in this codebase was causing. We override it here: a vertical-
+  // dominant gesture is handed back to the page; a horizontal-dominant
+  // one (Shift+scroll, trackpad swipe) is left alone to move the row.
+  // Must be a native, non-passive listener — React's onWheel prop is
+  // registered passive by default, so preventDefault() there is a no-op.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        window.scrollBy({ top: e.deltaY, left: 0, behavior: 'auto' });
+      }
+      // else: horizontal-dominant input — let the browser scroll the row natively.
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   const onMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     const el = ref.current;
     if (!el) return;
