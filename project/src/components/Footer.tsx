@@ -26,7 +26,7 @@ const columns: { title: string; links: { label: string; to: string }[] }[] = [
       { label: 'About GyftKart', to: '/' },
       { label: 'How it works', to: '/' },
       { label: 'Careers', to: '/' },
-      { label: 'Contact', to: '/corporate' },
+      { label: 'Contact', to: '/contact' },
     ],
   },
 ];
