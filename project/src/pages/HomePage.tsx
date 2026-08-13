@@ -216,6 +216,7 @@ export default function HomePage() {
           ) : (
             <div
               ref={categoryRowRef}
+              onDragStart={(e) => e.preventDefault()}
               className="flex gap-5 overflow-x-auto no-scrollbar scroll-snap-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
               {[0, 1, 2].flatMap((copy) =>
@@ -286,6 +287,7 @@ export default function HomePage() {
           ) : (
             <div
               ref={trendingRowRef}
+              onDragStart={(e) => e.preventDefault()}
               className="flex gap-5 overflow-x-auto no-scrollbar scroll-snap-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
               {[0, 1, 2].flatMap((copy) =>
