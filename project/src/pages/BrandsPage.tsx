@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal, X, Gift, TrendingUp, ShoppingBag } from 'lucide-react';
+import { Search, SlidersHorizontal, X, TrendingUp, ShoppingBag } from 'lucide-react';
 import BrandCard from '@/components/BrandCard';
 import Reveal from '@/components/Reveal';
 import { useBrands } from '@/lib/useBrands';
@@ -12,7 +12,6 @@ export default function BrandsPage() {
   const { brands, loading } = useBrands();
   const [params, setParams] = useSearchParams();
   const initialQ = params.get('q') ?? '';
-  const initialOccasion = params.get('occasion') ?? '';
   const filter = params.get('filter') ?? '';
 
   const [query, setQuery] = useState(initialQ);
@@ -45,35 +44,6 @@ export default function BrandsPage() {
 
   return (
     <div className="pt-16 min-h-screen bg-gradient-to-b from-brand-50/40 to-white">
-      {/* Header */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 to-white border-b border-slate-100">
-        <div className="absolute inset-0 bg-grid opacity-50 pointer-events-none" />
-        <div className="absolute -top-20 -right-10 h-72 w-72 rounded-full bg-brand-200/40 blur-3xl pointer-events-none" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
-          <Reveal>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-700">
-              <ShoppingBag className="h-3.5 w-3.5" /> 200+ brands
-            </span>
-            <h1 className="mt-3 font-display text-4xl sm:text-5xl font-extrabold text-slate-900">
-              Explore all <span className="text-gradient">brands</span>
-            </h1>
-            <p className="mt-2 text-slate-600 max-w-xl">
-              Find the perfect gift card for any occasion across shopping, fashion,
-              food, travel and entertainment.
-            </p>
-
-            {(initialOccasion || filter) && (
-              <p className="mt-3 text-sm text-brand-700 font-semibold flex items-center gap-1.5">
-                <Gift className="h-4 w-4" />
-                {initialOccasion
-                  ? `Showing gifts for: ${initialOccasion}`
-                  : 'Showing trending brands'}
-              </p>
-            )}
-          </Reveal>
-        </div>
-      </section>
-
       {/* Filters + grid */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
         {/* Category chips */}
