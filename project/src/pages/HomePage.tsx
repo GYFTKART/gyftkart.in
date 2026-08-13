@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   Search,
   Sparkles,
@@ -57,49 +57,14 @@ const testimonials = [
   { name: 'Rohan Gupta', role: 'Delhi', text: 'Corporate gifting for 120 employees was effortless. Bulk orders, branded cards, done in a day.' },
 ];
 
-// Woohoo-style infinite drag carousel for a horizontal row: the row's
-// content is rendered three times back-to-back (so a real card always
-// exists in either drag direction), and the scroll position is silently
-// re-centered into the middle copy whenever it nears an edge — since the
-// copies are identical, the reset is invisible. Dragging is implemented
-// with plain onMouseDown/onMouseMove/onMouseUp/onMouseLeave handlers (not
-// Pointer Events) so it's explicit and easy to reason about; touch is left
-// untouched so the native overflow-x-auto swipe scrolling keeps working.
-function useDragScrollCarousel(itemCount: number) {
+// Finite, mouse-draggable horizontal slider: plain onMouseDown/onMouseMove/
+// onMouseUp/onMouseLeave handlers move the row's native scrollLeft, while
+// touch is left untouched so the native overflow-x-auto swipe scrolling
+// keeps working. No duplication, no re-centering — just a normal row that
+// slides left/right and stops at its real start/end.
+function useDragScrollCarousel() {
   const ref = useRef<HTMLDivElement | null>(null);
-  const copyWidth = useRef(0);
   const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: 0 });
-
-  // Start the row scrolled to the beginning of the middle copy so the
-  // user can drag either direction immediately, before any real edge.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || itemCount === 0) return;
-    const raf = requestAnimationFrame(() => {
-      const width = el.scrollWidth / 3;
-      copyWidth.current = width;
-      el.scrollLeft = width;
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [itemCount]);
-
-  // Silent infinite-loop teleport stays on a native scroll listener —
-  // it has nothing to do with how the drag itself is captured.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const onScroll = () => {
-      const width = copyWidth.current || el.scrollWidth / 3;
-      if (width <= 0) return;
-      if (el.scrollLeft < width * 0.5) {
-        el.scrollLeft += width;
-      } else if (el.scrollLeft > width * 1.5) {
-        el.scrollLeft -= width;
-      }
-    };
-    el.addEventListener('scroll', onScroll);
-    return () => el.removeEventListener('scroll', onScroll);
-  }, []);
 
   const onMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     const el = ref.current;
@@ -159,9 +124,9 @@ export default function HomePage() {
     return list.slice(0, 8);
   }, [brands, activeCategory]);
 
-  // Infinite, mouse-draggable carousels for the two brand-card rows.
-  const categoryDrag = useDragScrollCarousel(filteredBrands.length);
-  const trendingDrag = useDragScrollCarousel(trending.length);
+  // Finite, mouse-draggable sliders for the two brand-card rows.
+  const categoryDrag = useDragScrollCarousel();
+  const trendingDrag = useDragScrollCarousel();
 
   return (
     <div className="flex flex-col justify-start pt-16">
@@ -246,18 +211,16 @@ export default function HomePage() {
               onDragStart={(e) => e.preventDefault()}
               className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
-              {[0, 1, 2].flatMap((copy) =>
-                filteredBrands.map((brand, i) => (
-                  <Reveal
-                    key={`${copy}-${brand.id}`}
-                    delay={copy === 1 ? i * 60 : 0}
-                    className="shrink-0 w-60 sm:w-64"
-                    motion="fade"
-                  >
-                    <BrandCard brand={brand} />
-                  </Reveal>
-                ))
-              )}
+              {filteredBrands.map((brand, i) => (
+                <Reveal
+                  key={brand.id}
+                  delay={i * 60}
+                  className="shrink-0 w-60 sm:w-64"
+                  motion="fade"
+                >
+                  <BrandCard brand={brand} />
+                </Reveal>
+              ))}
             </div>
           )}
 
@@ -323,18 +286,16 @@ export default function HomePage() {
               onDragStart={(e) => e.preventDefault()}
               className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
-              {[0, 1, 2].flatMap((copy) =>
-                trending.map((brand, i) => (
-                  <Reveal
-                    key={`${copy}-${brand.id}`}
-                    delay={copy === 1 ? i * 60 : 0}
-                    className="shrink-0 w-60 sm:w-64"
-                    motion="fade"
-                  >
-                    <BrandCard brand={brand} />
-                  </Reveal>
-                ))
-              )}
+              {trending.map((brand, i) => (
+                <Reveal
+                  key={brand.id}
+                  delay={i * 60}
+                  className="shrink-0 w-60 sm:w-64"
+                  motion="fade"
+                >
+                  <BrandCard brand={brand} />
+                </Reveal>
+              ))}
             </div>
           )}
         </div>
