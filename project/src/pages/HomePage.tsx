@@ -57,33 +57,68 @@ const testimonials = [
   { name: 'Rohan Gupta', role: 'Delhi', text: 'Corporate gifting for 120 employees was effortless. Bulk orders, branded cards, done in a day.' },
 ];
 
-// Adds Woohoo-style click-and-drag scrolling to a horizontal row.
-// Touch devices already get native swipe scrolling from overflow-x-auto,
-// so this only needs to handle mouse dragging, plus suppressing the
-// stray click a drag would otherwise fire on a BrandCard's <Link>.
-function useDragScroll<T extends HTMLElement>() {
-  const ref = useRef<T | null>(null);
-  const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: 0 });
+// Woohoo-style infinite drag carousel for a horizontal row: the row's
+// content is rendered three times back-to-back (so a real card always
+// exists in either drag direction), and the scroll position is silently
+// re-centered into the middle copy whenever it nears an edge — since the
+// copies are identical, the reset is invisible. Mouse dragging is handled
+// via Pointer Events + setPointerCapture (works consistently across
+// desktop browsers, including drags that leave the element's bounds);
+// touch pointers are left alone so the native overflow-x-auto swipe
+// scrolling keeps working as-is.
+function useInfiniteDragScroll(itemCount: number) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const copyWidth = useRef(0);
+  const drag = useRef({ isDown: false, pointerId: -1, startX: 0, scrollLeft: 0, moved: 0 });
 
-  const onMouseDown = (e: React.MouseEvent) => {
+  // Start the row scrolled to the beginning of the middle copy so the
+  // user can drag either direction immediately, before any real edge.
+  useEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    drag.current = { isDown: true, startX: e.pageX, scrollLeft: el.scrollLeft, moved: 0 };
-  };
+    if (!el || itemCount === 0) return;
+    const raf = requestAnimationFrame(() => {
+      const width = el.scrollWidth / 3;
+      copyWidth.current = width;
+      el.scrollLeft = width;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [itemCount]);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
-    const onMouseMove = (e: MouseEvent) => {
-      if (!drag.current.isDown) return;
-      e.preventDefault();
-      const dx = e.pageX - drag.current.startX;
+    const onScroll = () => {
+      const width = copyWidth.current || el.scrollWidth / 3;
+      if (width <= 0) return;
+      // Crossed into the leading or trailing copy — teleport by exactly
+      // one copy-width back into the middle copy, no animation.
+      if (el.scrollLeft < width * 0.5) {
+        el.scrollLeft += width;
+      } else if (el.scrollLeft > width * 1.5) {
+        el.scrollLeft -= width;
+      }
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return; // let native touch scrolling handle itself
+      el.setPointerCapture(e.pointerId);
+      drag.current = { isDown: true, pointerId: e.pointerId, startX: e.clientX, scrollLeft: el.scrollLeft, moved: 0 };
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!drag.current.isDown || e.pointerId !== drag.current.pointerId) return;
+      const dx = e.clientX - drag.current.startX;
       drag.current.moved = Math.abs(dx);
       el.scrollLeft = drag.current.scrollLeft - dx;
     };
-    const stopDrag = () => {
+    const endDrag = (e: PointerEvent) => {
+      if (e.pointerId !== drag.current.pointerId) return;
       drag.current.isDown = false;
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
     };
     // A drag ending on a card shouldn't also trigger its Link navigation.
     const onClickCapture = (e: MouseEvent) => {
@@ -94,17 +129,23 @@ function useDragScroll<T extends HTMLElement>() {
       drag.current.moved = 0;
     };
 
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', stopDrag);
+    el.addEventListener('scroll', onScroll);
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', endDrag);
+    el.addEventListener('pointercancel', endDrag);
     el.addEventListener('click', onClickCapture, true);
     return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', stopDrag);
+      el.removeEventListener('scroll', onScroll);
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointermove', onPointerMove);
+      el.removeEventListener('pointerup', endDrag);
+      el.removeEventListener('pointercancel', endDrag);
       el.removeEventListener('click', onClickCapture, true);
     };
   }, []);
 
-  return { ref, onMouseDown };
+  return ref;
 }
 
 export default function HomePage() {
@@ -121,12 +162,9 @@ export default function HomePage() {
     return list.slice(0, 8);
   }, [brands, activeCategory]);
 
-  // Mouse click-and-drag scrolling for the single-row horizontal card
-  // carousels (Shop by Category, Trending Brands). Touch swipe already
-  // works out of the box via overflow-x-auto, so this only wires up
-  // mouse dragging (Woohoo-style, no arrow buttons).
-  const categoryDrag = useDragScroll();
-  const trendingDrag = useDragScroll();
+  // Infinite, mouse-draggable carousels for the two brand-card rows.
+  const categoryRowRef = useInfiniteDragScroll(filteredBrands.length);
+  const trendingRowRef = useInfiniteDragScroll(trending.length);
 
   return (
     <div className="pt-16">
@@ -177,15 +215,20 @@ export default function HomePage() {
             </div>
           ) : (
             <div
-              ref={categoryDrag.ref}
-              onMouseDown={categoryDrag.onMouseDown}
+              ref={categoryRowRef}
               className="flex gap-5 overflow-x-auto no-scrollbar scroll-snap-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
-              {filteredBrands.map((brand, i) => (
-                <Reveal key={brand.id} delay={i * 60} className="shrink-0 w-60 sm:w-64 snap-start">
-                  <BrandCard brand={brand} />
-                </Reveal>
-              ))}
+              {[0, 1, 2].flatMap((copy) =>
+                filteredBrands.map((brand, i) => (
+                  <Reveal
+                    key={`${copy}-${brand.id}`}
+                    delay={copy === 1 ? i * 60 : 0}
+                    className="shrink-0 w-60 sm:w-64 snap-start"
+                  >
+                    <BrandCard brand={brand} />
+                  </Reveal>
+                ))
+              )}
             </div>
           )}
 
@@ -242,15 +285,20 @@ export default function HomePage() {
             </div>
           ) : (
             <div
-              ref={trendingDrag.ref}
-              onMouseDown={trendingDrag.onMouseDown}
+              ref={trendingRowRef}
               className="flex gap-5 overflow-x-auto no-scrollbar scroll-snap-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
-              {trending.map((brand, i) => (
-                <Reveal key={brand.id} delay={i * 60} className="shrink-0 w-60 sm:w-64 snap-start">
-                  <BrandCard brand={brand} />
-                </Reveal>
-              ))}
+              {[0, 1, 2].flatMap((copy) =>
+                trending.map((brand, i) => (
+                  <Reveal
+                    key={`${copy}-${brand.id}`}
+                    delay={copy === 1 ? i * 60 : 0}
+                    className="shrink-0 w-60 sm:w-64 snap-start"
+                  >
+                    <BrandCard brand={brand} />
+                  </Reveal>
+                ))
+              )}
             </div>
           )}
         </div>

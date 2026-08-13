@@ -60,27 +60,32 @@ const slides: BannerSlide[] = [
 ];
 
 const AUTOPLAY_MS = 5000;
+const TRANSITION_MS = 700;
 
 export default function HeroBanner() {
-  const [index, setIndex] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // True infinite loop: render [lastSlideClone, ...slides, firstSlideClone].
+  // `index` always moves in one direction (1..N are the real slides, in
+  // order); after a transition lands on a clone at either end, we jump
+  // instantly (transition disabled for one frame) to the equivalent real
+  // slide at the opposite end — since the clone and the real slide look
+  // identical, the jump is invisible and motion never reverses.
+  const extendedSlides = [slides[slides.length - 1], ...slides, slides[0]];
+  const lastIndex = extendedSlides.length - 1;
 
-  // Mouse-drag / touch-swipe state. dragOffset is the live pixel offset
-  // applied on top of the current slide's transform while a drag is in
-  // progress; trackRef/trackWidth are used to size the swipe threshold
-  // and dragMoved suppresses an accidental Link click after a real drag.
+  const [index, setIndex] = useState(1);
+  const [withTransition, setWithTransition] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Drag / swipe state.
   const trackRef = useRef<HTMLDivElement | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
-  const dragStartX = useRef(0);
-  const dragOffsetRef = useRef(0);
-  const dragMoved = useRef(false);
-  const trackWidth = useRef(1);
+  const drag = useRef({ isDown: false, pointerId: -1, startX: 0, width: 1, moved: false });
 
   const startAutoplay = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      setIndex((i) => (i + 1) % slides.length);
+      setIndex((i) => i + 1);
     }, AUTOPLAY_MS);
   };
 
@@ -88,74 +93,119 @@ export default function HeroBanner() {
     startAutoplay();
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // After every index change, if we've landed on a lead/trail clone, wait
+  // for the transition to finish then snap (no animation) to the matching
+  // real slide at the far end.
+  useEffect(() => {
+    if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
+    if (index === lastIndex) {
+      snapTimerRef.current = setTimeout(() => {
+        setWithTransition(false);
+        setIndex(1);
+      }, TRANSITION_MS);
+    } else if (index === 0) {
+      snapTimerRef.current = setTimeout(() => {
+        setWithTransition(false);
+        setIndex(lastIndex - 1);
+      }, TRANSITION_MS);
+    }
+    return () => {
+      if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
+
+  // Re-enable the transition on the next frame after a transitionless snap.
+  useEffect(() => {
+    if (withTransition) return;
+    const raf = requestAnimationFrame(() => setWithTransition(true));
+    return () => cancelAnimationFrame(raf);
+  }, [withTransition]);
+
+  const activeDotIndex = ((index - 1) % slides.length + slides.length) % slides.length;
+
   const goTo = (i: number) => {
-    setIndex(i);
+    setIndex(i + 1);
     // Restart the timer on manual navigation so a queued auto-advance
     // doesn't fire a moment after the user just picked a slide.
     startAutoplay();
   };
 
-  const beginDrag = (clientX: number) => {
-    dragStartX.current = clientX;
-    dragOffsetRef.current = 0;
-    dragMoved.current = false;
-    trackWidth.current = trackRef.current?.offsetWidth || 1;
-    setIsDragging(true);
+  const beginDrag = (clientX: number, pointerId: number) => {
+    drag.current = { isDown: true, pointerId, startX: clientX, width: trackRef.current?.offsetWidth || 1, moved: false };
     if (timerRef.current) clearInterval(timerRef.current);
+    if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
   };
 
   const updateDrag = (clientX: number) => {
-    const delta = clientX - dragStartX.current;
-    dragOffsetRef.current = delta;
-    if (Math.abs(delta) > 5) dragMoved.current = true;
+    if (!drag.current.isDown) return;
+    const delta = clientX - drag.current.startX;
+    if (Math.abs(delta) > 5) drag.current.moved = true;
     setDragOffset(delta);
   };
 
-  const endDrag = () => {
-    setIsDragging(false);
-    const threshold = trackWidth.current * 0.15;
-    const offset = dragOffsetRef.current;
-    if (offset > threshold) {
-      setIndex((i) => (i - 1 + slides.length) % slides.length);
-    } else if (offset < -threshold) {
-      setIndex((i) => (i + 1) % slides.length);
+  const endDrag = (finalX: number) => {
+    if (!drag.current.isDown) return;
+    drag.current.isDown = false;
+    const delta = finalX - drag.current.startX;
+    const threshold = drag.current.width * 0.15;
+    if (delta > threshold) {
+      setIndex((i) => i - 1);
+    } else if (delta < -threshold) {
+      setIndex((i) => i + 1);
     }
-    dragOffsetRef.current = 0;
     setDragOffset(0);
     startAutoplay();
   };
 
-  // Mouse dragging can leave the track's bounds mid-drag, so listen on
-  // the window while a drag is active rather than only on the element.
-  useEffect(() => {
-    if (!isDragging) return;
-    const onMouseMove = (e: MouseEvent) => updateDrag(e.clientX);
-    const onMouseUp = () => endDrag();
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDragging]);
-
-  // Suppress the click a drag would otherwise fire on a slide's <Link>.
   useEffect(() => {
     const el = trackRef.current;
     if (!el) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      el.setPointerCapture(e.pointerId);
+      beginDrag(e.clientX, e.pointerId);
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerId !== drag.current.pointerId) return;
+      updateDrag(e.clientX);
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerId !== drag.current.pointerId) return;
+      endDrag(e.clientX);
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
+    };
+    // A drag ending on a slide's CTA shouldn't also trigger its Link.
     const onClickCapture = (e: MouseEvent) => {
-      if (dragMoved.current) {
+      if (drag.current.moved) {
         e.preventDefault();
         e.stopPropagation();
       }
+      drag.current.moved = false;
     };
+
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('pointercancel', onPointerUp);
     el.addEventListener('click', onClickCapture, true);
-    return () => el.removeEventListener('click', onClickCapture, true);
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointermove', onPointerMove);
+      el.removeEventListener('pointerup', onPointerUp);
+      el.removeEventListener('pointercancel', onPointerUp);
+      el.removeEventListener('click', onClickCapture, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -170,21 +220,15 @@ export default function HeroBanner() {
           ref={trackRef}
           className="relative w-full h-[220px] sm:h-[280px] md:h-[330px] lg:h-[380px] overflow-hidden rounded-3xl cursor-grab active:cursor-grabbing select-none touch-pan-y"
           style={{ backgroundColor: PAGE_CREAM }}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            beginDrag(e.clientX);
-          }}
-          onTouchStart={(e) => beginDrag(e.touches[0].clientX)}
-          onTouchMove={(e) => updateDrag(e.touches[0].clientX)}
-          onTouchEnd={endDrag}
         >
-          {slides.map((slide, i) => (
+          {extendedSlides.map((slide, i) => (
             <div
-              key={slide.id}
-              className={`absolute inset-0 flex items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 ${
-                isDragging ? '' : 'transition-transform duration-700 ease-out'
-              }`}
-              style={{ transform: `translateX(calc(${(i - index) * 100}% + ${dragOffset}px))` }}
+              key={`${slide.id}-${i}`}
+              className="absolute inset-0 flex items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8"
+              style={{
+                transform: `translateX(calc(${(i - index) * 100}% + ${dragOffset}px))`,
+                transition: withTransition ? `transform ${TRANSITION_MS}ms ease-out` : 'none',
+              }}
               aria-hidden={i !== index}
             >
               {/* Left text column — ~55-60% width */}
@@ -229,7 +273,7 @@ export default function HeroBanner() {
                   src={slide.imageUrl}
                   alt={slide.imageAlt}
                   className="h-full w-full object-cover"
-                  loading={i === 0 ? 'eager' : 'lazy'}
+                  loading={i === 1 ? 'eager' : 'lazy'}
                   draggable={false}
                 />
               </div>
@@ -240,7 +284,7 @@ export default function HeroBanner() {
         {/* Navigation dots — left-aligned under the text column, dash style */}
         <div className="mt-3 sm:mt-4 flex items-center gap-1.5 pl-2 sm:pl-4 lg:pl-8">
           {slides.map((slide, i) => {
-            const active = i === index;
+            const active = i === activeDotIndex;
             return (
               <button
                 key={slide.id}
