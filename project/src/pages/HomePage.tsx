@@ -326,10 +326,10 @@ export default function HomePage() {
               <Link
                 key={o.name}
                 to={`/brands?occasion=${encodeURIComponent(o.search)}`}
-                className={`group relative block w-60 h-44 rounded-3xl bg-gradient-to-br ${o.color} p-6 text-white shadow-card overflow-hidden`}
+                className={`group relative block w-60 h-44 rounded-3xl bg-gradient-to-br ${o.color} p-6 text-white overflow-hidden`}
               >
                 <div className="absolute -top-8 -right-8 h-24 w-24 rounded-full bg-white/15 blur-2xl" />
-                <o.icon className="h-9 w-9 drop-shadow" />
+                <o.icon className="h-9 w-9" />
                 <div className="absolute bottom-5 left-5 right-5">
                   <p className="font-display text-2xl font-extrabold">{o.name}</p>
                   <p className="text-sm text-white/80 mt-0.5 flex items-center gap-1">
