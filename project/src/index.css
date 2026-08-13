@@ -8,7 +8,7 @@
   }
   body {
     @apply text-slate-800 font-sans antialiased;
-    background-color: #FAF9F5;
+    background-color: #F5F5E9;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }

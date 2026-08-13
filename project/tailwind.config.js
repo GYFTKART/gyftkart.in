@@ -8,19 +8,25 @@ export default {
         display: ['"Sora"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       colors: {
+        // Green scale — brand-600 matches HeroBanner's ACCENT_GREEN (#0B6E4F)
+        // exactly, and brand-700 matches the dark-green active-pill /
+        // deep-section color (#0A4A34), so every component lines up with
+        // the banner already redesigned.
         brand: {
-          50: '#faf5ff',
-          100: '#f3e8ff',
-          200: '#e9d5ff',
-          300: '#d8b4fe',
-          400: '#c084fc',
-          500: '#a855f7',
-          600: '#9333ea',
-          700: '#7e22ce',
-          800: '#6b21a8',
-          900: '#581c87',
-          950: '#3b0764',
+          50: '#EAF5F1',
+          100: '#CFE8DF',
+          200: '#9FD1BF',
+          300: '#6FBA9F',
+          400: '#3FA37F',
+          500: '#17875F',
+          600: '#0B6E4F',
+          700: '#0A4A34',
+          800: '#0A3A2A',
+          900: '#092E22',
+          950: '#071F17',
         },
+        // Untouched — used only for star ratings / "hot" badges, not part
+        // of the purple-to-green theme swap.
         gold: {
           50: '#fffbeb',
           100: '#fef3c7',
@@ -35,16 +41,16 @@ export default {
         },
       },
       boxShadow: {
-        glow: '0 0 50px -12px rgba(147, 51, 234, 0.55)',
-        'glow-sm': '0 0 25px -8px rgba(147, 51, 234, 0.45)',
-        card: '0 14px 40px -18px rgba(88, 28, 135, 0.35)',
-        'card-hover': '0 26px 60px -20px rgba(88, 28, 135, 0.5)',
+        glow: '0 0 50px -12px rgba(11, 110, 79, 0.55)',
+        'glow-sm': '0 0 25px -8px rgba(11, 110, 79, 0.45)',
+        card: '0 14px 40px -18px rgba(10, 74, 52, 0.35)',
+        'card-hover': '0 26px 60px -20px rgba(10, 74, 52, 0.5)',
         soft: '0 6px 24px -10px rgba(15, 23, 42, 0.12)',
         'inner-glow': 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
       },
       backgroundImage: {
         'grid-light':
-          'linear-gradient(to right, rgba(147,51,234,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(147,51,234,0.06) 1px, transparent 1px)',
+          'linear-gradient(to right, rgba(11,110,79,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(11,110,79,0.06) 1px, transparent 1px)',
       },
       keyframes: {
         float: {
@@ -72,8 +78,8 @@ export default {
           '100%': { backgroundPosition: '700px 0' },
         },
         'pulse-glow': {
-          '0%,100%': { boxShadow: '0 0 0 0 rgba(245,158,11,0.5)' },
-          '50%': { boxShadow: '0 0 0 8px rgba(245,158,11,0)' },
+          '0%,100%': { boxShadow: '0 0 0 0 rgba(11,110,79,0.5)' },
+          '50%': { boxShadow: '0 0 0 8px rgba(11,110,79,0)' },
         },
         gradient: {
           '0%,100%': { backgroundPosition: '0% 50%' },
