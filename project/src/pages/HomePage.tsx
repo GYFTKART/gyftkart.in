@@ -158,7 +158,7 @@ export default function HomePage() {
       </div>
 
       {/* ===== SHOP BY CATEGORY ===== */}
-      <section className="pb-16">
+      <section className="pb-10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Category pills */}
           <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
@@ -235,31 +235,18 @@ export default function HomePage() {
       </section>
 
       {/* ===== TRENDING BRANDS ===== */}
-      <section className="py-16">
+      <section className="py-10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Reveal className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3">
-              <span className="grid place-items-center h-12 w-12 rounded-2xl bg-brand-100 text-brand-700">
-                <TrendingUp className="h-6 w-6" />
-              </span>
-              <div>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-gold-100 px-3 py-0.5 text-[11px] font-bold text-gold-700">
-                  <Sparkles className="h-3 w-3" /> Hot right now
-                </span>
-                <h2 className="mt-1.5 font-display text-3xl sm:text-4xl font-bold text-slate-900">
-                  Trending brands
-                </h2>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link
-                to="/brands"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-800 group whitespace-nowrap"
-              >
-                View all brands
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </Link>
-            </div>
+          <Reveal className="text-center max-w-2xl mx-auto mb-6">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gold-100 px-3 py-1 text-xs font-bold text-gold-700">
+              <Sparkles className="h-3.5 w-3.5" /> Hot right now
+            </span>
+            <h2 className="mt-3 font-display text-3xl sm:text-4xl font-bold text-slate-900">
+              Trending brands
+            </h2>
+            <p className="mt-2 text-slate-500">
+              The most popular gift cards everyone is buying right now.
+            </p>
           </Reveal>
 
           {loading ? (
@@ -297,11 +284,20 @@ export default function HomePage() {
               ))}
             </div>
           )}
+
+          <div className="mt-10 text-center">
+            <Link
+              to="/brands"
+              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
+            >
+              View all brands <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </section>
 
       {/* ===== OCCASIONS SLIDER ===== */}
-      <section className="pt-16">
+      <section className="pt-10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Reveal className="text-center max-w-2xl mx-auto">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-700">
