@@ -60,15 +60,18 @@ const slides: BannerSlide[] = [
 ];
 
 const AUTOPLAY_MS = 5000;
-const TRANSITION_MS = 700;
+const TRANSITION_MS = 500;
 
 export default function HeroBanner() {
-  // True infinite loop: render [lastSlideClone, ...slides, firstSlideClone].
-  // `index` always moves in one direction (1..N are the real slides, in
-  // order); after a transition lands on a clone at either end, we jump
-  // instantly (transition disabled for one frame) to the equivalent real
-  // slide at the opposite end — since the clone and the real slide look
-  // identical, the jump is invisible and motion never reverses.
+  // True infinite loop: render [lastSlideClone, ...slides, firstSlideClone]
+  // as a single flex row (the "track"). `index` always moves in one
+  // direction (1..N are the real slides, in order); after a transition
+  // lands on a clone at either end, we jump instantly (transition
+  // disabled for one frame) to the equivalent real slide at the opposite
+  // end — since the clone and the real slide look identical, the jump is
+  // invisible and motion never reverses. All slides stay mounted the
+  // entire time; only the track's transform changes, so nothing
+  // unmounts/remounts and there's no flash/jump.
   const extendedSlides = [slides[slides.length - 1], ...slides, slides[0]];
   const lastIndex = extendedSlides.length - 1;
 
@@ -208,6 +211,12 @@ export default function HeroBanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The track's horizontal position, in percent of ONE slide's width
+  // (each slide is 100% of the viewport, so this is just -index * 100%).
+  // dragOffset is a live pixel value added on top while the user is
+  // actively dragging.
+  const trackTransform = `translateX(calc(${-index * 100}% + ${dragOffset}px))`;
+
   return (
     <section className="pt-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -215,72 +224,85 @@ export default function HeroBanner() {
           ~3.3:1 wide rectangle at desktop, matching the reference —
           a fixed responsive height (rather than a strict aspect-ratio)
           keeps the headline/subtext/CTA stack legible at narrow widths.
+          This outer div is the "viewport": it clips the track and never
+          changes size or position itself, so it never flashes/jumps.
         */}
         <div
-          ref={trackRef}
           className="relative w-full aspect-[3/1] min-h-[220px] sm:min-h-[280px] md:min-h-[330px] lg:min-h-[380px] overflow-hidden rounded-3xl cursor-grab active:cursor-grabbing select-none touch-pan-y"
           style={{ backgroundColor: PAGE_CREAM }}
         >
-          {extendedSlides.map((slide, i) => (
-            <div
-              key={`${slide.id}-${i}`}
-              className="absolute inset-0 flex items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 will-change-transform transform-gpu"
-              style={{
-                transform: `translateX(calc(${(i - index) * 100}% + ${dragOffset}px))`,
-                transition: withTransition ? `transform ${TRANSITION_MS}ms ease-out` : 'none',
-              }}
-              aria-hidden={i !== index}
-            >
-              {/* Left text column — ~55-60% width */}
-              <div className="flex h-full w-[56%] sm:w-[58%] flex-col justify-center gap-2.5 sm:gap-3.5 pl-2 sm:pl-4 lg:pl-8">
-                <div className="leading-[1.05]">
-                  <p className="font-display font-extrabold text-2xl sm:text-4xl lg:text-5xl text-slate-900">
-                    {slide.titleHead}
-                  </p>
-                  <p
-                    className="font-display font-extrabold text-2xl sm:text-4xl lg:text-5xl"
-                    style={{ color: ACCENT_GREEN }}
-                  >
-                    {slide.titleAccent}
-                  </p>
-                </div>
-                <p className="max-w-xs sm:max-w-sm text-xs sm:text-sm lg:text-base text-slate-600 line-clamp-2">
-                  {slide.subtext}
-                </p>
-                <Link
-                  to={slide.buttonLink}
-                  tabIndex={i === index ? 0 : -1}
-                  className="group mt-1 inline-flex w-fit items-center gap-2.5 sm:gap-3"
-                >
-                  <span
-                    className="grid h-8 w-8 sm:h-10 sm:w-10 lg:h-11 lg:w-11 shrink-0 place-items-center rounded-full text-white transition-transform duration-200 group-hover:scale-105"
-                    style={{ backgroundColor: ACCENT_GREEN }}
-                  >
-                    <ArrowUpRight className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </span>
-                  <span className="text-xs sm:text-sm lg:text-base font-bold text-slate-900">
-                    {slide.buttonText}
-                  </span>
-                </Link>
-              </div>
-
-              {/* Right product-image card — ~40-44% width, own rounded card + backdrop color */}
+          {/*
+            The track: a single flex row holding every slide (clones
+            included) side by side, all mounted at once. Sliding is done
+            purely by translating this row — no slide is ever
+            unmounted/remounted and nothing uses `key={index}`, so there's
+            no layout re-render or flash between slides.
+          */}
+          <div
+            ref={trackRef}
+            className="flex h-full w-full will-change-transform transform-gpu"
+            style={{
+              transform: trackTransform,
+              transition: withTransition ? `transform ${TRANSITION_MS}ms ease-out` : 'none',
+            }}
+          >
+            {extendedSlides.map((slide, i) => (
               <div
-                className="relative h-full w-[44%] sm:w-[42%] overflow-hidden rounded-2xl sm:rounded-3xl"
-                style={{ backgroundColor: slide.panelBg }}
+                key={`${slide.id}-${i}`}
+                className="flex h-full w-full flex-shrink-0 items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8"
+                aria-hidden={i !== index}
               >
-                <img
-                  src={slide.imageUrl}
-                  alt={slide.imageAlt}
-                  width={960}
-                  height={380}
-                  className="h-full w-full object-cover"
-                  loading={i === 1 ? 'eager' : 'lazy'}
-                  draggable={false}
-                />
+                {/* Left text column — ~55-60% width, fixed so text never reflows during the slide */}
+                <div className="flex h-full w-[56%] sm:w-[58%] flex-shrink-0 flex-col justify-center gap-2.5 sm:gap-3.5 pl-2 sm:pl-4 lg:pl-8">
+                  <div className="leading-[1.05]">
+                    <p className="font-display font-extrabold text-2xl sm:text-4xl lg:text-5xl text-slate-900">
+                      {slide.titleHead}
+                    </p>
+                    <p
+                      className="font-display font-extrabold text-2xl sm:text-4xl lg:text-5xl"
+                      style={{ color: ACCENT_GREEN }}
+                    >
+                      {slide.titleAccent}
+                    </p>
+                  </div>
+                  <p className="max-w-xs sm:max-w-sm text-xs sm:text-sm lg:text-base text-slate-600 line-clamp-2">
+                    {slide.subtext}
+                  </p>
+                  <Link
+                    to={slide.buttonLink}
+                    tabIndex={i === index ? 0 : -1}
+                    className="group mt-1 inline-flex w-fit items-center gap-2.5 sm:gap-3"
+                  >
+                    <span
+                      className="grid h-8 w-8 sm:h-10 sm:w-10 lg:h-11 lg:w-11 shrink-0 place-items-center rounded-full text-white transition-transform duration-200 group-hover:scale-105"
+                      style={{ backgroundColor: ACCENT_GREEN }}
+                    >
+                      <ArrowUpRight className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </span>
+                    <span className="text-xs sm:text-sm lg:text-base font-bold text-slate-900">
+                      {slide.buttonText}
+                    </span>
+                  </Link>
+                </div>
+
+                {/* Right product-image card — fixed ~40-44% width/full height so the image never pops or shifts */}
+                <div
+                  className="relative h-full w-[44%] sm:w-[42%] flex-shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl"
+                  style={{ backgroundColor: slide.panelBg }}
+                >
+                  <img
+                    src={slide.imageUrl}
+                    alt={slide.imageAlt}
+                    width={960}
+                    height={380}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    loading={i === 1 ? 'eager' : 'lazy'}
+                    draggable={false}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* Navigation dots — left-aligned under the text column, dash style */}
