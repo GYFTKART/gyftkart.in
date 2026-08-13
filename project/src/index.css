@@ -88,6 +88,18 @@
     opacity: 1;
     transform: translateY(0);
   }
+
+  /* Opacity-only entrance — no transform, so there is no visible
+     movement of the element's box at all (used for horizontal-scroll
+     carousel cards, where a translateY animation firing mid-scroll
+     looks like the card is shifting/fighting the user's scroll). */
+  .reveal-fade {
+    opacity: 0;
+    transition: opacity 0.5s ease-out;
+  }
+  .reveal-fade.is-visible {
+    opacity: 1;
+  }
 }
 
 /* Custom scrollbar */

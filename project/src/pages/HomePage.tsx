@@ -252,6 +252,7 @@ export default function HomePage() {
                     key={`${copy}-${brand.id}`}
                     delay={copy === 1 ? i * 60 : 0}
                     className="shrink-0 w-60 sm:w-64"
+                    motion="fade"
                   >
                     <BrandCard brand={brand} />
                   </Reveal>
@@ -328,6 +329,7 @@ export default function HomePage() {
                     key={`${copy}-${brand.id}`}
                     delay={copy === 1 ? i * 60 : 0}
                     className="shrink-0 w-60 sm:w-64"
+                    motion="fade"
                   >
                     <BrandCard brand={brand} />
                   </Reveal>
