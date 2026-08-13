@@ -165,8 +165,14 @@ export default function HomePage() {
 
   return (
     <div className="pt-16">
-      {/* ===== HERO BANNER ===== */}
-      <HeroBanner />
+      {/* ===== HERO BANNER =====
+          Fixed-dimension outer reservation: this space is claimed by CSS
+          before HeroBanner's own JS state ever runs, so even if something
+          inside HeroBanner re-renders or its inner height calculation is
+          briefly wrong, the page around it cannot collapse or jump. */}
+      <div className="w-full min-h-[300px] sm:min-h-[360px] md:min-h-[420px] aspect-[16/6]">
+        <HeroBanner />
+      </div>
 
       {/* ===== SHOP BY CATEGORY ===== */}
       <section className="pt-4 pb-16">

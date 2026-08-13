@@ -143,7 +143,7 @@ export default function HeroBanner() {
           jump/layout-shift.
         */}
         <div
-          className="relative w-full h-[340px] sm:h-[380px] md:h-[420px] overflow-hidden rounded-3xl select-none"
+          className="relative min-h-[300px] sm:min-h-[360px] md:min-h-[420px] h-[300px] sm:h-[360px] md:h-[420px] w-full overflow-hidden rounded-3xl select-none"
           style={{ backgroundColor: PAGE_CREAM }}
         >
           {/*
@@ -152,9 +152,14 @@ export default function HeroBanner() {
             purely by translating this row with a GPU-accelerated
             transform — no slide is ever unmounted/remounted and nothing
             is keyed off `index`, so there's no flash between slides.
+
+            Pinned to `absolute inset-0` inside the fixed-height wrapper
+            above so the track's own box can never influence the height
+            of anything outside it — layout shifts inside the slider stay
+            fully contained and never ripple into page flow.
           */}
           <div
-            className="flex h-full w-full will-change-transform transform-gpu"
+            className="absolute inset-0 flex h-full w-full will-change-transform transform-gpu"
             style={{
               transform: `translateX(${-index * 100}%)`,
               transition: withTransition ? `transform ${TRANSITION_MS}ms ease-out` : 'none',
