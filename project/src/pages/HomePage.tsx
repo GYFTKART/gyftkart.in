@@ -178,7 +178,18 @@ export default function HomePage() {
           the effective CSS width balloons and the aspect box grows far
           taller than HeroBanner's actual fixed-height content — leaving a
           large blank gap below the banner. A fixed height can't do that. */}
-      <div className="w-full h-[300px] sm:h-[360px] md:h-[420px] mb-6 sm:mb-8">
+      {/*
+        Height here is NOT just the slider's own h-[...] — it must also
+        cover HeroBanner's internal `pt-6` top padding and its dots row
+        below the slider (mt-3/mt-4 + dot height), since that content
+        renders past this placeholder's box. If this height is short,
+        the dots overflow the box and the mb-6/mb-8 below gets silently
+        absorbed by that overflow instead of producing a visible gap —
+        which is exactly the "dots touching the category pills" bug.
+        300/360/420 (slider) + 24 (pt-6) + 12/16/16 (dots mt-3/mt-4) +
+        10 (dot height) = 346 / 410 / 470.
+      */}
+      <div className="w-full h-[346px] sm:h-[410px] md:h-[470px] mb-6 sm:mb-8">
         <HeroBanner />
       </div>
 
