@@ -33,23 +33,25 @@ export default function BrandCard({ brand, className = '' }: BrandCardProps) {
       to={`/brand/${brand.slug}`}
       className={`group relative block rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-brand-200 transition-all duration-300 hover:-translate-y-1 ${className}`}
     >
-      {/* Logo face — flat off-white panel, no gradient, no dark overlay */}
-      <div className="relative h-32 flex items-center justify-center bg-slate-50/70 border-b border-slate-100">
-        <span className="w-16 h-16 bg-white rounded-xl p-2.5 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
-          {showImage ? (
-            <img
-              src={logoUrl as string}
-              alt={`${brand.name} logo`}
-              className="h-full w-full object-contain"
-              loading="lazy"
-              onError={() => setImgFailed(true)}
-            />
-          ) : initials ? (
-            <span className="text-sm font-extrabold text-slate-700">{initials}</span>
-          ) : (
-            <Store className="h-5 w-5 text-slate-400" />
-          )}
-        </span>
+      {/* Full-width image banner, flush with the card's top corners */}
+      <div className="relative h-36 w-full overflow-hidden rounded-t-2xl bg-slate-50/70 border-b border-slate-100">
+        {showImage ? (
+          <img
+            src={logoUrl as string}
+            alt={`${brand.name} logo`}
+            className="h-full w-full object-cover"
+            loading="lazy"
+            onError={() => setImgFailed(true)}
+          />
+        ) : initials ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <span className="text-2xl font-extrabold text-slate-700">{initials}</span>
+          </div>
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <Store className="h-8 w-8 text-slate-400" />
+          </div>
+        )}
       </div>
 
       {/* Bottom info */}
