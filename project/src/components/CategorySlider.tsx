@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useRef, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRef, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 
 interface CategorySliderProps {
   children: ReactNode[];
@@ -16,11 +15,44 @@ export default function CategorySlider({
   icon,
 }: CategorySliderProps) {
   const ref = useRef<HTMLDivElement | null>(null);
+  // Same plain onMouseDown/onMouseMove/onMouseUp/onMouseLeave drag-to-scroll
+  // approach as the brand card rows on HomePage — moves the row's native
+  // scrollLeft directly. Touch is left untouched so native swipe scrolling
+  // keeps working.
+  const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: 0 });
 
-  const scrollBy = (dir: number) => {
+  const onMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     const el = ref.current;
     if (!el) return;
-    el.scrollBy({ left: dir * (el.clientWidth * 0.8), behavior: 'smooth' });
+    drag.current = {
+      isDown: true,
+      startX: e.pageX - el.offsetLeft,
+      scrollLeft: el.scrollLeft,
+      moved: 0,
+    };
+  };
+
+  const endDrag = () => {
+    drag.current.isDown = false;
+  };
+
+  const onMouseMove = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const el = ref.current;
+    if (!el || !drag.current.isDown) return;
+    e.preventDefault();
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - drag.current.startX) * 2;
+    drag.current.moved = Math.abs(walk);
+    el.scrollLeft = drag.current.scrollLeft - walk;
+  };
+
+  // A drag ending on a card shouldn't also trigger its Link navigation.
+  const onClickCapture = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (drag.current.moved > 5) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    drag.current.moved = 0;
   };
 
   return (
@@ -40,27 +72,17 @@ export default function CategorySlider({
               {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2">
-            <button
-              onClick={() => scrollBy(-1)}
-              className="grid place-items-center h-10 w-10 rounded-full border border-gray-400 bg-transparent text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
-              aria-label="Scroll left"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => scrollBy(1)}
-              className="grid place-items-center h-10 w-10 rounded-full border border-gray-400 bg-transparent text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
-              aria-label="Scroll right"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
         </div>
 
         <div
           ref={ref}
-          className="flex flex-nowrap gap-4 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y scroll-snap-x pb-2 -mx-4 px-4"
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={endDrag}
+          onMouseLeave={endDrag}
+          onClickCapture={onClickCapture}
+          onDragStart={(e) => e.preventDefault()}
+          className="flex flex-nowrap gap-4 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y scroll-snap-x pb-2 -mx-4 px-4 cursor-grab active:cursor-grabbing select-none"
         >
           {children.map((child, i) => (
             <div key={i} className="snap-start shrink-0">

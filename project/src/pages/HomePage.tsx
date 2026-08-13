@@ -114,7 +114,6 @@ export default function HomePage() {
   const { brands, loading } = useBrands();
 
   const trending = brands.filter((b) => b.trending).slice(0, 8);
-  const popular = brands.slice(0, 12);
 
   const [activeCategory, setActiveCategory] = useState('All');
   const filteredBrands = useMemo(() => {
@@ -327,14 +326,14 @@ export default function HomePage() {
               <Link
                 key={o.name}
                 to={`/brands?occasion=${encodeURIComponent(o.search)}`}
-                className={`group relative block w-60 h-44 rounded-3xl bg-gradient-to-br ${o.color} p-6 text-white shadow-card hover:shadow-card-hover hover:-translate-y-1.5 transition-all duration-500 overflow-hidden`}
+                className={`group relative block w-60 h-44 rounded-3xl bg-gradient-to-br ${o.color} p-6 text-white shadow-card overflow-hidden`}
               >
-                <div className="absolute -top-8 -right-8 h-24 w-24 rounded-full bg-white/15 blur-2xl group-hover:scale-150 transition-transform duration-700" />
+                <div className="absolute -top-8 -right-8 h-24 w-24 rounded-full bg-white/15 blur-2xl" />
                 <o.icon className="h-9 w-9 drop-shadow" />
                 <div className="absolute bottom-5 left-5 right-5">
                   <p className="font-display text-2xl font-extrabold">{o.name}</p>
                   <p className="text-sm text-white/80 mt-0.5 flex items-center gap-1">
-                    Explore cards <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+                    Explore cards <ArrowRight className="h-3.5 w-3.5" />
                   </p>
                 </div>
               </Link>
@@ -349,8 +348,8 @@ export default function HomePage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {features.map((f, i) => (
               <Reveal key={f.title} delay={i * 80}>
-                <div className="group h-full rounded-3xl border border-slate-100 bg-white p-6 shadow-soft hover:shadow-card hover:-translate-y-1 transition-all duration-400">
-                  <span className="grid place-items-center h-12 w-12 rounded-2xl bg-brand-600 text-white shadow-glow-sm group-hover:scale-110 transition-transform">
+                <div className="h-full rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+                  <span className="grid place-items-center h-12 w-12 rounded-2xl bg-brand-600 text-white shadow-glow-sm">
                     <f.icon className="h-6 w-6" />
                   </span>
                   <h3 className="mt-4 font-display text-lg font-bold text-slate-900">{f.title}</h3>
@@ -358,57 +357,6 @@ export default function HomePage() {
                 </div>
               </Reveal>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== POPULAR BRANDS STRIP ===== */}
-      <section className="py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Reveal className="text-center max-w-2xl mx-auto mb-10">
-            <h2 className="font-display text-3xl sm:text-4xl font-bold text-slate-900">
-              More brands you'll love
-            </h2>
-            <p className="mt-2 text-slate-500">
-              Browse the full catalogue — shopping, fashion, food, travel and more.
-            </p>
-          </Reveal>
-
-          {loading ? (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div key={i} className="h-24 rounded-2xl shimmer" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-              {popular.map((b, i) => (
-                <Reveal key={b.id} delay={i * 40}>
-                  <Link
-                    to={`/brand/${b.slug}`}
-                    className="group flex flex-col items-center justify-center gap-2 rounded-2xl border border-slate-100 bg-white p-4 h-24 shadow-soft hover:shadow-card hover:border-brand-200 transition-all duration-300"
-                  >
-                    <span
-                      className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-display font-extrabold text-xs shadow-soft transition-transform group-hover:scale-110"
-                      style={{ background: `linear-gradient(135deg, ${b.color}, ${b.color2})` }}
-                    >
-                      {b.name.slice(0, 2).toUpperCase()}
-                    </span>
-                    <span className="text-[11px] font-semibold text-slate-600 group-hover:text-brand-700 text-center leading-tight">
-                      {b.name}
-                    </span>
-                  </Link>
-                </Reveal>
-              ))}
-            </div>
-          )}
-          <div className="mt-8 text-center">
-            <Link
-              to="/brands"
-              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
-            >
-              Explore all brands <ArrowRight className="h-4 w-4" />
-            </Link>
           </div>
         </div>
       </section>
