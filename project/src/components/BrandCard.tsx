@@ -31,9 +31,9 @@ export default function BrandCard({ brand, className = '' }: BrandCardProps) {
   return (
     <Link
       to={`/brand/${brand.slug}`}
-      draggable={false}
+      draggable="false"
       onDragStart={(e) => e.preventDefault()}
-      className={`group relative block rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-brand-200 transition-all duration-300 ${className}`}
+      className={`group relative block select-none rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-brand-200 transition-all duration-300 ${className}`}
     >
       {/* Full-width image banner, flush with the card's top corners */}
       <div className="relative h-36 w-full overflow-hidden rounded-t-2xl bg-slate-50/70 border-b border-slate-100">
@@ -41,9 +41,9 @@ export default function BrandCard({ brand, className = '' }: BrandCardProps) {
           <img
             src={logoUrl as string}
             alt={`${brand.name} logo`}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover select-none pointer-events-none [-webkit-user-drag:none]"
             loading="lazy"
-            draggable={false}
+            draggable="false"
             onError={() => setImgFailed(true)}
           />
         ) : initials ? (
