@@ -65,6 +65,18 @@ export default function HeroBanner() {
   const [index, setIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Mouse-drag / touch-swipe state. dragOffset is the live pixel offset
+  // applied on top of the current slide's transform while a drag is in
+  // progress; trackRef/trackWidth are used to size the swipe threshold
+  // and dragMoved suppresses an accidental Link click after a real drag.
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const dragStartX = useRef(0);
+  const dragOffsetRef = useRef(0);
+  const dragMoved = useRef(false);
+  const trackWidth = useRef(1);
+
   const startAutoplay = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
@@ -87,6 +99,65 @@ export default function HeroBanner() {
     startAutoplay();
   };
 
+  const beginDrag = (clientX: number) => {
+    dragStartX.current = clientX;
+    dragOffsetRef.current = 0;
+    dragMoved.current = false;
+    trackWidth.current = trackRef.current?.offsetWidth || 1;
+    setIsDragging(true);
+    if (timerRef.current) clearInterval(timerRef.current);
+  };
+
+  const updateDrag = (clientX: number) => {
+    const delta = clientX - dragStartX.current;
+    dragOffsetRef.current = delta;
+    if (Math.abs(delta) > 5) dragMoved.current = true;
+    setDragOffset(delta);
+  };
+
+  const endDrag = () => {
+    setIsDragging(false);
+    const threshold = trackWidth.current * 0.15;
+    const offset = dragOffsetRef.current;
+    if (offset > threshold) {
+      setIndex((i) => (i - 1 + slides.length) % slides.length);
+    } else if (offset < -threshold) {
+      setIndex((i) => (i + 1) % slides.length);
+    }
+    dragOffsetRef.current = 0;
+    setDragOffset(0);
+    startAutoplay();
+  };
+
+  // Mouse dragging can leave the track's bounds mid-drag, so listen on
+  // the window while a drag is active rather than only on the element.
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMouseMove = (e: MouseEvent) => updateDrag(e.clientX);
+    const onMouseUp = () => endDrag();
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDragging]);
+
+  // Suppress the click a drag would otherwise fire on a slide's <Link>.
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const onClickCapture = (e: MouseEvent) => {
+      if (dragMoved.current) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    el.addEventListener('click', onClickCapture, true);
+    return () => el.removeEventListener('click', onClickCapture, true);
+  }, []);
+
   return (
     <section className="pt-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -96,14 +167,24 @@ export default function HeroBanner() {
           keeps the headline/subtext/CTA stack legible at narrow widths.
         */}
         <div
-          className="relative w-full h-[220px] sm:h-[280px] md:h-[330px] lg:h-[380px] overflow-hidden rounded-3xl"
+          ref={trackRef}
+          className="relative w-full h-[220px] sm:h-[280px] md:h-[330px] lg:h-[380px] overflow-hidden rounded-3xl cursor-grab active:cursor-grabbing select-none touch-pan-y"
           style={{ backgroundColor: PAGE_CREAM }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            beginDrag(e.clientX);
+          }}
+          onTouchStart={(e) => beginDrag(e.touches[0].clientX)}
+          onTouchMove={(e) => updateDrag(e.touches[0].clientX)}
+          onTouchEnd={endDrag}
         >
           {slides.map((slide, i) => (
             <div
               key={slide.id}
-              className="absolute inset-0 flex items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 transition-transform duration-700 ease-out"
-              style={{ transform: `translateX(${(i - index) * 100}%)` }}
+              className={`absolute inset-0 flex items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 ${
+                isDragging ? '' : 'transition-transform duration-700 ease-out'
+              }`}
+              style={{ transform: `translateX(calc(${(i - index) * 100}% + ${dragOffset}px))` }}
               aria-hidden={i !== index}
             >
               {/* Left text column — ~55-60% width */}
@@ -149,6 +230,7 @@ export default function HeroBanner() {
                   alt={slide.imageAlt}
                   className="h-full w-full object-cover"
                   loading={i === 0 ? 'eager' : 'lazy'}
+                  draggable={false}
                 />
               </div>
             </div>

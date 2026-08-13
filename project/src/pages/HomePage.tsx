@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   Sparkles,
@@ -18,8 +18,6 @@ import {
   CreditCard,
   Mail,
   ShoppingBag,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 import Reveal from '@/components/Reveal';
 import CategorySlider from '@/components/CategorySlider';
@@ -59,6 +57,56 @@ const testimonials = [
   { name: 'Rohan Gupta', role: 'Delhi', text: 'Corporate gifting for 120 employees was effortless. Bulk orders, branded cards, done in a day.' },
 ];
 
+// Adds Woohoo-style click-and-drag scrolling to a horizontal row.
+// Touch devices already get native swipe scrolling from overflow-x-auto,
+// so this only needs to handle mouse dragging, plus suppressing the
+// stray click a drag would otherwise fire on a BrandCard's <Link>.
+function useDragScroll<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: 0 });
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    const el = ref.current;
+    if (!el) return;
+    drag.current = { isDown: true, startX: e.pageX, scrollLeft: el.scrollLeft, moved: 0 };
+  };
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!drag.current.isDown) return;
+      e.preventDefault();
+      const dx = e.pageX - drag.current.startX;
+      drag.current.moved = Math.abs(dx);
+      el.scrollLeft = drag.current.scrollLeft - dx;
+    };
+    const stopDrag = () => {
+      drag.current.isDown = false;
+    };
+    // A drag ending on a card shouldn't also trigger its Link navigation.
+    const onClickCapture = (e: MouseEvent) => {
+      if (drag.current.moved > 5) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      drag.current.moved = 0;
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', stopDrag);
+    el.addEventListener('click', onClickCapture, true);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', stopDrag);
+      el.removeEventListener('click', onClickCapture, true);
+    };
+  }, []);
+
+  return { ref, onMouseDown };
+}
+
 export default function HomePage() {
   const { brands, loading } = useBrands();
 
@@ -73,17 +121,12 @@ export default function HomePage() {
     return list.slice(0, 8);
   }, [brands, activeCategory]);
 
-  // Refs + helper for the single-row horizontal card carousels
-  // (Shop by Category, Trending Brands). Native touch/trackpad swipe
-  // works out of the box via overflow-x-auto; these just power the
-  // optional desktop arrow buttons.
-  const categoryRowRef = useRef<HTMLDivElement | null>(null);
-  const trendingRowRef = useRef<HTMLDivElement | null>(null);
-  const scrollRowBy = (ref: React.RefObject<HTMLDivElement>, dir: number) => {
-    const el = ref.current;
-    if (!el) return;
-    el.scrollBy({ left: dir * (el.clientWidth * 0.8), behavior: 'smooth' });
-  };
+  // Mouse click-and-drag scrolling for the single-row horizontal card
+  // carousels (Shop by Category, Trending Brands). Touch swipe already
+  // works out of the box via overflow-x-auto, so this only wires up
+  // mouse dragging (Woohoo-style, no arrow buttons).
+  const categoryDrag = useDragScroll();
+  const trendingDrag = useDragScroll();
 
   return (
     <div className="pt-16">
@@ -115,24 +158,6 @@ export default function HomePage() {
             })}
           </div>
 
-          {/* Desktop scroll arrows */}
-          <div className="hidden sm:flex items-center justify-end gap-2 mb-3">
-            <button
-              onClick={() => scrollRowBy(categoryRowRef, -1)}
-              className="grid place-items-center h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
-              aria-label="Scroll left"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => scrollRowBy(categoryRowRef, 1)}
-              className="grid place-items-center h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
-              aria-label="Scroll right"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-
           {/* Filtered brand cards — single-row horizontal carousel */}
           {loading ? (
             <div className="flex gap-5 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
@@ -152,8 +177,9 @@ export default function HomePage() {
             </div>
           ) : (
             <div
-              ref={categoryRowRef}
-              className="flex gap-5 overflow-x-auto no-scrollbar scroll-snap-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+              ref={categoryDrag.ref}
+              onMouseDown={categoryDrag.onMouseDown}
+              className="flex gap-5 overflow-x-auto no-scrollbar scroll-snap-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
               {filteredBrands.map((brand, i) => (
                 <Reveal key={brand.id} delay={i * 60} className="shrink-0 w-60 sm:w-64 snap-start">
@@ -192,22 +218,6 @@ export default function HomePage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2">
-                <button
-                  onClick={() => scrollRowBy(trendingRowRef, -1)}
-                  className="grid place-items-center h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
-                  aria-label="Scroll left"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() => scrollRowBy(trendingRowRef, 1)}
-                  className="grid place-items-center h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
-                  aria-label="Scroll right"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
               <Link
                 to="/brands"
                 className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-800 group whitespace-nowrap"
@@ -232,8 +242,9 @@ export default function HomePage() {
             </div>
           ) : (
             <div
-              ref={trendingRowRef}
-              className="flex gap-5 overflow-x-auto no-scrollbar scroll-snap-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+              ref={trendingDrag.ref}
+              onMouseDown={trendingDrag.onMouseDown}
+              className="flex gap-5 overflow-x-auto no-scrollbar scroll-snap-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
               {trending.map((brand, i) => (
                 <Reveal key={brand.id} delay={i * 60} className="shrink-0 w-60 sm:w-64 snap-start">

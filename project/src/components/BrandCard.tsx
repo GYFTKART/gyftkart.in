@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Store } from 'lucide-react';
+import { Store } from 'lucide-react';
 import type { Brand } from '@/lib/types';
 
 interface BrandCardProps {
@@ -54,18 +54,10 @@ export default function BrandCard({ brand, className = '' }: BrandCardProps) {
         )}
       </div>
 
-      {/* Bottom info */}
-      <div className="p-4">
+      {/* Bottom info — brand title + discount tag only, compact */}
+      <div className="px-3 py-2.5">
         <p className="text-sm font-bold text-slate-900 truncate">{brand.name}</p>
         <p className="mt-0.5 text-xs font-semibold text-brand-700">Get 10% Discount</p>
-
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <span className="text-[11px] text-slate-400 truncate">{brand.tagline}</span>
-          <span className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 shrink-0">
-            Buy Now
-            <ArrowUpRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-          </span>
-        </div>
       </div>
     </Link>
   );
