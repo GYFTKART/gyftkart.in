@@ -19,13 +19,6 @@ export default function BrandsPage() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [onlyTrending, setOnlyTrending] = useState(filter === 'trending');
 
-  const updateParam = (key: string, value: string) => {
-    const next = new URLSearchParams(params);
-    if (value) next.set(key, value);
-    else next.delete(key);
-    setParams(next, { replace: true });
-  };
-
   const filtered = useMemo(() => {
     let list = brands;
     if (activeCategory !== 'All') list = list.filter((b) => b.category === activeCategory);
@@ -68,32 +61,6 @@ export default function BrandsPage() {
               Find the perfect gift card for any occasion across shopping, fashion,
               food, travel and entertainment.
             </p>
-
-            {/* Search */}
-            <div className="mt-6 max-w-xl flex items-center gap-2 rounded-2xl bg-white p-2 shadow-card border border-slate-100">
-              <Search className="ml-2 h-5 w-5 text-slate-400" />
-              <input
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  updateParam('q', e.target.value);
-                }}
-                placeholder="Search Amazon, Myntra, Swiggy…"
-                className="flex-1 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 outline-none py-2"
-              />
-              {query && (
-                <button
-                  onClick={() => {
-                    setQuery('');
-                    updateParam('q', '');
-                  }}
-                  className="grid place-items-center h-8 w-8 rounded-full text-slate-400 hover:bg-slate-100"
-                  aria-label="Clear search"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
 
             {(initialOccasion || filter) && (
               <p className="mt-3 text-sm text-brand-700 font-semibold flex items-center gap-1.5">
