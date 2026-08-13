@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface CategorySliderProps {
@@ -16,27 +16,6 @@ export default function CategorySlider({
   icon,
 }: CategorySliderProps) {
   const ref = useRef<HTMLDivElement | null>(null);
-
-  // Wheel passthrough: same fix as the brand-card rows on HomePage —
-  // this element only scrolls horizontally, so browsers will otherwise
-  // silently redirect vertical wheel input into its scrollLeft instead
-  // of letting the page scroll. A vertical-dominant gesture is handed
-  // back to the page here; horizontal-dominant input (Shift+scroll,
-  // trackpad swipe) is left to scroll the row natively. Has to be a
-  // native, non-passive listener — React's onWheel prop is passive by
-  // default and preventDefault() would silently do nothing there.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        window.scrollBy({ top: e.deltaY, left: 0, behavior: 'auto' });
-      }
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, []);
 
   const scrollBy = (dir: number) => {
     const el = ref.current;
@@ -81,7 +60,7 @@ export default function CategorySlider({
 
         <div
           ref={ref}
-          className="flex gap-4 overflow-x-auto no-scrollbar scroll-snap-x pb-2 -mx-4 px-4"
+          className="flex flex-nowrap gap-4 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y scroll-snap-x pb-2 -mx-4 px-4"
         >
           {children.map((child, i) => (
             <div key={i} className="snap-start shrink-0">

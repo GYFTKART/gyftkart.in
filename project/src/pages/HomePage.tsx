@@ -101,30 +101,6 @@ function useDragScrollCarousel(itemCount: number) {
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Wheel passthrough: this row can only scroll horizontally, so by
-  // default Chrome/Edge/Firefox will silently redirect a plain vertical
-  // mouse-wheel gesture into this element's horizontal scrollLeft
-  // instead of letting it bubble up to scroll the page — this is native
-  // browser scroll-chaining behavior, not something any onWheel handler
-  // in this codebase was causing. We override it here: a vertical-
-  // dominant gesture is handed back to the page; a horizontal-dominant
-  // one (Shift+scroll, trackpad swipe) is left alone to move the row.
-  // Must be a native, non-passive listener — React's onWheel prop is
-  // registered passive by default, so preventDefault() there is a no-op.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        window.scrollBy({ top: e.deltaY, left: 0, behavior: 'auto' });
-      }
-      // else: horizontal-dominant input — let the browser scroll the row natively.
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, []);
-
   const onMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     const el = ref.current;
     if (!el) return;
@@ -244,7 +220,7 @@ export default function HomePage() {
 
           {/* Filtered brand cards — single-row horizontal carousel */}
           {loading ? (
-            <div className="flex gap-5 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            <div className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="shrink-0 w-60 sm:w-64 rounded-3xl overflow-hidden border border-slate-100">
                   <div className="h-44 shimmer" />
@@ -268,7 +244,7 @@ export default function HomePage() {
               onMouseLeave={categoryDrag.onMouseLeave}
               onClickCapture={categoryDrag.onClickCapture}
               onDragStart={(e) => e.preventDefault()}
-              className="flex gap-5 overflow-x-auto no-scrollbar scrollbar-none pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
+              className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
               {[0, 1, 2].flatMap((copy) =>
                 filteredBrands.map((brand, i) => (
@@ -324,7 +300,7 @@ export default function HomePage() {
           </Reveal>
 
           {loading ? (
-            <div className="flex gap-5 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            <div className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="shrink-0 w-60 sm:w-64 rounded-3xl overflow-hidden border border-slate-100">
                   <div className="h-44 shimmer" />
@@ -344,7 +320,7 @@ export default function HomePage() {
               onMouseLeave={trendingDrag.onMouseLeave}
               onClickCapture={trendingDrag.onClickCapture}
               onDragStart={(e) => e.preventDefault()}
-              className="flex gap-5 overflow-x-auto no-scrollbar scrollbar-none pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
+              className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
             >
               {[0, 1, 2].flatMap((copy) =>
                 trending.map((brand, i) => (
