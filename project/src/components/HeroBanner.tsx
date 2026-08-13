@@ -218,13 +218,13 @@ export default function HeroBanner() {
         */}
         <div
           ref={trackRef}
-          className="relative w-full h-[220px] sm:h-[280px] md:h-[330px] lg:h-[380px] overflow-hidden rounded-3xl cursor-grab active:cursor-grabbing select-none touch-pan-y"
+          className="relative w-full aspect-[3/1] min-h-[220px] sm:min-h-[280px] md:min-h-[330px] lg:min-h-[380px] overflow-hidden rounded-3xl cursor-grab active:cursor-grabbing select-none touch-pan-y"
           style={{ backgroundColor: PAGE_CREAM }}
         >
           {extendedSlides.map((slide, i) => (
             <div
               key={`${slide.id}-${i}`}
-              className="absolute inset-0 flex items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8"
+              className="absolute inset-0 flex items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 will-change-transform transform-gpu"
               style={{
                 transform: `translateX(calc(${(i - index) * 100}% + ${dragOffset}px))`,
                 transition: withTransition ? `transform ${TRANSITION_MS}ms ease-out` : 'none',
@@ -272,6 +272,8 @@ export default function HeroBanner() {
                 <img
                   src={slide.imageUrl}
                   alt={slide.imageAlt}
+                  width={960}
+                  height={380}
                   className="h-full w-full object-cover"
                   loading={i === 1 ? 'eager' : 'lazy'}
                   draggable={false}
