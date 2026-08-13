@@ -164,18 +164,26 @@ export default function HomePage() {
   const trendingDrag = useDragScrollCarousel(trending.length);
 
   return (
-    <div className="pt-16">
+    <div className="flex flex-col justify-start pt-16">
       {/* ===== HERO BANNER =====
           Fixed-dimension outer reservation: this space is claimed by CSS
           before HeroBanner's own JS state ever runs, so even if something
           inside HeroBanner re-renders or its inner height calculation is
-          briefly wrong, the page around it cannot collapse or jump. */}
-      <div className="w-full min-h-[300px] sm:min-h-[360px] md:min-h-[420px] aspect-[16/6]">
+          briefly wrong, the page around it cannot collapse or jump.
+
+          NOTE: this uses an explicit height at each breakpoint (matching
+          HeroBanner's own h-[...] values) instead of `aspect-[16/6]`.
+          An aspect-ratio box scales with the *viewport width*, so at
+          extreme zoom-out (e.g. 25%) or on ultra-wide/high-res monitors
+          the effective CSS width balloons and the aspect box grows far
+          taller than HeroBanner's actual fixed-height content — leaving a
+          large blank gap below the banner. A fixed height can't do that. */}
+      <div className="w-full h-[300px] sm:h-[360px] md:h-[420px] mb-6 sm:mb-8">
         <HeroBanner />
       </div>
 
       {/* ===== SHOP BY CATEGORY ===== */}
-      <section className="pt-4 pb-16">
+      <section className="pb-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Category pills */}
           <div className="flex flex-wrap items-center justify-center gap-2 mb-6">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
 
@@ -79,6 +79,13 @@ export default function HeroBanner() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Drag / swipe state. Kept in a ref (not React state) since it's
+  // updated on every pointermove and we don't want to re-render the
+  // component on every pixel of movement — only `index` changes trigger
+  // a render, exactly like the existing autoplay logic.
+  const SWIPE_THRESHOLD_PX = 50;
+  const drag = useRef({ isDown: false, startX: 0 });
+
   const startAutoplay = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
@@ -133,6 +140,57 @@ export default function HeroBanner() {
     startAutoplay();
   };
 
+  // Shared start/end/cancel logic for both mouse and touch. Only the X
+  // coordinate is tracked (matching Woohoo-style horizontal swipe), and
+  // the same SWIPE_THRESHOLD_PX used for touch is used for mouse drag.
+  const startDrag = (clientX: number) => {
+    drag.current = { isDown: true, startX: clientX };
+    // Pause autoplay while the user is actively dragging so a timer tick
+    // can't fight with the manual swipe mid-gesture.
+    if (timerRef.current) clearInterval(timerRef.current);
+  };
+
+  const endDrag = (clientX: number | null) => {
+    if (!drag.current.isDown) return;
+    drag.current.isDown = false;
+
+    if (clientX !== null) {
+      const delta = clientX - drag.current.startX;
+      if (delta <= -SWIPE_THRESHOLD_PX) {
+        setIndex((i) => i + 1); // dragged left -> next slide
+      } else if (delta >= SWIPE_THRESHOLD_PX) {
+        setIndex((i) => i - 1); // dragged right -> previous slide
+      }
+    }
+    // Resume autoplay regardless of whether the drag crossed the
+    // threshold, same as after a manual dot click.
+    startAutoplay();
+  };
+
+  const cancelDrag = () => {
+    if (!drag.current.isDown) return;
+    drag.current.isDown = false;
+    startAutoplay();
+  };
+
+  const onMouseDown = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    startDrag(e.clientX);
+  };
+  // While the mouse button is held, suppress the browser's native
+  // image/text drag-select so it doesn't fight with our own gesture.
+  const onMouseMove = (e: ReactMouseEvent) => {
+    if (drag.current.isDown) e.preventDefault();
+  };
+  const onMouseUp = (e: ReactMouseEvent) => endDrag(e.clientX);
+  const onMouseLeave = () => cancelDrag();
+  const onTouchStart = (e: ReactTouchEvent) => startDrag(e.touches[0].clientX);
+  // No-op: we only need the final delta (captured in onTouchEnd), and
+  // leaving touchmove passive keeps native vertical page scroll working.
+  const onTouchMove = () => {};
+  const onTouchEnd = (e: ReactTouchEvent) => endDrag(e.changedTouches[0]?.clientX ?? null);
+  const onTouchCancel = () => cancelDrag();
+
   return (
     <section className="pt-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -159,11 +217,19 @@ export default function HeroBanner() {
             fully contained and never ripple into page flow.
           */}
           <div
-            className="absolute inset-0 flex h-full w-full will-change-transform transform-gpu"
+            className="absolute inset-0 flex h-full w-full will-change-transform transform-gpu cursor-grab active:cursor-grabbing select-none"
             style={{
               transform: `translateX(${-index * 100}%)`,
               transition: withTransition ? `transform ${TRANSITION_MS}ms ease-out` : 'none',
             }}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseLeave}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            onTouchCancel={onTouchCancel}
           >
             {extendedSlides.map((slide, i) => (
               <div
@@ -216,7 +282,7 @@ export default function HeroBanner() {
                     height={380}
                     className="absolute inset-0 h-full w-full object-cover"
                     loading={i === 1 ? 'eager' : 'lazy'}
-                    draggable={false}
+                    draggable="false"
                   />
                 </div>
               </div>
