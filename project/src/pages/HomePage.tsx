@@ -208,7 +208,7 @@ export default function HomePage() {
                   className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
                     active
                       ? 'bg-brand-700 text-white shadow-sm'
-                      : 'bg-white border border-gray-200 text-slate-600 hover:bg-slate-50 hover:border-brand-200'
+                      : 'bg-transparent border border-gray-400 text-slate-600 hover:bg-slate-900/5 hover:border-brand-400'
                   }`}
                 >
                   <Icon className="h-4 w-4" />

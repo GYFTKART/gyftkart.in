@@ -279,8 +279,8 @@ export default function Navbar() {
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo */}
           <Link to="/" className="flex items-center shrink-0" onClick={() => setMobileOpen(false)}>
-            <span className="font-display text-xl font-extrabold tracking-tight text-slate-900">
-              Gyft<span className="text-gradient">Kart</span>
+            <span className="font-display text-xl font-extrabold tracking-tight text-[#F26722]">
+              GyftKart
             </span>
           </Link>
 
@@ -294,7 +294,7 @@ export default function Navbar() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search brands…"
-              className="w-full rounded-full border border-slate-200 bg-white/80 pl-11 pr-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none transition"
+              className="w-full rounded-full border border-gray-300 bg-transparent pl-11 pr-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none transition"
             />
           </form>
 
@@ -381,7 +381,7 @@ export default function Navbar() {
             ) : (
               <button
                 onClick={openLogin}
-                className="hidden sm:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 pl-2 pr-4 py-1.5 text-sm font-semibold text-slate-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors"
+                className="hidden sm:inline-flex items-center gap-2 rounded-full border border-gray-300 bg-transparent pl-2 pr-4 py-1.5 text-sm font-semibold text-slate-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors"
                 aria-label="Login or sign up"
               >
                 <span className="grid place-items-center h-7 w-7 rounded-full bg-gradient-to-br from-brand-100 to-brand-200 text-brand-700">

@@ -43,14 +43,14 @@ export default function CategorySlider({
           <div className="hidden sm:flex items-center gap-2">
             <button
               onClick={() => scrollBy(-1)}
-              className="grid place-items-center h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
+              className="grid place-items-center h-10 w-10 rounded-full border border-gray-400 bg-transparent text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
               aria-label="Scroll left"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
             <button
               onClick={() => scrollBy(1)}
-              className="grid place-items-center h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
+              className="grid place-items-center h-10 w-10 rounded-full border border-gray-400 bg-transparent text-slate-600 hover:border-brand-400 hover:text-brand-600 transition-colors shadow-soft"
               aria-label="Scroll right"
             >
               <ChevronRight className="h-5 w-5" />

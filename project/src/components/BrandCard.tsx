@@ -33,7 +33,7 @@ export default function BrandCard({ brand, className = '' }: BrandCardProps) {
       to={`/brand/${brand.slug}`}
       draggable="false"
       onDragStart={(e) => e.preventDefault()}
-      className={`group relative block select-none rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-brand-200 transition-all duration-300 ${className}`}
+      className={`group relative block select-none rounded-2xl overflow-hidden bg-transparent border border-slate-300 shadow-sm hover:shadow-md hover:border-brand-200 transition-all duration-300 ${className}`}
     >
       {/* Full-width image banner, flush with the card's top corners */}
       <div className="relative h-36 w-full overflow-hidden rounded-t-2xl bg-slate-50/70 border-b border-slate-100">
@@ -58,7 +58,7 @@ export default function BrandCard({ brand, className = '' }: BrandCardProps) {
       </div>
 
       {/* Bottom info — brand title + discount tag only, compact */}
-      <div className="px-3 py-2.5">
+      <div className="px-3 py-2.5 bg-transparent">
         <p className="text-sm font-bold text-slate-900 truncate">{brand.name}</p>
         <p className="mt-0.5 text-xs font-semibold text-brand-700">Get 10% Discount</p>
       </div>
