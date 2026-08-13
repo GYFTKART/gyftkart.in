@@ -91,7 +91,7 @@ export default function HomePage() {
       <HeroBanner />
 
       {/* ===== SHOP BY CATEGORY ===== */}
-      <section className="pt-4 pb-16 bg-gradient-to-b from-brand-50/40 to-white">
+      <section className="pt-4 pb-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Category pills */}
           <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
@@ -104,8 +104,8 @@ export default function HomePage() {
                   onClick={() => setActiveCategory(c)}
                   className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
                     active
-                      ? 'bg-brand-600 text-white shadow-glow-sm'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-700'
+                      ? 'bg-brand-700 text-white shadow-sm'
+                      : 'bg-white border border-gray-200 text-slate-600 hover:bg-slate-50 hover:border-brand-200'
                   }`}
                 >
                   <Icon className="h-4 w-4" />
