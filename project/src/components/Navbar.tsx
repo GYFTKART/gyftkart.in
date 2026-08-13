@@ -289,12 +289,12 @@ export default function Navbar() {
             onSubmit={submitSearch}
             className="hidden md:flex items-center flex-1 max-w-2xl relative ml-2"
           >
-            <Search className="pointer-events-none absolute left-4 h-4 w-4 text-gray-900" />
+            <Search className="pointer-events-none absolute left-4 h-4 w-4 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search brands…"
-              className="w-full rounded-full border border-gray-300 bg-[#F2EFEA] pl-11 pr-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-[#0A4A3C] focus:ring-2 focus:ring-[#0A4A3C] outline-none transition"
+              className="w-full rounded-full border border-gray-300 bg-transparent pl-11 pr-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none transition"
             />
           </form>
 
@@ -381,7 +381,7 @@ export default function Navbar() {
             ) : (
               <button
                 onClick={openLogin}
-                className="hidden sm:inline-flex items-center gap-2 rounded-full border border-gray-300 bg-[#F2EFEA] pl-2 pr-4 py-1.5 text-sm font-semibold text-slate-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors"
+                className="hidden sm:inline-flex items-center gap-2 rounded-full border border-gray-300 bg-transparent pl-2 pr-4 py-1.5 text-sm font-semibold text-slate-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors"
                 aria-label="Login or sign up"
               >
                 <span className="grid place-items-center h-7 w-7 rounded-full bg-gradient-to-br from-brand-100 to-brand-200 text-brand-700">
