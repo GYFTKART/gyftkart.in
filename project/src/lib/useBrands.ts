@@ -44,8 +44,21 @@ function buildCloudLogoUrl(domain: string): string {
   return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
 }
 
+// Custom local overrides — brands we've designed a dedicated flat-vector
+// gift-card graphic for (public/images/banners/). These take priority
+// over the generic Google favicon so BrandCard shows the on-brand
+// artwork instead of a tiny favicon icon.
+const LOCAL_LOGO_OVERRIDES: Record<string, string> = {
+  amazon: '/images/banners/amazon-gift-card.png',
+  flipkart: '/images/banners/flipkart-gift-card.png',
+  myntra: '/images/banners/myntra-gift-card.png',
+};
+
 const BRAND_LOGO_URLS: Record<string, string> = Object.fromEntries(
-  Object.entries(BRAND_DOMAINS).map(([key, domain]) => [key, buildCloudLogoUrl(domain)])
+  Object.entries(BRAND_DOMAINS).map(([key, domain]) => [
+    key,
+    LOCAL_LOGO_OVERRIDES[key] ?? buildCloudLogoUrl(domain),
+  ])
 );
 
 // A deterministic accent color per brand, used only if we ever need the
