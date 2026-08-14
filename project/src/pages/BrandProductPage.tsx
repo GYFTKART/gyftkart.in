@@ -3,7 +3,6 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
-  Tag,
   ShieldCheck,
   Zap,
   Clock,
@@ -529,11 +528,6 @@ export default function BrandProductPage() {
                 </div>
               </div>
 
-              {brand.offer_badge && (
-                <span className="absolute top-6 left-6 inline-flex items-center gap-1 rounded-full bg-gold-400 text-gold-950 px-3 py-1 text-xs font-bold shadow-md animate-pulse-glow">
-                  <Tag className="h-3.5 w-3.5" /> {brand.offer_badge}
-                </span>
-              )}
             </div>
 
             {/* trust badges */}
@@ -776,11 +770,6 @@ export default function BrandProductPage() {
                 <span className="text-sm text-slate-500">Subtotal</span>
                 <span className="font-display text-2xl font-extrabold text-slate-900">{inr(total)}</span>
               </div>
-              {brand.discount_percent > 0 && (
-                <p className="mt-1 text-xs text-emerald-600 font-semibold flex items-center gap-1">
-                  <Tag className="h-3.5 w-3.5" /> You save up to {brand.discount_percent}% on this brand
-                </p>
-              )}
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
