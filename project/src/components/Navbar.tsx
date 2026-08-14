@@ -414,7 +414,7 @@ export default function Navbar() {
             </button>
             <button
               onClick={() => setMobileOpen((v) => !v)}
-              className="grid place-items-center h-10 w-10 rounded-full hover:bg-brand-50 text-slate-700 transition-colors"
+              className="lg:hidden grid place-items-center h-10 w-10 rounded-full hover:bg-brand-50 text-slate-700 transition-colors"
               aria-label="Toggle menu"
             >
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -425,7 +425,7 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       <div
-        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
+        className={`lg:hidden overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
           mobileOpen ? 'max-h-[560px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
