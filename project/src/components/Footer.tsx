@@ -23,9 +23,9 @@ const columns: { title: string; links: { label: string; to: string }[] }[] = [
   {
     title: 'Company',
     links: [
-      { label: 'About GyftKart', to: '/' },
-      { label: 'How it works', to: '/' },
-      { label: 'Careers', to: '/' },
+      { label: 'About GyftKart', to: '/about' },
+      { label: 'How it works', to: '/how-it-works' },
+      { label: 'Careers', to: '/careers' },
       { label: 'Contact', to: '/contact' },
     ],
   },

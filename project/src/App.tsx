@@ -24,6 +24,9 @@ import TermsOfUse from '@/pages/TermsOfUse';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import FaqPage from '@/pages/FaqPage';
 import OfferTerms from '@/pages/OfferTerms';
+import AboutPage from '@/pages/AboutPage';
+import HowItWorksPage from '@/pages/HowItWorksPage';
+import CareersPage from '@/pages/CareersPage';
 
 
 function ScrollToTop() {
@@ -92,6 +95,9 @@ export default function App() {
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/faq" element={<FaqPage />} />
               <Route path="/offer-terms" element={<OfferTerms />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/how-it-works" element={<HowItWorksPage />} />
+              <Route path="/careers" element={<CareersPage />} />
 
 
               {/* Admin */}
