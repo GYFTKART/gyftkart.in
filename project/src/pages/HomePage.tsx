@@ -224,17 +224,18 @@ export default function HomePage() {
           </div>
 
           {/* Filtered brand cards — single-row horizontal carousel.
-              min-h pins this section to the shimmer skeleton's own height
-              (h-44 image + p-4 text block + pb-2), so the loading -> loaded
-              swap can only ever change what's *inside* this box, never the
-              box's own height — which is what stops the rest of the page
-              (trending, occasions, features…) from shifting up/down the
-              moment `loading` flips to false. */}
+              min-h-[204px] matches BrandCard's real rendered height exactly
+              (h-36 image + px-3 py-2.5 text block, see the skeleton card
+              below), so the loading -> loaded swap can only ever change
+              what's *inside* this box, never the box's own height — which
+              is what stops the rest of the page (trending, occasions,
+              features…) from shifting up/down the moment `loading` flips
+              to false. */}
           {/* relative + the two children absolutely stacked (only while both
               are mounted mid-crossfade) is what lets the skeleton and the
               real cards overlap and cross-dissolve instead of one replacing
               the other in a single frame. */}
-          <div className="min-h-[232px] sm:min-h-[248px] relative">
+          <div className="min-h-[204px] relative">
           {categoryCrossfade.showSkeleton && (
             <div
               className={`flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-opacity duration-300 ease-out ${
@@ -242,11 +243,19 @@ export default function HomePage() {
               } ${!loading ? 'absolute inset-0' : ''}`}
             >
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="shrink-0 w-60 sm:w-64 rounded-3xl overflow-hidden border border-slate-100">
-                  <div className="h-44 shimmer" />
-                  <div className="p-4 space-y-2">
-                    <div className="h-4 w-20 shimmer rounded" />
-                    <div className="h-6 w-28 shimmer rounded" />
+                <div key={i} className="shrink-0 w-60 sm:w-64 rounded-2xl overflow-hidden border border-slate-300">
+                  {/* Matches BrandCard exactly: h-36 image + px-3 py-2.5 text
+                      block with a single title bar (h-5 = text-sm's 20px
+                      line-height) and a single discount bar (h-4 = text-xs's
+                      16px line-height), mt-0.5 apart — same as the real
+                      card's two <p> tags. This is what makes the skeleton
+                      and the loaded card the exact same height, so nothing
+                      below it (the "Explore all brands" button) shifts when
+                      the swap happens. */}
+                  <div className="h-36 shimmer" />
+                  <div className="px-3 py-2.5">
+                    <div className="h-5 w-24 shimmer rounded" />
+                    <div className="mt-0.5 h-4 w-16 shimmer rounded" />
                   </div>
                 </div>
               ))}
@@ -316,7 +325,7 @@ export default function HomePage() {
             </p>
           </Reveal>
 
-          <div className="min-h-[232px] sm:min-h-[248px] relative">
+          <div className="min-h-[204px] relative">
           {trendingCrossfade.showSkeleton && (
             <div
               className={`flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-opacity duration-300 ease-out ${
@@ -324,11 +333,19 @@ export default function HomePage() {
               } ${!loading ? 'absolute inset-0' : ''}`}
             >
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="shrink-0 w-60 sm:w-64 rounded-3xl overflow-hidden border border-slate-100">
-                  <div className="h-44 shimmer" />
-                  <div className="p-4 space-y-2">
-                    <div className="h-4 w-20 shimmer rounded" />
-                    <div className="h-6 w-28 shimmer rounded" />
+                <div key={i} className="shrink-0 w-60 sm:w-64 rounded-2xl overflow-hidden border border-slate-300">
+                  {/* Matches BrandCard exactly: h-36 image + px-3 py-2.5 text
+                      block with a single title bar (h-5 = text-sm's 20px
+                      line-height) and a single discount bar (h-4 = text-xs's
+                      16px line-height), mt-0.5 apart — same as the real
+                      card's two <p> tags. This is what makes the skeleton
+                      and the loaded card the exact same height, so nothing
+                      below it (the "Explore all brands" button) shifts when
+                      the swap happens. */}
+                  <div className="h-36 shimmer" />
+                  <div className="px-3 py-2.5">
+                    <div className="h-5 w-24 shimmer rounded" />
+                    <div className="mt-0.5 h-4 w-16 shimmer rounded" />
                   </div>
                 </div>
               ))}
