@@ -11,6 +11,18 @@
        suddenly there's a full page and the browser's own scroll-anchoring
        shifts things). */
     min-height: 100%;
+    /* Previously only `body` carried the cream background. On a hard
+       refresh the browser paints the <html> box (and any gap between
+       html's edge and body's own box, e.g. default margins before this
+       stylesheet's reset applies) before body's background-color is
+       necessarily in effect — that sliver is what read as a white flash.
+       Setting it on html too means there is no frame where any part of
+       the viewport can be un-themed white. `color-scheme: light` stops
+       a dark-mode OS/browser from painting its own default (often dark
+       or stark white) background for that same first frame, before any
+       author CSS has been applied at all. */
+    background-color: #F5F5E9;
+    color-scheme: light;
   }
   body {
     @apply text-slate-800 font-sans antialiased;
@@ -18,6 +30,15 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     min-height: 100vh;
+  }
+  /* The React root mount node. It has no box of its own until React
+     commits its first render, so on a hard refresh there's a brief
+     window where #root is empty — this keeps that window themed
+     correctly (and full-height) instead of showing raw body/html
+     styling as a fallback that may not have applied yet. */
+  #root {
+    min-height: 100vh;
+    background-color: #F5F5E9;
   }
   /* Our own scroll-restoration logic in App.tsx always passes an explicit
      `behavior: 'instant'` to scrollTo, which per spec should take priority

@@ -128,7 +128,7 @@ export default function HomePage() {
   const trendingDrag = useDragScrollCarousel();
 
   return (
-    <div className="flex flex-col justify-start pt-16">
+    <div className="flex flex-col justify-start pt-16 min-h-screen bg-[#F5F5E9]">
       {/* ===== HERO BANNER =====
           Fixed-dimension outer reservation: this space is claimed by CSS
           before HeroBanner's own JS state ever runs, so even if something
@@ -182,7 +182,14 @@ export default function HomePage() {
             })}
           </div>
 
-          {/* Filtered brand cards — single-row horizontal carousel */}
+          {/* Filtered brand cards — single-row horizontal carousel.
+              min-h pins this section to the shimmer skeleton's own height
+              (h-44 image + p-4 text block + pb-2), so the loading -> loaded
+              swap can only ever change what's *inside* this box, never the
+              box's own height — which is what stops the rest of the page
+              (trending, occasions, features…) from shifting up/down the
+              moment `loading` flips to false. */}
+          <div className="min-h-[232px] sm:min-h-[248px]">
           {loading ? (
             <div className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -222,6 +229,7 @@ export default function HomePage() {
               ))}
             </div>
           )}
+          </div>
 
           <div className="mt-10 text-center">
             <Link
@@ -249,6 +257,7 @@ export default function HomePage() {
             </p>
           </Reveal>
 
+          <div className="min-h-[232px] sm:min-h-[248px]">
           {loading ? (
             <div className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -284,6 +293,7 @@ export default function HomePage() {
               ))}
             </div>
           )}
+          </div>
 
           <div className="mt-10 text-center">
             <Link
