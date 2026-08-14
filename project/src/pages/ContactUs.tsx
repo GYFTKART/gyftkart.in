@@ -93,14 +93,12 @@ export default function ContactUs() {
   return (
     <div className="pt-16 min-h-screen bg-transparent">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
-        {/* Breadcrumb */}
-        <p className="text-xs font-medium text-slate-400">
-          <Link to="/" className="hover:text-brand-600 transition-colors">
-            Home
-          </Link>
-          <span className="mx-1.5 text-slate-300">&gt;</span>
-          <span className="text-slate-600 font-medium">Contact us</span>
-        </p>
+        {/* breadcrumb */}
+        <nav className="flex items-center gap-2 text-sm text-slate-500">
+          <Link to="/" className="hover:text-brand-700">Home</Link>
+          <span>/</span>
+          <span className="text-slate-800 font-medium">Contact us</span>
+        </nav>
 
         {/* Header */}
         <div className="mt-8 text-center">
