@@ -2,6 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Inline, blocking, zero network cost — parses/paints before the
+         Vite-injected index.css (which only lands after main.tsx's JS
+         module graph resolves) or the Google Fonts link even reach the
+         browser. This is the ONLY way to guarantee there is no white
+         frame: background-color rules living in index.css are always
+         too late for the very first paint, no matter how they're
+         written. Keep this in sync with the #F5F5E9 in index.css. -->
+    <style>
+      html, body, #root { background-color: #F5F5E9; }
+      html { color-scheme: light; }
+    </style>
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GyftKart — Premium E-Gift Card Marketplace</title>

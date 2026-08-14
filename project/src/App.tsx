@@ -64,43 +64,55 @@ function saveScroll(key: string, y: number) {
   }
 }
 
-// Scrolls to `target` and keeps re-asserting it for a few animation frames.
-// This is what makes restoration reliable (and jerk-free) even while the
-// page's content is still loading and its height keeps changing under us —
-// a single scrollTo call would otherwise get overridden by layout shifts.
+// Scrolls to `target` and keeps re-asserting it for as long as the page's
+// own height keeps changing under us. This is what makes restoration
+// reliable (and jerk-free) even on pages with async data fetches (e.g.
+// HomePage's useBrands()) that resolve well after mount and grow the
+// page — a single scrollTo call, or even a fixed handful of rAF retries,
+// gets overridden by that late layout shift once it lands.
 //
-// IMPORTANT: the first write happens synchronously (not inside a rAF). The
-// caller always invokes this from a useLayoutEffect, which React guarantees
-// runs after the DOM is updated but before the browser paints. Writing the
-// scroll position synchronously there means the very first paint the user
-// sees already has the correct position baked in — nothing to visibly snap
-// to. Deferring that first write into a requestAnimationFrame (as before)
-// let the browser paint once at scroll 0 and then jump a frame later, which
-// is exactly the jitter reported. Only the *follow-up* corrections (needed
-// because async content can still grow the page after that first paint) are
-// deferred into rAFs, since those genuinely have to wait for layout to
-// change before they can do anything useful.
+// IMPORTANT: the first write happens synchronously (not inside a rAF/RO
+// callback). The caller always invokes this from a useLayoutEffect, which
+// React guarantees runs after the DOM is updated but before the browser
+// paints. Writing the scroll position synchronously there means the very
+// first paint the user sees already has the correct position baked in —
+// nothing to visibly snap to. Only the *follow-up* corrections (needed
+// because async content can still grow the page after that first paint)
+// are driven by ResizeObserver, since those genuinely have to wait for
+// layout to change before they can do anything useful.
 function restoreScroll(target: number) {
-  let attempts = 0;
-  const maxAttempts = 10;
   const root = document.documentElement;
-
   root.classList.add('disable-smooth-scroll');
 
-  const finish = () => root.classList.remove('disable-smooth-scroll');
+  let settleTimer: number;
 
-  const attempt = () => {
+  const snap = () => {
     window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
-    attempts += 1;
-    const settled = Math.abs(window.scrollY - target) < 2;
-    if (!settled && attempts < maxAttempts) {
-      requestAnimationFrame(attempt);
-    } else {
-      finish();
-    }
   };
 
-  attempt(); // synchronous first write — no visible jump
+  const finish = () => {
+    ro.disconnect();
+    root.classList.remove('disable-smooth-scroll');
+  };
+
+  // Previously this retried a fixed 10 animation frames (~160ms) and gave
+  // up. That's fine for content that's already in the DOM, but pages with
+  // a real network fetch (brand lists, product data, etc.) can easily grow
+  // their height well past 160ms after mount, which let the old version
+  // exhaust its retries before the fetch even resolved — the page would
+  // then settle taller than the restored position, producing a visible
+  // jump. Watching document.body directly removes the guesswork: we keep
+  // re-snapping on every height change, and only stop once 400ms pass
+  // with no further change (i.e. the page has actually finished growing).
+  const ro = new ResizeObserver(() => {
+    snap();
+    clearTimeout(settleTimer);
+    settleTimer = window.setTimeout(finish, 400);
+  });
+
+  snap(); // synchronous first write — no visible jump
+  ro.observe(document.body);
+  settleTimer = window.setTimeout(finish, 400);
 }
 
 function ScrollManager() {
