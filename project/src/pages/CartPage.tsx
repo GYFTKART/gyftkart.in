@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Trash2, ShoppingBag, ArrowLeft, Gift, ShieldCheck, CreditCard, FlaskConical, Loader2 } from 'lucide-react';
+import { Trash2, ShoppingBag, ArrowLeft, Gift, ShieldCheck, CreditCard, FlaskConical, Loader2, Minus, Plus } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/CustomerAuthContext';
 import { useToast } from '@/components/Toast';
@@ -20,7 +20,7 @@ function genPin(): string {
 }
 
 export default function CartPage() {
-  const { items, remove, subtotal, count, clear, isLoading } = useCart();
+  const { items, remove, updateQuantity, subtotal, count, clear, isLoading } = useCart();
   const { session } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
@@ -135,7 +135,7 @@ export default function CartPage() {
           {/* ===== LEFT: Items table ===== */}
           <div className="lg:col-span-2 rounded-[28px] border border-slate-100 bg-white shadow-card overflow-hidden">
             {/* table header - desktop only */}
-            <div className="hidden sm:grid grid-cols-[1fr_110px_90px_44px] gap-4 px-6 py-4 bg-slate-50 border-b border-slate-100 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+            <div className="hidden sm:grid grid-cols-[1fr_110px_116px_44px] gap-4 px-6 py-4 bg-slate-50 border-b border-slate-100 text-[11px] font-bold uppercase tracking-widest text-slate-500">
               <span>Gift card</span>
               <span>Value</span>
               <span>Qty</span>
@@ -146,7 +146,7 @@ export default function CartPage() {
               {items.map((item) => (
                 <li
                   key={item.id}
-                  className="grid grid-cols-1 sm:grid-cols-[1fr_110px_90px_44px] gap-3 sm:gap-4 items-center px-6 py-5"
+                  className="grid grid-cols-1 sm:grid-cols-[1fr_110px_116px_44px] gap-3 sm:gap-4 items-center px-6 py-5"
                 >
                   {/* Brand / voucher chip */}
                   <div className="flex items-center gap-3 min-w-0">
@@ -173,12 +173,29 @@ export default function CartPage() {
                     <span className="font-display text-sm font-bold text-slate-800">{inr(item.amount)}</span>
                   </div>
 
-                  {/* Quantity (read-only display) */}
+                  {/* Quantity selector */}
                   <div className="flex sm:block items-center justify-between">
                     <span className="sm:hidden text-xs font-semibold text-slate-400">Qty</span>
-                    <span className="inline-flex items-center justify-center h-8 min-w-8 px-2 rounded-full bg-slate-100 text-sm font-bold text-slate-700">
-                      {item.quantity}
-                    </span>
+                    <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 p-1">
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        disabled={item.quantity <= 1}
+                        aria-label={`Decrease quantity of ${item.brand_name}`}
+                        className="grid place-items-center h-7 w-7 rounded-full bg-white text-slate-600 shadow-sm hover:text-brand-700 disabled:opacity-40 disabled:hover:text-slate-600 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="min-w-[1.75rem] text-center text-sm font-bold text-slate-700">
+                        {item.quantity}
+                      </span>
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        aria-label={`Increase quantity of ${item.brand_name}`}
+                        className="grid place-items-center h-7 w-7 rounded-full bg-white text-slate-600 shadow-sm hover:text-brand-700 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Delete */}
