@@ -14,10 +14,10 @@ const columns: { title: string; links: { label: string; to: string }[] }[] = [
   {
     title: 'Account',
     links: [
-      { label: 'Dashboard', to: '/dashboard' },
-      { label: 'My gift cards', to: '/dashboard' },
-      { label: 'Purchase history', to: '/dashboard' },
-      { label: 'Wallet', to: '/dashboard' },
+      { label: 'Terms of Use', to: '/terms' },
+      { label: 'Privacy Policy', to: '/privacy' },
+      { label: 'FAQ', to: '/faq' },
+      { label: 'Offer Terms', to: '/offer-terms' },
     ],
   },
   {
@@ -128,7 +128,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-12 pt-6 border-t border-brand-800 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-brand-300">
-            © {new Date().getFullYear()} GyftKart Technologies. Demo project. All rights reserved.
+            © 2026 GyftKart.in. Demo project - © 2026 Tecticon Technologies Pvt Ltd. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <Link

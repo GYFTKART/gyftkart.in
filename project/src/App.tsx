@@ -20,6 +20,10 @@ import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import ProfilePage from './pages/ProfilePage';
 import OrdersPage from '@/pages/OrdersPage';
 import ContactUs from '@/pages/ContactUs';
+import TermsOfUse from '@/pages/TermsOfUse';
+import PrivacyPolicy from '@/pages/PrivacyPolicy';
+import FaqPage from '@/pages/FaqPage';
+import OfferTerms from '@/pages/OfferTerms';
 
 
 function ScrollToTop() {
@@ -84,6 +88,10 @@ export default function App() {
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/orders" element={<OrdersPage />} />
               <Route path="/contact" element={<ContactUs />} />
+              <Route path="/terms" element={<TermsOfUse />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/faq" element={<FaqPage />} />
+              <Route path="/offer-terms" element={<OfferTerms />} />
 
 
               {/* Admin */}
