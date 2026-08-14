@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import { CartProvider } from '@/context/CartContext';
 import { CustomerAuthProvider } from '@/context/CustomerAuthContext';
@@ -29,11 +29,30 @@ import HowItWorksPage from '@/pages/HowItWorksPage';
 import CareersPage from '@/pages/CareersPage';
 
 
+// Ensure the browser (not React) owns scroll restoration on hard reloads.
+// This must run once, as early as possible, before the browser paints.
+if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
+  window.history.scrollRestoration = 'auto';
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
+  const isFirstRender = useRef(true);
+
   useEffect(() => {
+    // On the very first render — which covers both the initial app load
+    // and a hard refresh of any route — skip scrolling. Forcing scroll
+    // to 0 here would override the browser's native scroll restoration
+    // and is why refreshing always jumped back to the top. We only want
+    // to jump to top on genuine in-app navigations (pathname changes
+    // after the app has already mounted).
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   }, [pathname]);
+
   return null;
 }
 
