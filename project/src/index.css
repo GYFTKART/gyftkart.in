@@ -29,7 +29,15 @@
     background-color: #F5F5E9;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* 100vh is the LARGE viewport (address bar hidden) on mobile Safari/
+       Chrome. On first paint the browser doesn't know the bar is about to
+       collapse, so it lays out at the small-viewport height, then jumps
+       to the 100vh box once the bar hides — that jump is the "jerk" on
+       refresh. 100dvh tracks the *current* viewport continuously so
+       there's no second layout pass; 100vh stays first as a fallback for
+       browsers that don't support dvh. */
     min-height: 100vh;
+    min-height: 100dvh;
   }
   /* The React root mount node. It has no box of its own until React
      commits its first render, so on a hard refresh there's a brief
@@ -50,6 +58,7 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    min-height: 100dvh;
     background-color: #F5F5E9;
   }
   /* Our own scroll-restoration logic in App.tsx always passes an explicit
