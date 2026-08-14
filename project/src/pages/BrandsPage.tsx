@@ -44,8 +44,19 @@ export default function BrandsPage() {
 
   return (
     <div className="pt-16 min-h-screen bg-gradient-to-b from-brand-50/40 to-white">
+      {/* Breadcrumb */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6">
+        <p className="text-xs font-medium text-slate-400">
+          <Link to="/" className="hover:text-brand-600 transition-colors">
+            Home
+          </Link>
+          <span className="mx-1.5 text-slate-300">&gt;</span>
+          <span className="text-slate-600 font-medium">Brands</span>
+        </p>
+      </div>
+
       {/* Filters + grid */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-4 pb-10">
         {/* Category chips */}
         <div className="flex flex-wrap items-center gap-2 mb-6">
           <span className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700 mr-1">

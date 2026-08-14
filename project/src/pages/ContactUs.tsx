@@ -94,12 +94,12 @@ export default function ContactUs() {
     <div className="pt-16 min-h-screen bg-transparent">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
         {/* Breadcrumb */}
-        <p className="text-xs text-gray-400">
-          <Link to="/" className="hover:text-gray-600 transition-colors">
+        <p className="text-xs font-medium text-slate-400">
+          <Link to="/" className="hover:text-brand-600 transition-colors">
             Home
-          </Link>{' '}
-          <span className="mx-1">&gt;</span>
-          <span className="text-gray-500">Contact us</span>
+          </Link>
+          <span className="mx-1.5 text-slate-300">&gt;</span>
+          <span className="text-slate-600 font-medium">Contact us</span>
         </p>
 
         {/* Header */}
