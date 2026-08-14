@@ -122,7 +122,7 @@ async function clearRemoteCart() {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const { session } = useAuth();
+  const { session, authReady } = useAuth();
   const isAuthed = Boolean(session?.email);
 
   const [items, setItems] = useState<CartItem[]>(() => readGuestCart());
@@ -135,6 +135,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const wasAuthedRef = useRef(false);
 
   useEffect(() => {
+    // Wait until CustomerAuthContext has finished re-attaching the
+    // cached JWT to the Supabase client (see its `authReady` flag).
+    // `isAuthed` above flips true the instant the *local* profile cache
+    // resolves, which is synchronous and happens before that token
+    // restore completes — firing fetchRemoteCart() here on that first
+    // tick would query Supabase with no JWT attached yet and come back
+    // empty, even for a genuinely logged-in user, which is exactly the
+    // "cart wiped on refresh" bug this fixes. Once authReady is true,
+    // the client is guaranteed to either have a valid session attached
+    // or to have confirmed there isn't one.
+    if (!authReady) return;
+
     let cancelled = false;
 
     async function syncOnAuthChange() {
@@ -181,7 +193,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthed, session?.email]);
+  }, [isAuthed, session?.email, authReady]);
 
   // Guests keep their cart mirrored to localStorage on every change.
   // Logged-in users don't need this — Supabase is already the source
