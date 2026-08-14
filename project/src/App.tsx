@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { useLocation, Routes, Route, Navigate } from 'react-router-dom';
+import { useLocation, useNavigationType, Routes, Route, Navigate } from 'react-router-dom';
 import { CartProvider } from '@/context/CartContext';
 import { CustomerAuthProvider } from '@/context/CustomerAuthContext';
 import { ToastProvider } from '@/components/Toast';
@@ -35,23 +35,52 @@ if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
   window.history.scrollRestoration = 'auto';
 }
 
-function ScrollToTop() {
-  const { pathname } = useLocation();
+// Remembers the scroll position of every visited history entry (keyed by
+// React Router's per-navigation `location.key`) so it can be restored when
+// the user comes back to that entry via the browser's Back/Forward buttons.
+// Module-level so it survives re-renders and persists for the whole tab
+// session, the same way native browser scroll restoration would.
+const scrollPositions = new Map<string, number>();
+
+function ScrollManager() {
+  const location = useLocation();
+  const navType = useNavigationType(); // 'PUSH' | 'REPLACE' | 'POP'
   const isFirstRender = useRef(true);
+
+  // Continuously record the scroll position for the *current* entry so that
+  // whenever the user navigates away, we already know where they left off.
+  useEffect(() => {
+    const key = location.key;
+    const handleScroll = () => {
+      scrollPositions.set(key, window.scrollY);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [location.key]);
 
   useEffect(() => {
     // On the very first render — which covers both the initial app load
     // and a hard refresh of any route — skip scrolling. Forcing scroll
-    // to 0 here would override the browser's native scroll restoration
-    // and is why refreshing always jumped back to the top. We only want
-    // to jump to top on genuine in-app navigations (pathname changes
-    // after the app has already mounted).
+    // here would override the browser's native scroll restoration on
+    // reload. We only want to manage scroll on genuine in-app navigations
+    // that happen after the app has already mounted.
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
-    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-  }, [pathname]);
+
+    if (navType === 'POP') {
+      // Back/forward navigation: restore the scroll position this entry
+      // had when the user left it (e.g. scrolled to the footer, clicked a
+      // link, then hit Back).
+      const saved = scrollPositions.get(location.key);
+      window.scrollTo({ top: saved ?? 0, behavior: 'instant' as ScrollBehavior });
+    } else {
+      // Regular link navigation (PUSH) or a redirect (REPLACE): start the
+      // new page at the top, same as before.
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    }
+  }, [location.pathname, location.key, navType]);
 
   return null;
 }
@@ -77,7 +106,7 @@ export default function App() {
   return (
     <ToastProvider>
       {/*
-        CartProvider now wraps ScrollToTop, the navbar/drawer, AND the
+        CartProvider now wraps ScrollManager, the navbar/drawer, AND the
         <main>/<Routes> block below. Previously it only wrapped the
         navbar + drawer, so any page component (BrandProductPage,
         CartPage, CheckoutPage, etc.) that called useCart() would throw
@@ -87,7 +116,7 @@ export default function App() {
       */}
       <CustomerAuthProvider>
         <CartProvider>
-          <ScrollToTop />
+          <ScrollManager />
           {!isAdmin && <Navbar />}
 
           <main className="min-h-screen">
