@@ -103,6 +103,7 @@ function restoreScroll(target: number) {
 
   let settleTimer: number;
   let cancelled = false;
+  let lastHeight = document.body.scrollHeight;
 
   const snap = () => {
     if (cancelled) return;
@@ -126,10 +127,25 @@ function restoreScroll(target: number) {
     // exhaust its retries before the fetch even resolved — the page would
     // then settle taller than the restored position, producing a visible
     // jump. Watching document.body directly removes the guesswork: we keep
-    // re-snapping on every height change, and only stop once 400ms pass
-    // with no further change (i.e. the page has actually finished growing)
-    // — or the user starts scrolling themselves, whichever comes first.
-    snap();
+    // re-snapping while the page is genuinely still growing, and only stop
+    // once 400ms pass with no further growth — or the user starts
+    // scrolling themselves, whichever comes first.
+    //
+    // GROWTH-ONLY GUARD: only call snap() when scrollHeight has actually
+    // increased since the last check. A resize that shrinks or holds
+    // steady (a skeleton settling into its final measured height, a card
+    // row losing a couple of reserved pixels, etc.) does NOT make `target`
+    // stale — there's nothing to correct. The browser's own scroll
+    // anchoring already keeps the viewport visually stable for those
+    // off-screen resizes; forcibly re-running scrollTo on top of that
+    // fights the anchoring correction and is exactly what produced the
+    // visible up/down jerk. Only real growth (late content pushing
+    // `target` further down the page) needs an active re-snap.
+    const newHeight = document.body.scrollHeight;
+    const grew = newHeight > lastHeight;
+    lastHeight = newHeight;
+
+    if (grew) snap();
     clearTimeout(settleTimer);
     settleTimer = window.setTimeout(finish, 400);
   });
