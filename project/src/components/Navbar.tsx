@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Gift,
   Search,
@@ -67,7 +67,17 @@ export default function Navbar() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) is deliberate here. ScrollManager (in
+  // App.tsx) restores the page's scroll position from a layout effect too,
+  // and — because it's declared earlier in the tree — its layout effect
+  // fires first. By reading window.scrollY in a layout effect ourselves,
+  // we pick up that already-restored position and compute the correct
+  // `scrolled` value before the browser's first paint. With a plain
+  // useEffect, the header would paint once in its transparent (unscrolled)
+  // state, then flip to the glass/blurred state a frame later once this
+  // effect finally ran — a visible pop-in on any refresh that lands you
+  // partway down a page.
+  useLayoutEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });

@@ -68,9 +68,26 @@ function saveScroll(key: string, y: number) {
 // This is what makes restoration reliable (and jerk-free) even while the
 // page's content is still loading and its height keeps changing under us —
 // a single scrollTo call would otherwise get overridden by layout shifts.
+//
+// IMPORTANT: the first write happens synchronously (not inside a rAF). The
+// caller always invokes this from a useLayoutEffect, which React guarantees
+// runs after the DOM is updated but before the browser paints. Writing the
+// scroll position synchronously there means the very first paint the user
+// sees already has the correct position baked in — nothing to visibly snap
+// to. Deferring that first write into a requestAnimationFrame (as before)
+// let the browser paint once at scroll 0 and then jump a frame later, which
+// is exactly the jitter reported. Only the *follow-up* corrections (needed
+// because async content can still grow the page after that first paint) are
+// deferred into rAFs, since those genuinely have to wait for layout to
+// change before they can do anything useful.
 function restoreScroll(target: number) {
   let attempts = 0;
   const maxAttempts = 10;
+  const root = document.documentElement;
+
+  root.classList.add('disable-smooth-scroll');
+
+  const finish = () => root.classList.remove('disable-smooth-scroll');
 
   const attempt = () => {
     window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
@@ -78,10 +95,12 @@ function restoreScroll(target: number) {
     const settled = Math.abs(window.scrollY - target) < 2;
     if (!settled && attempts < maxAttempts) {
       requestAnimationFrame(attempt);
+    } else {
+      finish();
     }
   };
 
-  requestAnimationFrame(attempt);
+  attempt(); // synchronous first write — no visible jump
 }
 
 function ScrollManager() {
@@ -171,62 +190,81 @@ export default function App() {
       <CustomerAuthProvider>
         <CartProvider>
           <ScrollManager />
-          {!isAdmin && <Navbar />}
+          {/*
+            flex-col + min-h-screen turns header/main/footer into a single
+            stable column instead of three blocks that each flow
+            independently. Two things this fixes:
+              1. `main` no longer needs its own min-h-screen — that was
+                 sized off the viewport regardless of the header/footer's
+                 own height, so on a tall header/short content page the
+                 total stack could exceed the viewport and the browser
+                 would show a scrollbar (and a jump) that had nothing to
+                 do with actual content. flex-1 lets it fill whatever
+                 space is left instead.
+              2. Because it's all one flex column, header/footer height
+                 changes (e.g. Navbar swapping in an avatar once auth
+                 resolves) push main up/down predictably in normal layout
+                 flow rather than the whole page's total height jumping
+                 around as isolated blocks resize.
+          */}
+          <div className="flex min-h-screen flex-col">
+            {!isAdmin && <Navbar />}
 
-          <main className="min-h-screen">
-            <Routes>
-              {/* Public marketplace */}
-              <Route path="/" element={<HomePage />} />
-              <Route path="/brands" element={<BrandsPage />} />
-              <Route path="/brand/:slug" element={<BrandProductPage />} />
-              <Route path="/corporate" element={<CorporatePage />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedCustomerRoute>
-                    <DashboardPage />
-                  </ProtectedCustomerRoute>
-                }
-              />
-              <Route path="/cart" element={<CartPage />} />
-              <Route path="/checkout" element={<CheckoutPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/orders" element={<OrdersPage />} />
-              <Route path="/contact" element={<ContactUs />} />
-              <Route path="/terms" element={<TermsOfUse />} />
-              <Route path="/privacy" element={<PrivacyPolicy />} />
-              <Route path="/faq" element={<FaqPage />} />
-              <Route path="/offer-terms" element={<OfferTerms />} />
-              <Route path="/about" element={<AboutPage />} />
-              <Route path="/how-it-works" element={<HowItWorksPage />} />
-              <Route path="/careers" element={<CareersPage />} />
+            <main className="flex-1">
+              <Routes>
+                {/* Public marketplace */}
+                <Route path="/" element={<HomePage />} />
+                <Route path="/brands" element={<BrandsPage />} />
+                <Route path="/brand/:slug" element={<BrandProductPage />} />
+                <Route path="/corporate" element={<CorporatePage />} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedCustomerRoute>
+                      <DashboardPage />
+                    </ProtectedCustomerRoute>
+                  }
+                />
+                <Route path="/cart" element={<CartPage />} />
+                <Route path="/checkout" element={<CheckoutPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/orders" element={<OrdersPage />} />
+                <Route path="/contact" element={<ContactUs />} />
+                <Route path="/terms" element={<TermsOfUse />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/faq" element={<FaqPage />} />
+                <Route path="/offer-terms" element={<OfferTerms />} />
+                <Route path="/about" element={<AboutPage />} />
+                <Route path="/how-it-works" element={<HowItWorksPage />} />
+                <Route path="/careers" element={<CareersPage />} />
 
 
-              {/* Admin */}
-              <Route
-                path="/admin"
-                element={
-                  <AdminAuthProvider>
-                    <AdminLoginPage />
-                  </AdminAuthProvider>
-                }
-              />
-              <Route
-                path="/admin/dashboard"
-                element={
-                  <AdminAuthProvider>
-                    <ProtectedAdminRoute>
-                      <AdminDashboardPage />
-                    </ProtectedAdminRoute>
-                  </AdminAuthProvider>
-                }
-              />
+                {/* Admin */}
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminAuthProvider>
+                      <AdminLoginPage />
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route
+                  path="/admin/dashboard"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminDashboardPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
 
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </main>
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </main>
 
-          {!isAdmin && <Footer />}
+            {!isAdmin && <Footer />}
+          </div>
         </CartProvider>
       </CustomerAuthProvider>
     </ToastProvider>

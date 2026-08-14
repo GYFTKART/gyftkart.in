@@ -5,12 +5,31 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* Stable baseline so the root element never has a 0-height moment
+       between first paint and content mounting — that gap is one of the
+       ways a "jump" on refresh shows up (nothing to scroll yet, then
+       suddenly there's a full page and the browser's own scroll-anchoring
+       shifts things). */
+    min-height: 100%;
   }
   body {
     @apply text-slate-800 font-sans antialiased;
     background-color: #F5F5E9;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+  /* Our own scroll-restoration logic in App.tsx always passes an explicit
+     `behavior: 'instant'` to scrollTo, which per spec should take priority
+     over the `scroll-behavior: smooth` above — but some browser versions
+     (older Safari in particular) have shipped this incorrectly and animate
+     the "restore" scroll instead of snapping to it, which reads as a
+     jump/settle jitter on refresh. This class lets restoreScroll()
+     temporarily opt the root out of smooth scrolling as a defensive
+     belt-and-suspenders fix; see the `disable-smooth-scroll` toggle in
+     App.tsx.  */
+  html.disable-smooth-scroll {
+    scroll-behavior: auto;
   }
   h1, h2, h3, h4, h5 {
     @apply font-display;
