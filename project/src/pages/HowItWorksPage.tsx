@@ -31,7 +31,7 @@ const steps = [
 
 export default function HowItWorksPage() {
   return (
-    <div className="pt-16 min-h-screen bg-gradient-to-b from-brand-50/40 to-white">
+    <div className="pt-16 bg-gradient-to-b from-brand-50/40 to-transparent">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10">
         {/* breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-slate-500">

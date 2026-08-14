@@ -107,7 +107,7 @@ export default function ProfilePage() {
 
   if (!session) {
     return (
-      <div className="min-h-screen pt-32 pb-16 px-4 flex items-start justify-center bg-gradient-to-b from-brand-50/40 to-white">
+      <div className="pt-32 pb-16 px-4 flex items-start justify-center bg-gradient-to-b from-brand-50/40 to-transparent">
         <div className="w-full max-w-md rounded-3xl bg-white shadow-card border border-slate-100 p-8 text-center">
           <span className="mx-auto mb-4 grid place-items-center h-14 w-14 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glow-sm">
             <User className="h-6 w-6" />
@@ -131,7 +131,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen pt-28 pb-16 px-4 bg-gradient-to-b from-brand-50/40 to-white">
+    <div className="pt-28 pb-16 px-4 bg-gradient-to-b from-brand-50/40 to-transparent">
       <div className="mx-auto max-w-2xl">
         <button
           onClick={() => navigate(-1)}

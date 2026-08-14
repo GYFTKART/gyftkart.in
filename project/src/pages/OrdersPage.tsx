@@ -48,7 +48,7 @@ function StatusBadge({ status }: { status: Order['status'] }) {
 
 export default function OrdersPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-50/40 via-white to-white pt-28 pb-16 px-4 sm:px-6 lg:px-8">
+    <div className="bg-gradient-to-b from-brand-50/40 via-transparent to-transparent pt-28 pb-16 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
         <div className="flex items-center justify-between mb-8">
           <div>
