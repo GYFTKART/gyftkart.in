@@ -266,25 +266,6 @@ export default function CheckoutPage() {
                     <ShieldCheck className="h-4 w-4 text-emerald-500" />
                     256-bit encrypted · PCI-DSS compliant
                   </div>
-
-                  <div className="mt-6">
-                    <RazorpayCheckoutButton
-                      amount={total}
-                      items={items}
-                      buyerName={buyerName}
-                      buyerEmail={buyerEmail}
-                      disabled={!validBuyer}
-                      onSuccess={handleRazorpaySuccess}
-                      onError={handleRazorpayError}
-                      label={`Pay ${inr(total)}`}
-                    />
-                  </div>
-                  <button
-                    onClick={() => setStep('review')}
-                    className="mt-3 w-full text-center text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors"
-                  >
-                    Back to review
-                  </button>
                 </div>
               )}
             </div>
@@ -319,6 +300,27 @@ export default function CheckoutPage() {
                   >
                     Proceed to payment <ChevronRight className="h-4 w-4" />
                   </button>
+                )}
+
+                {step === 'pay' && (
+                  <div className="mt-5">
+                    <RazorpayCheckoutButton
+                      amount={total}
+                      items={items}
+                      buyerName={buyerName}
+                      buyerEmail={buyerEmail}
+                      disabled={!validBuyer}
+                      onSuccess={handleRazorpaySuccess}
+                      onError={handleRazorpayError}
+                      label={`Pay ${inr(total)}`}
+                    />
+                    <button
+                      onClick={() => setStep('review')}
+                      className="mt-3 w-full text-center text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+                    >
+                      Back to review
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
