@@ -76,24 +76,14 @@ export default function CartPage() {
     }
   };
 
-  if (isLoading) {
-    // Same shape as the empty-cart state below (icon + heading position)
-    // so there's no layout jump when this swaps to either the empty
-    // state or the real cart a moment later — just a neutral hold, not
-    // a claim that the cart is empty.
-    return (
-      <div className="pt-16">
-        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-20 text-center">
-          <span className="grid place-items-center h-20 w-20 rounded-3xl bg-brand-100 text-brand-600 mx-auto">
-            <Loader2 className="h-10 w-10 animate-spin" />
-          </span>
-          <p className="mt-5 text-slate-500">Loading your cart…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
+  // While the cart is still resolving (hard refresh, auth reattach),
+  // skip both the spinner and the empty-cart message entirely — neither
+  // is a true statement of cart state yet, and swapping between three
+  // different layouts (spinner -> empty -> real cart) is what caused
+  // the visible jump. Falling through to the normal cart UI below with
+  // items still [] just renders a quiet, stable shell that fills in
+  // once isLoading clears — no jump, no false "empty" claim.
+  if (items.length === 0 && !isLoading) {
     return (
       <div className="pt-16">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-20 text-center">

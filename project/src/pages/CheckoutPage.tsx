@@ -76,7 +76,7 @@ export default function CheckoutPage() {
     }
   }, [isBuyNow, isLoading, items.length, step, navigate]);
 
-  const convenienceFee = items.length > 0 ? 9 : 0;
+  const convenienceFee = 0;
   const total = subtotal + convenienceFee;
 
   const validBuyer = buyerName.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(buyerEmail);
