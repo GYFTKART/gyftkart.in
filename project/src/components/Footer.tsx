@@ -12,7 +12,7 @@ const columns: { title: string; links: { label: string; to: string }[] }[] = [
     ],
   },
   {
-    title: 'Account',
+    title: 'Legal',
     links: [
       { label: 'Terms of Use', to: '/terms' },
       { label: 'Privacy Policy', to: '/privacy' },
@@ -93,13 +93,13 @@ export default function Footer() {
             </p>
             <div className="mt-5 space-y-2 text-sm text-brand-200">
               <p className="flex items-center gap-2.5">
-                <Mail className="h-4 w-4 text-brand-300" /> hello@gyftkart.in
+                <Mail className="h-4 w-4 text-brand-300" /> gyftkart@gmail.com
               </p>
               <p className="flex items-center gap-2.5">
-                <Phone className="h-4 w-4 text-brand-300" /> 1800-200-GIFT
+                <Phone className="h-4 w-4 text-brand-300" /> 09695393786
               </p>
               <p className="flex items-center gap-2.5">
-                <MapPin className="h-4 w-4 text-brand-300" /> Bengaluru, India
+                <MapPin className="h-4 w-4 text-brand-300" /> Uttar Pradesh, India
               </p>
             </div>
           </div>
@@ -128,7 +128,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-12 pt-6 border-t border-brand-800 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-brand-300">
-            © 2026 GyftKart.in. Demo project - © 2026 Tecticon Technologies Pvt Ltd. All rights reserved.
+            © 2026 Tecticon Technologies Pvt Ltd. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <Link
