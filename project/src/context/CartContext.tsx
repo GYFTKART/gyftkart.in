@@ -60,7 +60,12 @@ function newLocalId(): string {
   );
 }
 
-async function fetchRemoteCart(): Promise<CartItem[]> {
+// Returns null on failure (network error, RLS rejection, missing auth,
+// etc.) instead of []. Collapsing "the fetch failed" into "the cart is
+// empty" is exactly what let an unauthenticated/errored query silently
+// wipe a real cart earlier — callers must check for null and leave
+// existing items alone rather than overwrite them with it.
+async function fetchRemoteCart(): Promise<CartItem[] | null> {
   const { data, error } = await supabase
     .from('cart_items')
     .select(CART_COLUMNS)
@@ -68,7 +73,7 @@ async function fetchRemoteCart(): Promise<CartItem[]> {
 
   if (error) {
     console.error('Failed to fetch cart from Supabase:', error.message);
-    return [];
+    return null;
   }
   return (data ?? []) as unknown as CartItem[];
 }
@@ -164,18 +169,29 @@ export function CartProvider({ children }: { children: ReactNode }) {
             ]);
             if (cancelled) return;
 
-            writeGuestCart([]);
-
-            const merged = [...remote, ...migrated].filter(
-              (item, index, arr) => arr.findIndex((i) => i.id === item.id) === index
-            );
-            setItems(merged);
+            if (remote === null) {
+              // Fetch failed/unauthenticated — do NOT touch items. The
+              // guest items are still sitting in `items` from before
+              // this effect ran; leaving them as-is beats replacing a
+              // real cart with an empty one because one query failed.
+              console.error('Cart sync skipped: could not load the remote cart.');
+            } else {
+              writeGuestCart([]);
+              const merged = [...remote, ...migrated].filter(
+                (item, index, arr) => arr.findIndex((i) => i.id === item.id) === index
+              );
+              setItems(merged);
+            }
           } else {
             // Already logged in (e.g. tab refocus, other tab changed
             // the cart) — just refresh from the database.
             const remote = await fetchRemoteCart();
             if (cancelled) return;
-            setItems(remote);
+            if (remote === null) {
+              console.error('Cart sync skipped: could not load the remote cart.');
+            } else {
+              setItems(remote);
+            }
           }
         } finally {
           if (!cancelled) setSyncing(false);

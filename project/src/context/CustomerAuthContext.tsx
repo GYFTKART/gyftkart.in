@@ -125,6 +125,18 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
           cacheSession(refreshed);
           setSession(refreshed);
         }
+      } else if (cached) {
+        // A cached session exists but is missing a usable token pair —
+        // most likely saved by an older build of this file, before
+        // refreshToken was tracked. There is no way to re-attach a JWT
+        // to the Supabase client from this, so it cannot be trusted.
+        // Leaving it in place would make `session` look logged-in while
+        // the Supabase client stays anonymous underneath — the exact
+        // mismatch that silently empties the cart. Drop it instead; the
+        // person will need to log in again once, and every login from
+        // here on caches the full pair.
+        cacheSession(null);
+        setSession(null);
       }
       if (!cancelled) setAuthReady(true);
     }
