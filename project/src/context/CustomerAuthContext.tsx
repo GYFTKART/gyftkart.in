@@ -135,12 +135,15 @@ async function performRestore(): Promise<Session | null> {
     return null;
   }
 
-  let result: Awaited<ReturnType<typeof supabase.auth.setSession>>;
-  try {
-    result = await supabase.auth.setSession({
+  const attemptSetSession = () =>
+    supabase.auth.setSession({
       access_token: cached.token,
       refresh_token: cached.refreshToken,
     });
+
+  let result: Awaited<ReturnType<typeof supabase.auth.setSession>>;
+  try {
+    result = await attemptSetSession();
   } catch (err) {
     // Network/transport failure — NOT a rejection of the token itself.
     // The cached refresh token may still be perfectly valid; it just
@@ -151,12 +154,32 @@ async function performRestore(): Promise<Session | null> {
     return cached;
   }
 
+  if (result.error) {
+    // Supabase already forgives reuse of the *immediate* parent token
+    // on its own (10s default reuse interval) — a real revoke means
+    // either the reuse interval was exceeded, or more than one
+    // generation was skipped. Neither of those is a local timing
+    // hiccup we can retry our way out of. This one retry only exists
+    // to absorb a genuine edge case: our own request landing in the
+    // same instant a *different* tab's rotation is being committed on
+    // Supabase's side. It will not and should not "undo" a real,
+    // intentional session termination.
+    await new Promise((r) => setTimeout(r, 350));
+    try {
+      result = await attemptSetSession();
+    } catch (err) {
+      console.error('Session restore retry failed (network):', err);
+      return cached;
+    }
+  }
+
   const { data, error } = result;
 
   if (error || !data.session) {
-    // A genuine rejection from Supabase (token really is invalid or
-    // was already consumed elsewhere) — only now is it safe to drop
-    // the cache.
+    // Still rejected after the retry — this is a genuine termination
+    // (reuse interval exceeded, or a generation was skipped). Only now
+    // is it safe to drop the cache; nothing client-side should try to
+    // paper over an intentional security revoke.
     cacheSession(null);
     return null;
   }
