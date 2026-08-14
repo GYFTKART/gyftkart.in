@@ -57,10 +57,13 @@ export default function BrandCard({ brand, className = '' }: BrandCardProps) {
         )}
       </div>
 
-      {/* Bottom info — brand title + discount tag only, compact */}
-      <div className="px-3 py-2.5 bg-transparent">
+      {/* Bottom info — brand title only. Single line now, so padding is
+          tightened from the old two-line block (px-3 py-2.5) and
+          vertically centered instead of top-aligned, so the name sits
+          in the middle of the footer strip rather than leaving empty
+          space below it. */}
+      <div className="flex items-center px-3.5 py-3 bg-transparent">
         <p className="text-sm font-bold text-slate-900 truncate">{brand.name}</p>
-        <p className="mt-0.5 text-xs font-semibold text-brand-700">Get 10% Discount</p>
       </div>
     </Link>
   );
