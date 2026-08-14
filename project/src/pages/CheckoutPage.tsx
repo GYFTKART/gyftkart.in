@@ -35,7 +35,7 @@ function genCode(): string {
 }
 
 export default function CheckoutPage() {
-  const { items: cartItems, subtotal: cartSubtotal, clear, count: cartCount } = useCart();
+  const { items: cartItems, subtotal: cartSubtotal, clear, count: cartCount, isLoading } = useCart();
   const { session } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
@@ -69,10 +69,12 @@ export default function CheckoutPage() {
   // redirect to brands if cart empties (but not right after success clear,
   // and never for a Buy Now checkout — that flow never touches the cart)
   useEffect(() => {
-    if (!isBuyNow && items.length === 0 && step !== 'success') {
+    if (isBuyNow) return; // Buy Now never touches the shared cart, skip check
+    if (isLoading) return; // cart still resolving (hard refresh, auth reattach) — don't judge yet
+    if (items.length === 0 && step !== 'success') {
       navigate('/brands', { replace: true });
     }
-  }, [isBuyNow, items.length, step, navigate]);
+  }, [isBuyNow, isLoading, items.length, step, navigate]);
 
   const convenienceFee = items.length > 0 ? 9 : 0;
   const total = subtotal + convenienceFee;
