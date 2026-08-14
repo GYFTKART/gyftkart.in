@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   Search,
   Sparkles,
@@ -110,6 +110,43 @@ function useDragScrollCarousel() {
   };
 }
 
+// Crossfades a loading skeleton into real content instead of an instant
+// conditional swap. While `loading` is true only the skeleton is mounted.
+// The instant `loading` flips to false, the real content mounts UNDERNEATH
+// the still-visible skeleton (both absolutely stacked by the caller), then
+// on the next animation frame we flip `contentVisible` so CSS can transition
+// the skeleton's opacity down and the content's opacity up together. Only
+// after that transition finishes do we unmount the skeleton, so there is
+// never a frame where old content disappears and new content appears at
+// once — just a soft cross-dissolve.
+function useCrossfade(loading: boolean, duration = 300) {
+  const [showSkeleton, setShowSkeleton] = useState(loading);
+  const [contentVisible, setContentVisible] = useState(!loading);
+
+  useEffect(() => {
+    if (loading) {
+      // Went back into a loading state — snap back instantly, no fade.
+      setShowSkeleton(true);
+      setContentVisible(false);
+      return;
+    }
+
+    // Data just arrived. Mount the real content at opacity-0 first (this
+    // render), then flip it visible on the next frame so the browser
+    // actually animates the opacity change instead of skipping straight
+    // to the end state.
+    const raf = requestAnimationFrame(() => setContentVisible(true));
+    const unmountSkeleton = setTimeout(() => setShowSkeleton(false), duration);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(unmountSkeleton);
+    };
+  }, [loading, duration]);
+
+  return { showSkeleton, contentVisible };
+}
+
 export default function HomePage() {
   const { brands, loading } = useBrands();
 
@@ -126,6 +163,10 @@ export default function HomePage() {
   // Finite, mouse-draggable sliders for the two brand-card rows.
   const categoryDrag = useDragScrollCarousel();
   const trendingDrag = useDragScrollCarousel();
+
+  // Skeleton -> real-card crossfades for the two brand-card rows below.
+  const categoryCrossfade = useCrossfade(loading);
+  const trendingCrossfade = useCrossfade(loading);
 
   return (
     <div className="flex flex-col justify-start pt-16 bg-[#F5F5E9]">
@@ -189,9 +230,17 @@ export default function HomePage() {
               box's own height — which is what stops the rest of the page
               (trending, occasions, features…) from shifting up/down the
               moment `loading` flips to false. */}
-          <div className="min-h-[232px] sm:min-h-[248px]">
-          {loading ? (
-            <div className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          {/* relative + the two children absolutely stacked (only while both
+              are mounted mid-crossfade) is what lets the skeleton and the
+              real cards overlap and cross-dissolve instead of one replacing
+              the other in a single frame. */}
+          <div className="min-h-[232px] sm:min-h-[248px] relative">
+          {categoryCrossfade.showSkeleton && (
+            <div
+              className={`flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-opacity duration-300 ease-out ${
+                categoryCrossfade.contentVisible ? 'opacity-0' : 'opacity-100'
+              } ${!loading ? 'absolute inset-0' : ''}`}
+            >
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="shrink-0 w-60 sm:w-64 rounded-3xl overflow-hidden border border-slate-100">
                   <div className="h-44 shimmer" />
@@ -202,31 +251,41 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-          ) : filteredBrands.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-slate-500">No brands found in this category yet.</p>
-            </div>
-          ) : (
+          )}
+
+          {!loading && (
             <div
-              ref={categoryDrag.ref}
-              onMouseDown={categoryDrag.onMouseDown}
-              onMouseMove={categoryDrag.onMouseMove}
-              onMouseUp={categoryDrag.onMouseUp}
-              onMouseLeave={categoryDrag.onMouseLeave}
-              onClickCapture={categoryDrag.onClickCapture}
-              onDragStart={(e) => e.preventDefault()}
-              className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
+              className={`transition-opacity duration-300 ease-out ${
+                categoryCrossfade.contentVisible ? 'opacity-100' : 'opacity-0'
+              } ${categoryCrossfade.showSkeleton ? 'absolute inset-0' : ''}`}
             >
-              {filteredBrands.map((brand, i) => (
-                <Reveal
-                  key={brand.id}
-                  delay={i * 60}
-                  className="shrink-0 w-60 sm:w-64"
-                  motion="fade"
+              {filteredBrands.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-slate-500">No brands found in this category yet.</p>
+                </div>
+              ) : (
+                <div
+                  ref={categoryDrag.ref}
+                  onMouseDown={categoryDrag.onMouseDown}
+                  onMouseMove={categoryDrag.onMouseMove}
+                  onMouseUp={categoryDrag.onMouseUp}
+                  onMouseLeave={categoryDrag.onMouseLeave}
+                  onClickCapture={categoryDrag.onClickCapture}
+                  onDragStart={(e) => e.preventDefault()}
+                  className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
                 >
-                  <BrandCard brand={brand} />
-                </Reveal>
-              ))}
+                  {filteredBrands.map((brand, i) => (
+                    <Reveal
+                      key={brand.id}
+                      delay={i * 60}
+                      className="shrink-0 w-60 sm:w-64"
+                      motion="fade"
+                    >
+                      <BrandCard brand={brand} />
+                    </Reveal>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           </div>
@@ -257,9 +316,13 @@ export default function HomePage() {
             </p>
           </Reveal>
 
-          <div className="min-h-[232px] sm:min-h-[248px]">
-          {loading ? (
-            <div className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <div className="min-h-[232px] sm:min-h-[248px] relative">
+          {trendingCrossfade.showSkeleton && (
+            <div
+              className={`flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-opacity duration-300 ease-out ${
+                trendingCrossfade.contentVisible ? 'opacity-0' : 'opacity-100'
+              } ${!loading ? 'absolute inset-0' : ''}`}
+            >
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="shrink-0 w-60 sm:w-64 rounded-3xl overflow-hidden border border-slate-100">
                   <div className="h-44 shimmer" />
@@ -270,27 +333,35 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-          ) : (
+          )}
+
+          {!loading && (
             <div
-              ref={trendingDrag.ref}
-              onMouseDown={trendingDrag.onMouseDown}
-              onMouseMove={trendingDrag.onMouseMove}
-              onMouseUp={trendingDrag.onMouseUp}
-              onMouseLeave={trendingDrag.onMouseLeave}
-              onClickCapture={trendingDrag.onClickCapture}
-              onDragStart={(e) => e.preventDefault()}
-              className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
+              className={`transition-opacity duration-300 ease-out ${
+                trendingCrossfade.contentVisible ? 'opacity-100' : 'opacity-0'
+              } ${trendingCrossfade.showSkeleton ? 'absolute inset-0' : ''}`}
             >
-              {trending.map((brand, i) => (
-                <Reveal
-                  key={brand.id}
-                  delay={i * 60}
-                  className="shrink-0 w-60 sm:w-64"
-                  motion="fade"
-                >
-                  <BrandCard brand={brand} />
-                </Reveal>
-              ))}
+              <div
+                ref={trendingDrag.ref}
+                onMouseDown={trendingDrag.onMouseDown}
+                onMouseMove={trendingDrag.onMouseMove}
+                onMouseUp={trendingDrag.onMouseUp}
+                onMouseLeave={trendingDrag.onMouseLeave}
+                onClickCapture={trendingDrag.onClickCapture}
+                onDragStart={(e) => e.preventDefault()}
+                className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
+              >
+                {trending.map((brand, i) => (
+                  <Reveal
+                    key={brand.id}
+                    delay={i * 60}
+                    className="shrink-0 w-60 sm:w-64"
+                    motion="fade"
+                  >
+                    <BrandCard brand={brand} />
+                  </Reveal>
+                ))}
+              </div>
             </div>
           )}
           </div>
