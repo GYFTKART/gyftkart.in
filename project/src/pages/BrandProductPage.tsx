@@ -438,7 +438,7 @@ export default function BrandProductPage() {
   }
 
   return (
-    <div className="pt-16 min-h-screen bg-gradient-to-b from-brand-50/40 to-white">
+    <div className="pt-16 bg-gradient-to-b from-brand-50/40 to-transparent">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         {/* breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6">
