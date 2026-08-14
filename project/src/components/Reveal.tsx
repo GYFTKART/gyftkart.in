@@ -22,6 +22,14 @@ export default function Reveal({
   as = 'div',
   motion = 'full',
 }: RevealProps) {
+  
+  // --- TEMPORARY TRACKING CODE ADDED FOR DEBUGGING ---
+  useEffect(() => {
+    console.log('[Reveal MOUNT]', { key: (children as any)?.key ?? "no-key", time: performance.now() });
+    return () => console.log('[Reveal UNMOUNT]', { key: (children as any)?.key ?? "no-key", time: performance.now() });
+  }, []);
+  // ---------------------------------------------------
+
   const ref = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
 
