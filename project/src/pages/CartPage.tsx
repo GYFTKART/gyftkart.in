@@ -20,7 +20,7 @@ function genPin(): string {
 }
 
 export default function CartPage() {
-  const { items, remove, subtotal, count, clear } = useCart();
+  const { items, remove, subtotal, count, clear, isLoading } = useCart();
   const { session } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
@@ -75,6 +75,23 @@ export default function CartPage() {
       setCheckingOut(false);
     }
   };
+
+  if (isLoading) {
+    // Same shape as the empty-cart state below (icon + heading position)
+    // so there's no layout jump when this swaps to either the empty
+    // state or the real cart a moment later — just a neutral hold, not
+    // a claim that the cart is empty.
+    return (
+      <div className="pt-16">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-20 text-center">
+          <span className="grid place-items-center h-20 w-20 rounded-3xl bg-brand-100 text-brand-600 mx-auto">
+            <Loader2 className="h-10 w-10 animate-spin" />
+          </span>
+          <p className="mt-5 text-slate-500">Loading your cart…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (

@@ -25,6 +25,15 @@ interface CartContextValue {
   subtotal: number;
   /** True while the cart is being fetched/merged from Supabase. */
   syncing: boolean;
+  /**
+   * True until the cart has been resolved at least once for the current
+   * auth state — covers both the pre-authReady window (Supabase JWT not
+   * yet re-attached) and the first Supabase fetch for a logged-in user.
+   * The empty-cart UI must wait for this to be false, otherwise it
+   * renders "Your cart is empty" for the one tick before real items
+   * arrive — a false-empty flash, not an actual empty cart.
+   */
+  isLoading: boolean;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -133,6 +142,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(() => readGuestCart());
   const [isOpen, setIsOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  // Starts true unconditionally — even guests need one tick to confirm
+  // there's nothing to wait for, and an authed user needs the full
+  // authReady -> fetch chain to resolve. Never optimistically false.
+  const [isLoading, setIsLoading] = useState(true);
 
   // Tracks whether the *previous* render was authenticated, so we can
   // tell a fresh login (guest -> authed) apart from "still logged in,
@@ -194,12 +207,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
             }
           }
         } finally {
-          if (!cancelled) setSyncing(false);
+          if (!cancelled) {
+            setSyncing(false);
+            setIsLoading(false);
+          }
         }
       } else {
         // Logged out (or never logged in): fall back to the local
-        // guest cart.
+        // guest cart. Synchronous, but still goes through isLoading so
+        // the empty-check in CartPage never runs on a stale default
+        // before this branch has actually had a chance to execute.
         setItems(readGuestCart());
+        if (!cancelled) setIsLoading(false);
       }
       wasAuthedRef.current = isAuthed;
     }
@@ -287,6 +306,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     count,
     subtotal,
     syncing,
+    isLoading,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
