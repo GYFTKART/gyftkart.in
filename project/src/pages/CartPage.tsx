@@ -78,7 +78,7 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="pt-16 bg-gradient-to-b from-brand-50/40 to-white">
+      <div className="pt-16">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-20 text-center">
           <span className="grid place-items-center h-20 w-20 rounded-3xl bg-brand-100 text-brand-600 mx-auto">
             <ShoppingBag className="h-10 w-10" />
@@ -99,7 +99,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="pt-16 bg-gradient-to-b from-brand-50/40 to-white">
+    <div className="pt-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
         {/* breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6">

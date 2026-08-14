@@ -229,7 +229,7 @@ export default function CorporatePage() {
       </section>
 
       {/* ===== INQUIRY FORM ===== */}
-      <section id="inquiry" className="py-16 bg-gradient-to-b from-white to-brand-50/50">
+      <section id="inquiry" className="py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-5 gap-8 items-start">
             {/* Left copy */}
