@@ -84,6 +84,118 @@ function cacheSession(session: Session | null) {
   }
 }
 
+// ---------------------------------------------------------------------
+// Session restore: deduped + lock-guarded.
+//
+// supabase.auth.setSession() ROTATES the refresh token — the one we
+// send in is consumed and a new one comes back. That new pair only
+// reaches localStorage once the response arrives (cacheSession below).
+// Two things used to be able to go wrong when the page refreshes
+// rapidly or multiple tabs are open:
+//
+//  1. A page unloads (next refresh fires) before its in-flight
+//     setSession() response lands and gets cached. The next load then
+//     reads the OLD refresh token — already consumed/rotated away by
+//     the previous load — and Supabase correctly rejects it, which we
+//     used to treat as "not logged in" and wipe the cache.
+//  2. Two near-simultaneous callers (two tabs refreshed together, or a
+//     dev-mode double-mount) both read the same cached token and both
+//     call setSession(). Only one can win; the loser's rejection used
+//     to wipe the cache even when the winner had just written a
+//     perfectly good, fresher pair.
+//
+// `inFlightRestore` dedupes concurrent calls within this tab so only
+// one setSession() call is ever made per cached token generation.
+// `navigator.locks` (Web Locks API — supported in all current major
+// browsers) extends that guarantee across TABS: if another tab is
+// mid-rotation, this one waits for the lock instead of racing it, then
+// re-reads localStorage to pick up whatever the lock-holder just wrote.
+// ---------------------------------------------------------------------
+
+let inFlightRestore: Promise<Session | null> | null = null;
+
+async function performRestore(): Promise<Session | null> {
+  // Re-read here (not just at the top of restoreSessionOnce) because by
+  // the time we actually get the lock, another tab may have already
+  // rotated the tokens — we want the freshest cache, not the one that
+  // was current when we started waiting.
+  const cached = getCachedSession();
+
+  if (!cached) return null;
+
+  if (!cached.token || !cached.refreshToken) {
+    // Cached profile exists but is missing a usable token pair — most
+    // likely saved by an older build of this file, before refreshToken
+    // was tracked. There is no way to re-attach a JWT to the Supabase
+    // client from this, so it cannot be trusted. Leaving it in place
+    // would make `session` look logged-in while the Supabase client
+    // stays anonymous underneath — the exact mismatch that silently
+    // empties the cart.
+    cacheSession(null);
+    return null;
+  }
+
+  let result: Awaited<ReturnType<typeof supabase.auth.setSession>>;
+  try {
+    result = await supabase.auth.setSession({
+      access_token: cached.token,
+      refresh_token: cached.refreshToken,
+    });
+  } catch (err) {
+    // Network/transport failure — NOT a rejection of the token itself.
+    // The cached refresh token may still be perfectly valid; it just
+    // couldn't be exchanged on this attempt. Keep the cache as-is
+    // (optimistically stay "logged in" in the UI) so the next load can
+    // retry, instead of treating a dropped connection as a logout.
+    console.error('Session restore failed (network):', err);
+    return cached;
+  }
+
+  const { data, error } = result;
+
+  if (error || !data.session) {
+    // A genuine rejection from Supabase (token really is invalid or
+    // was already consumed elsewhere) — only now is it safe to drop
+    // the cache.
+    cacheSession(null);
+    return null;
+  }
+
+  // Tokens rotate on every refresh — keep the cache in sync so the
+  // next hard refresh (or the next tab to grab the lock) uses the
+  // current pair, not the one from however many refreshes ago.
+  const refreshed: Session = {
+    ...cached,
+    token: data.session.access_token,
+    refreshToken: data.session.refresh_token,
+  };
+  cacheSession(refreshed);
+  return refreshed;
+}
+
+function restoreSessionOnce(): Promise<Session | null> {
+  if (inFlightRestore) return inFlightRestore;
+
+  inFlightRestore = (async () => {
+    try {
+      const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+      if (locks) {
+        return await locks.request('gyftkart-auth-refresh', performRestore);
+      }
+      // Browsers without the Locks API still get the same-tab dedupe
+      // above — just not the cross-tab coordination.
+      return await performRestore();
+    } finally {
+      // Cleared in finally (not after await resolves) so a call that
+      // arrives while we're still inside the lock genuinely awaits the
+      // same promise rather than starting a second one.
+      inFlightRestore = null;
+    }
+  })();
+
+  return inFlightRestore;
+}
+
 export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(() => getCachedSession());
   const [authReady, setAuthReady] = useState(false);
@@ -92,56 +204,15 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   // actually authenticated for this page load — the local `session`
   // state above only restores the UI-facing profile fields synchronously
   // from localStorage; it does nothing to the Supabase client itself.
-  // Runs once per mount (hard refresh / first load), which is exactly
-  // when the client otherwise has no token at all given
-  // persistSession: false.
   useEffect(() => {
     let cancelled = false;
 
-    async function restore() {
-      const cached = getCachedSession();
-      if (cached?.token && cached?.refreshToken) {
-        const { data, error } = await supabase.auth.setSession({
-          access_token: cached.token,
-          refresh_token: cached.refreshToken,
-        });
-        if (cancelled) return;
+    restoreSessionOnce().then((restored) => {
+      if (cancelled) return;
+      setSession(restored);
+      setAuthReady(true);
+    });
 
-        if (error || !data.session) {
-          // Refresh token expired/invalid — cached profile is stale,
-          // drop it so the UI doesn't claim to be logged in against a
-          // client that actually isn't.
-          cacheSession(null);
-          setSession(null);
-        } else {
-          // Tokens rotate on refresh — keep the cache in sync so the
-          // next hard refresh uses the current pair, not the one from
-          // however many refreshes ago.
-          const refreshed: Session = {
-            ...cached,
-            token: data.session.access_token,
-            refreshToken: data.session.refresh_token,
-          };
-          cacheSession(refreshed);
-          setSession(refreshed);
-        }
-      } else if (cached) {
-        // A cached session exists but is missing a usable token pair —
-        // most likely saved by an older build of this file, before
-        // refreshToken was tracked. There is no way to re-attach a JWT
-        // to the Supabase client from this, so it cannot be trusted.
-        // Leaving it in place would make `session` look logged-in while
-        // the Supabase client stays anonymous underneath — the exact
-        // mismatch that silently empties the cart. Drop it instead; the
-        // person will need to log in again once, and every login from
-        // here on caches the full pair.
-        cacheSession(null);
-        setSession(null);
-      }
-      if (!cancelled) setAuthReady(true);
-    }
-
-    restore();
     return () => {
       cancelled = true;
     };
