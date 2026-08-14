@@ -128,7 +128,7 @@ export default function HomePage() {
   const trendingDrag = useDragScrollCarousel();
 
   return (
-    <div className="flex flex-col justify-start pt-16 min-h-screen bg-[#F5F5E9]">
+    <div className="flex flex-col justify-start pt-16 bg-[#F5F5E9]">
       {/* ===== HERO BANNER =====
           Fixed-dimension outer reservation: this space is claimed by CSS
           before HeroBanner's own JS state ever runs, so even if something
