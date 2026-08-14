@@ -191,23 +191,20 @@ export default function App() {
         <CartProvider>
           <ScrollManager />
           {/*
-            flex-col + min-h-screen turns header/main/footer into a single
-            stable column instead of three blocks that each flow
-            independently. Two things this fixes:
-              1. `main` no longer needs its own min-h-screen — that was
-                 sized off the viewport regardless of the header/footer's
-                 own height, so on a tall header/short content page the
-                 total stack could exceed the viewport and the browser
-                 would show a scrollbar (and a jump) that had nothing to
-                 do with actual content. flex-1 lets it fill whatever
-                 space is left instead.
-              2. Because it's all one flex column, header/footer height
-                 changes (e.g. Navbar swapping in an avatar once auth
-                 resolves) push main up/down predictably in normal layout
-                 flow rather than the whole page's total height jumping
-                 around as isolated blocks resize.
+            This div used to carry its own `min-h-screen`, duplicating the
+            min-height: 100vh already declared on #root in index.css. Two
+            separately-sized "100vh" boxes nested inside each other is what
+            caused the bug: rounding/scrollbar-width differences between
+            them let #root's own cream background peek out past this div's
+            bottom edge — showing up as a cream-colored patch right above
+            the footer, plus an empty gap below the footer on short pages.
+
+            Now #root (in index.css) is the single owner of page height
+            via `display:flex; flex-direction:column; min-height:100vh`.
+            This div just uses `flex-1` to stretch and exactly fill
+            whatever #root gives it — no duplicate height claim, no seam.
           */}
-          <div className="flex min-h-screen flex-col">
+          <div className="flex flex-1 flex-col">
             {!isAdmin && <Navbar />}
 
             <main className="flex-1">

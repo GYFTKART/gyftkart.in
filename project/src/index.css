@@ -35,8 +35,20 @@
      commits its first render, so on a hard refresh there's a brief
      window where #root is empty — this keeps that window themed
      correctly (and full-height) instead of showing raw body/html
-     styling as a fallback that may not have applied yet. */
+     styling as a fallback that may not have applied yet.
+
+     #root is now the SINGLE source of truth for page height: it's a
+     flex column that owns min-height: 100vh. The App.tsx layout div
+     inside it just uses flex-1 to fill whatever #root gives it,
+     instead of separately re-declaring its own min-h-screen. Having
+     two nested elements each independently claim "100vh" was the bug —
+     rounding/scrollbar-width differences between them let #root's own
+     cream background box peek out past the inner div's edge, which
+     showed up as a cream-colored sliver right above the footer, plus
+     an empty gap on short pages. */
   #root {
+    display: flex;
+    flex-direction: column;
     min-height: 100vh;
     background-color: #F5F5E9;
   }
