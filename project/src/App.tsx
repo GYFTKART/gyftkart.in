@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { useLocation, useNavigationType, Routes, Route, Navigate } from 'react-router-dom';
 import { CartProvider } from '@/context/CartContext';
 import { CustomerAuthProvider } from '@/context/CustomerAuthContext';
@@ -29,56 +29,110 @@ import HowItWorksPage from '@/pages/HowItWorksPage';
 import CareersPage from '@/pages/CareersPage';
 
 
-// Ensure the browser (not React) owns scroll restoration on hard reloads.
-// This must run once, as early as possible, before the browser paints.
+// We take over scroll restoration entirely ourselves (see ScrollManager
+// below), because the browser's built-in 'auto' restoration has two
+// problems in a client-rendered app like this one:
+//  1. It fires before async content (data fetches, images) has finished
+//     loading, so it often restores to the wrong spot on a page that's
+//     still growing — which is why refreshing could still lose position.
+//  2. It doesn't know the difference between "user clicked a link"
+//     (should scroll to top) and "user pressed Back" (should restore),
+//     so relying on it produces inconsistent, occasionally jerky results.
+// Handing control to 'manual' lets us decide exactly what happens on
+// every navigation, and back it with sessionStorage so it also survives
+// a hard refresh.
 if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
-  window.history.scrollRestoration = 'auto';
+  window.history.scrollRestoration = 'manual';
 }
 
-// Remembers the scroll position of every visited history entry (keyed by
-// React Router's per-navigation `location.key`) so it can be restored when
-// the user comes back to that entry via the browser's Back/Forward buttons.
-// Module-level so it survives re-renders and persists for the whole tab
-// session, the same way native browser scroll restoration would.
-const scrollPositions = new Map<string, number>();
+const SCROLL_KEY_PREFIX = 'scrollpos:';
+
+function readSavedScroll(key: string): number | null {
+  try {
+    const raw = sessionStorage.getItem(SCROLL_KEY_PREFIX + key);
+    return raw === null ? null : Number(raw);
+  } catch {
+    return null; // sessionStorage unavailable (private browsing, etc.)
+  }
+}
+
+function saveScroll(key: string, y: number) {
+  try {
+    sessionStorage.setItem(SCROLL_KEY_PREFIX + key, String(y));
+  } catch {
+    // storage full/unavailable — restoration just won't be perfect, no crash
+  }
+}
+
+// Scrolls to `target` and keeps re-asserting it for a few animation frames.
+// This is what makes restoration reliable (and jerk-free) even while the
+// page's content is still loading and its height keeps changing under us —
+// a single scrollTo call would otherwise get overridden by layout shifts.
+function restoreScroll(target: number) {
+  let attempts = 0;
+  const maxAttempts = 10;
+
+  const attempt = () => {
+    window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+    attempts += 1;
+    const settled = Math.abs(window.scrollY - target) < 2;
+    if (!settled && attempts < maxAttempts) {
+      requestAnimationFrame(attempt);
+    }
+  };
+
+  requestAnimationFrame(attempt);
+}
 
 function ScrollManager() {
   const location = useLocation();
   const navType = useNavigationType(); // 'PUSH' | 'REPLACE' | 'POP'
   const isFirstRender = useRef(true);
 
-  // Continuously record the scroll position for the *current* entry so that
-  // whenever the user navigates away, we already know where they left off.
-  useEffect(() => {
+  // Continuously persist the scroll position of the *current* entry (to
+  // sessionStorage, not just memory) so it survives both in-app navigation
+  // and a hard refresh of the tab.
+  useLayoutEffect(() => {
     const key = location.key;
-    const handleScroll = () => {
-      scrollPositions.set(key, window.scrollY);
+    let frame = 0;
+    const persist = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => saveScroll(key, window.scrollY));
     };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', persist, { passive: true });
+    // Also catch the final position right as the tab closes/reloads, in
+    // case the last scroll event's rAF never got to run.
+    window.addEventListener('beforeunload', persist);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', persist);
+      window.removeEventListener('beforeunload', persist);
+    };
   }, [location.key]);
 
-  useEffect(() => {
-    // On the very first render — which covers both the initial app load
-    // and a hard refresh of any route — skip scrolling. Forcing scroll
-    // here would override the browser's native scroll restoration on
-    // reload. We only want to manage scroll on genuine in-app navigations
-    // that happen after the app has already mounted.
+  // Decide what to do with scroll position whenever the route changes —
+  // including the very first render, which covers hard refreshes.
+  useLayoutEffect(() => {
+    const saved = readSavedScroll(location.key);
+
     if (isFirstRender.current) {
       isFirstRender.current = false;
+      // Hard refresh (or very first load of the app): restore the exact
+      // spot the user was at on this entry, if we have one saved.
+      if (saved !== null) restoreScroll(saved);
       return;
     }
 
     if (navType === 'POP') {
-      // Back/forward navigation: restore the scroll position this entry
-      // had when the user left it (e.g. scrolled to the footer, clicked a
-      // link, then hit Back).
-      const saved = scrollPositions.get(location.key);
-      window.scrollTo({ top: saved ?? 0, behavior: 'instant' as ScrollBehavior });
+      // Back/Forward: restore the exact position that entry had when the
+      // user left it — this now works even if the entry we're returning
+      // to was itself refreshed at some point, since it's read from
+      // sessionStorage rather than an in-memory map.
+      restoreScroll(saved ?? 0);
     } else {
-      // Regular link navigation (PUSH) or a redirect (REPLACE): start the
-      // new page at the top, same as before.
-      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      // Regular link click (PUSH) or a redirect (REPLACE): always start
+      // the new page at the top.
+      restoreScroll(0);
     }
   }, [location.pathname, location.key, navType]);
 
