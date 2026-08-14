@@ -64,6 +64,13 @@ function saveScroll(key: string, y: number) {
   }
 }
 
+// Events that count as "the user has taken over scrolling". Deliberately
+// input-device events, not 'scroll' itself — a 'scroll' event fires just
+// as much from our own snap() calls as from the user, so it can't be used
+// to distinguish the two. wheel/touchstart/keydown only fire from an
+// actual person at the input device.
+const USER_INPUT_EVENTS = ['wheel', 'touchstart', 'keydown'] as const;
+
 // Scrolls to `target` and keeps re-asserting it for as long as the page's
 // own height keeps changing under us. This is what makes restoration
 // reliable (and jerk-free) even on pages with async data fetches (e.g.
@@ -80,35 +87,60 @@ function saveScroll(key: string, y: number) {
 // because async content can still grow the page after that first paint)
 // are driven by ResizeObserver, since those genuinely have to wait for
 // layout to change before they can do anything useful.
+//
+// USER-TAKEOVER: those follow-up ResizeObserver corrections used to be
+// able to fire up to ~1-2s after load (whenever a late font/image/brand
+// fetch resolves and shifts layout) with no awareness that the user had
+// already scrolled away in the meantime — yanking them back to the stale
+// `target` and producing a jarring down-then-up jerk. We now listen for
+// the first real input-device event (wheel, touch, or key) and treat it
+// as "the user has taken over": the moment one fires, we stop snapping
+// and tear the observer down immediately, so restoration only ever
+// fights layout shift and never fights the user.
 function restoreScroll(target: number) {
   const root = document.documentElement;
   root.classList.add('disable-smooth-scroll');
 
   let settleTimer: number;
+  let cancelled = false;
 
   const snap = () => {
+    if (cancelled) return;
     window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
   };
 
   const finish = () => {
+    if (cancelled) return;
+    cancelled = true;
     ro.disconnect();
+    clearTimeout(settleTimer);
     root.classList.remove('disable-smooth-scroll');
+    USER_INPUT_EVENTS.forEach((evt) => window.removeEventListener(evt, finish));
   };
 
-  // Previously this retried a fixed 10 animation frames (~160ms) and gave
-  // up. That's fine for content that's already in the DOM, but pages with
-  // a real network fetch (brand lists, product data, etc.) can easily grow
-  // their height well past 160ms after mount, which let the old version
-  // exhaust its retries before the fetch even resolved — the page would
-  // then settle taller than the restored position, producing a visible
-  // jump. Watching document.body directly removes the guesswork: we keep
-  // re-snapping on every height change, and only stop once 400ms pass
-  // with no further change (i.e. the page has actually finished growing).
   const ro = new ResizeObserver(() => {
+    // Previously this retried a fixed 10 animation frames (~160ms) and gave
+    // up. That's fine for content that's already in the DOM, but pages with
+    // a real network fetch (brand lists, product data, etc.) can easily grow
+    // their height well past 160ms after mount, which let the old version
+    // exhaust its retries before the fetch even resolved — the page would
+    // then settle taller than the restored position, producing a visible
+    // jump. Watching document.body directly removes the guesswork: we keep
+    // re-snapping on every height change, and only stop once 400ms pass
+    // with no further change (i.e. the page has actually finished growing)
+    // — or the user starts scrolling themselves, whichever comes first.
     snap();
     clearTimeout(settleTimer);
     settleTimer = window.setTimeout(finish, 400);
   });
+
+  // `finish` doubles as the input handler: the very first wheel/touch/key
+  // event cancels all further snapping and cleans everything up. `once:
+  // true` is just a belt-and-suspenders — finish() itself also removes
+  // all three listeners on first call, however it was triggered.
+  USER_INPUT_EVENTS.forEach((evt) =>
+    window.addEventListener(evt, finish, { passive: true, once: true })
+  );
 
   snap(); // synchronous first write — no visible jump
   ro.observe(document.body);
