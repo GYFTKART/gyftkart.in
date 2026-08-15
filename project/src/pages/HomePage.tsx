@@ -210,8 +210,17 @@ export default function HomePage() {
       {/* ===== SHOP BY CATEGORY ===== */}
       <section className="pb-10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          {/* Category pills */}
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
+          {/* Category pills — single-row horizontal scroller on mobile
+              (flex-nowrap + overflow-x-auto), scrollbar hidden via the
+              no-scrollbar/scrollbar-none utilities already used by the
+              other card rows on this page. -mx-4 px-4 lets the row bleed
+              to the screen edges so the first/last pill isn't cramped
+              against the page padding while scrolling, same pattern as
+              the brand-card carousels below. shrink-0 + whitespace-nowrap
+              on each pill keeps them from being squashed while scrolling.
+              sm and up: reverts to the original centered, wrapping,
+              non-scrolling layout — completely unchanged. */}
+          <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto sm:overflow-visible no-scrollbar scrollbar-none items-center justify-start sm:justify-center gap-2 -mx-4 px-4 sm:mx-0 sm:px-0 mb-6">
             {brandCategories.map((c) => {
               const Icon = c === 'All' ? ShoppingBag : c === 'Trending' ? TrendingUp : getCategoryIcon(c);
               const active = activeCategory === c;
@@ -219,7 +228,7 @@ export default function HomePage() {
                 <button
                   key={c}
                   onClick={() => setActiveCategory(c)}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
+                  className={`shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
                     active
                       ? 'bg-brand-700 text-white shadow-sm'
                       : 'bg-transparent border border-gray-400 text-slate-600 hover:bg-slate-900/5 hover:border-brand-400'
