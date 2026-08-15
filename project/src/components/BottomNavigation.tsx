@@ -2,17 +2,24 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { Home, Compass, ShoppingBag, Gift } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 
-// Fixed/floating bottom nav for mobile — Home, Explore, Cart, Offers.
+// Floating "dock" bottom nav for mobile — Home, Explore, Cart, Offers.
 // Hidden from `md` up (the regular header + desktop nav takes over
-// there). Renders above everything (z-[90], just under the header's
-// z-[100] and the auth modal's z-[200]) and pads itself for iOS home-
-// indicator safe areas so it never sits under the swipe gesture bar.
+// there). Renders above everything (z-50, still under the header's
+// z-[100] and the auth modal's z-[200]).
+//
+// Floats inset from all three edges (bottom-4 / left-4 / right-4)
+// as a rounded, blurred, shadowed capsule rather than a flush
+// full-width bar — matching the woohoo.in-style dock reference.
+// `bottom` is set inline (not just the bottom-4 class) so the gap
+// itself grows on devices with a home-indicator safe area, instead
+// of the bar sitting flush under it.
 //
 // Mount this once, near the bottom of App.tsx, alongside `!isAdmin &&
-// <Footer />` — and add matching bottom padding to the page's main
-// content wrapper on mobile (see the `pb-16 md:pb-0` note in App.tsx)
-// so this bar never overlaps the last bit of page content or the
-// footer.
+// <Footer />`. Because the bar now floats above the edge instead of
+// sitting flush against it, give the page's main content wrapper a
+// bit more mobile bottom padding than before — `pb-24 md:pb-0` — so
+// the floating dock never overlaps the last bit of page content or
+// the footer.
 interface NavItem {
   to: string;
   label: string;
@@ -33,8 +40,8 @@ export default function BottomNavigation() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-[90] border-t border-slate-100 bg-white/95 backdrop-blur-md shadow-[0_-4px_20px_-8px_rgba(15,23,42,0.12)]"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      className="md:hidden fixed left-4 right-4 z-50 rounded-2xl border border-slate-100/80 bg-white/90 backdrop-blur-md shadow-xl shadow-slate-900/10"
+      style={{ bottom: 'max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))' }}
       aria-label="Primary mobile navigation"
     >
       <div className="mx-auto grid max-w-7xl grid-cols-4">
