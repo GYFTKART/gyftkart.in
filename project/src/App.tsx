@@ -220,7 +220,13 @@ function ScrollManager() {
 }
 
 function ProtectedAdminRoute({ children }: { children: ReactNode }) {
-  const { admin } = useAdminAuth();
+  const { admin, loading } = useAdminAuth();
+  // AdminAuthContext now confirms admin status via a Supabase session +
+  // an `admins` table lookup, both async — on a hard refresh, `admin`
+  // is briefly null while that check is still running. Redirecting on
+  // that first render (as before) would bounce a valid admin straight
+  // back to the login page every time they refresh the dashboard.
+  if (loading) return null;
   if (!admin) return <Navigate to="/admin" replace />;
   return <>{children}</>;
 }
