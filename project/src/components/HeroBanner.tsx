@@ -202,7 +202,7 @@ export default function HeroBanner() {
   const onTouchCancel = () => cancelDrag();
 
   return (
-    <section className="pt-3 sm:pt-6">
+    <section className="pt-1 sm:pt-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/*
           sm and up: explicit fixed pixel height (NOT aspect-ratio) — the
@@ -299,7 +299,7 @@ export default function HeroBanner() {
 
                 {/* Product-image card — full width on mobile (sits on top of the stack), fixed share from sm up */}
                 <div
-                  className="relative h-[190px] sm:h-[280px] md:h-[320px] w-full sm:w-[42%] flex-shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl"
+                  className="relative h-[240px] sm:h-[280px] md:h-[320px] w-full sm:w-[42%] flex-shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl"
                   style={{ backgroundColor: slide.panelBg }}
                 >
                   <img
