@@ -50,6 +50,15 @@ export default function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  // Search icon toggle — MOBILE ONLY. Desktop already shows the full
+  // search input inline in the header (below), so we don't duplicate it
+  // with an icon there. This button (and the expanding bar it opens)
+  // carries the class `md:hidden` so it never renders at the `md`
+  // breakpoint and up — the desktop header stays exactly as it was.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   // Auth modal state
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -117,10 +126,33 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, [userMenuOpen]);
 
+  // Focus the mobile search input the moment the bar opens, and close on
+  // outside click or Escape — same pattern as the account dropdown.
+  useEffect(() => {
+    if (!searchOpen) return;
+    searchInputRef.current?.focus();
+
+    const onClickOutside = (e: MouseEvent) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSearchOpen(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [searchOpen]);
+
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
     navigate(`/brands?q=${encodeURIComponent(search.trim())}`);
     setMobileOpen(false);
+    setSearchOpen(false);
   };
 
   const resetFormState = () => {
@@ -294,7 +326,9 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Search (desktop) */}
+          {/* Search (desktop) — unchanged, always visible from md up.
+              This is the ONLY search entry point on desktop; no icon is
+              added next to the cart there. */}
           <form
             onSubmit={submitSearch}
             className="hidden md:flex items-center flex-1 max-w-2xl relative ml-2"
@@ -400,6 +434,23 @@ export default function Navbar() {
                 Login
               </button>
             )}
+
+            {/* Search icon — MOBILE / TABLET ONLY (md:hidden). Sits right
+                next to the cart icon. Desktop (md and up) relies solely
+                on the inline search bar above and never shows this. */}
+            <button
+              onClick={() => setSearchOpen((v) => !v)}
+              className={`md:hidden grid place-items-center h-10 w-10 rounded-full transition-colors ${
+                searchOpen
+                  ? 'bg-brand-50 text-brand-700'
+                  : 'hover:bg-brand-50 text-slate-700 hover:text-brand-700'
+              }`}
+              aria-label="Search"
+              aria-expanded={searchOpen}
+            >
+              <Search className="h-5 w-5" />
+            </button>
+
             <button
               onClick={() => navigate('/cart')}
               className="relative grid place-items-center h-10 w-10 rounded-full hover:bg-brand-50 text-slate-700 hover:text-brand-700 transition-colors"
@@ -423,6 +474,32 @@ export default function Navbar() {
         </div>
       </nav>
 
+      {/* Expanding mobile search bar — toggled by the search icon above.
+          md:hidden so it can never appear on desktop, matching the icon
+          that opens it. Collapsed to max-h-0 so it animates open/closed
+          rather than popping in. */}
+      <div
+        ref={searchWrapRef}
+        className={`md:hidden overflow-hidden border-t transition-[max-height,opacity] duration-300 ease-out ${
+          searchOpen
+            ? 'max-h-24 opacity-100 border-slate-100/70'
+            : 'max-h-0 opacity-0 border-transparent'
+        }`}
+      >
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
+          <form onSubmit={submitSearch} className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              ref={searchInputRef}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search brands…"
+              className="w-full rounded-full border border-gray-300 bg-white pl-11 pr-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none transition"
+            />
+          </form>
+        </div>
+      </div>
+
       {/* Mobile menu */}
       <div
         className={`lg:hidden overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
@@ -430,15 +507,6 @@ export default function Navbar() {
         }`}
       >
         <div className="mx-4 mb-4 rounded-3xl border border-slate-100 bg-white p-4 shadow-card">
-          <form onSubmit={submitSearch} className="relative mb-3">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search brands…"
-              className="w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-3 py-2.5 text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none"
-            />
-          </form>
           <div className="grid gap-1">
             {navLinks.map((l) => {
               const Icon = navIcons[l.to];

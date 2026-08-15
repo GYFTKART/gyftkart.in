@@ -8,6 +8,16 @@ import { ArrowUpRight } from 'lucide-react';
 // its own background color. Swap `imageUrl` for real creative in
 // /public/images/banners — autoplay, dots, and the slide transition all
 // work as-is regardless of what image is dropped in.
+//
+// MOBILE LAYOUT: below the `sm` breakpoint the slide switches from a
+// side-by-side row to a stacked column — the product-image card renders
+// ON TOP and the text block (headline / subtext / CTA) follows directly
+// underneath it, matching the reference layout. This is done with
+// `flex-col-reverse` on the slide row: the image div is the *second*
+// child in markup (so screen readers / tab order still hit the text
+// first), and `column-reverse` simply paints it above the text without
+// reordering the DOM. At `sm` and up we flip back to a normal `flex-row`
+// for the original side-by-side treatment.
 interface BannerSlide {
   id: string;
   titleHead: string; // first headline line, rendered in black
@@ -198,10 +208,12 @@ export default function HeroBanner() {
           Explicit fixed pixel height at every breakpoint (NOT
           aspect-ratio) — the viewport's box never has to be recalculated
           as slides change or images load, which is what removes the
-          jump/layout-shift.
+          jump/layout-shift. The mobile height is taller than before
+          because the stacked layout (image + text underneath) needs more
+          vertical room than the old side-by-side layout did.
         */}
         <div
-          className="relative min-h-[300px] sm:min-h-[360px] md:min-h-[420px] h-[300px] sm:h-[360px] md:h-[420px] w-full overflow-hidden rounded-3xl select-none"
+          className="relative min-h-[460px] sm:min-h-[360px] md:min-h-[420px] h-[460px] sm:h-[360px] md:h-[420px] w-full overflow-hidden rounded-3xl select-none"
           style={{ backgroundColor: PAGE_CREAM }}
         >
           {/*
@@ -234,17 +246,21 @@ export default function HeroBanner() {
             {extendedSlides.map((slide, i) => (
               <div
                 key={`${slide.id}-${i}`}
-                className="flex h-full w-full flex-shrink-0 items-center gap-4 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8"
+                // flex-col-reverse (mobile) -> image (2nd child) paints on
+                // top, text (1st child) follows below it, with NO markup
+                // reordering. sm:flex-row restores the original
+                // side-by-side layout on larger screens.
+                className="flex h-full w-full flex-shrink-0 flex-col-reverse sm:flex-row items-center gap-3 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 overflow-hidden"
                 aria-hidden={i !== index}
               >
-                {/* Left text column — fixed width share, height comes from the fixed-height parent */}
-                <div className="flex h-full w-[56%] sm:w-[58%] flex-shrink-0 flex-col justify-center gap-2.5 sm:gap-3.5 pl-2 sm:pl-4 lg:pl-8">
+                {/* Text column — full width & centered on mobile (below the image), fixed share + left-aligned from sm up */}
+                <div className="flex h-auto sm:h-full w-full sm:w-[58%] flex-shrink-0 flex-col justify-center items-center sm:items-start gap-2 sm:gap-3.5 text-center sm:text-left px-1 sm:pl-4 lg:pl-8">
                   <div className="leading-[1.05]">
-                    <p className="font-display font-extrabold text-2xl sm:text-4xl lg:text-5xl text-slate-900">
+                    <p className="font-display font-extrabold text-xl sm:text-4xl lg:text-5xl text-slate-900">
                       {slide.titleHead}
                     </p>
                     <p
-                      className="font-display font-extrabold text-2xl sm:text-4xl lg:text-5xl"
+                      className="font-display font-extrabold text-xl sm:text-4xl lg:text-5xl"
                       style={{ color: ACCENT_GREEN }}
                     >
                       {slide.titleAccent}
@@ -270,9 +286,9 @@ export default function HeroBanner() {
                   </Link>
                 </div>
 
-                {/* Right product-image card — explicit fixed height, no aspect-ratio reflow */}
+                {/* Product-image card — full width on mobile (sits on top of the stack), fixed share from sm up */}
                 <div
-                  className="relative h-[220px] sm:h-[280px] md:h-[320px] w-[44%] sm:w-[42%] flex-shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl"
+                  className="relative h-[190px] sm:h-[280px] md:h-[320px] w-full sm:w-[42%] flex-shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl"
                   style={{ backgroundColor: slide.panelBg }}
                 >
                   <img
@@ -290,8 +306,8 @@ export default function HeroBanner() {
           </div>
         </div>
 
-        {/* Navigation dots — left-aligned under the text column, dash style */}
-        <div className="mt-3 sm:mt-4 flex items-center gap-1.5 pl-2 sm:pl-4 lg:pl-8">
+        {/* Navigation dots — centered on mobile (under the stacked layout), left-aligned under the text column from sm up */}
+        <div className="mt-3 sm:mt-4 flex items-center justify-center sm:justify-start gap-1.5 pl-0 sm:pl-4 lg:pl-8">
           {slides.map((slide, i) => {
             const active = i === activeDotIndex;
             return (

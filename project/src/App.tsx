@@ -7,6 +7,7 @@ import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthContext';
 import { useAuth } from '@/context/CustomerAuthContext';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import BottomNavigation from '@/components/BottomNavigation';
 import HomePage from '@/pages/HomePage';
 import BrandsPage from '@/pages/BrandsPage';
 import BrandProductPage from '@/pages/BrandProductPage';
@@ -267,7 +268,14 @@ export default function App() {
           <div className="flex flex-1 flex-col">
             {!isAdmin && <Navbar />}
 
-            <main className="flex-1">
+            {/*
+              pb-16 (mobile only, matches BottomNavigation's own height)
+              keeps the fixed/floating bottom nav from ever overlapping
+              the tail end of page content or the footer. md:pb-0 removes
+              it again once BottomNavigation hides itself (md:hidden) and
+              the regular header takes over navigation duties.
+            */}
+            <main className={`flex-1 ${!isAdmin ? 'pb-16 md:pb-0' : ''}`}>
               <Routes>
                 {/* Public marketplace */}
                 <Route path="/" element={<HomePage />} />
@@ -321,6 +329,7 @@ export default function App() {
             </main>
 
             {!isAdmin && <Footer />}
+            {!isAdmin && <BottomNavigation />}
           </div>
         </CartProvider>
       </CustomerAuthProvider>
