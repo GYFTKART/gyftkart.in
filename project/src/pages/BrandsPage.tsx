@@ -133,18 +133,13 @@ export default function BrandsPage() {
             </button>
           </div>
         ) : (
-          <>
-            <p className="text-sm text-slate-500 mb-4">
-              Showing <span className="font-bold text-slate-800">{filtered.length}</span> brand{filtered.length !== 1 ? 's' : ''}
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-              {filtered.map((brand, i) => (
-                <Reveal key={brand.id} delay={(i % 8) * 50}>
-                  <BrandCard brand={brand} />
-                </Reveal>
-              ))}
-            </div>
-          </>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+            {filtered.map((brand, i) => (
+              <Reveal key={brand.id} delay={(i % 8) * 50}>
+                <BrandCard brand={brand} />
+              </Reveal>
+            ))}
+          </div>
         )}
 
         {/* corporate banner */}
