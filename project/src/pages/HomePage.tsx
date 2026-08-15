@@ -220,7 +220,7 @@ export default function HomePage() {
               on each pill keeps them from being squashed while scrolling.
               sm and up: reverts to the original centered, wrapping,
               non-scrolling layout — completely unchanged. */}
-          <div className="flex flex-nowrap overflow-x-auto sm:overflow-visible no-scrollbar scrollbar-none items-center justify-start sm:justify-center gap-2 -mx-4 px-4 sm:mx-0 sm:px-0 mb-6">
+          <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto sm:overflow-visible no-scrollbar scrollbar-none items-center justify-start sm:justify-center gap-2 -mx-4 px-4 sm:mx-0 sm:px-0 mb-6">
             {brandCategories.map((c) => {
               const Icon = c === 'All' ? ShoppingBag : c === 'Trending' ? TrendingUp : getCategoryIcon(c);
               const active = activeCategory === c;
