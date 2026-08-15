@@ -184,17 +184,26 @@ export default function HomePage() {
           taller than HeroBanner's actual fixed-height content — leaving a
           large blank gap below the banner. A fixed height can't do that. */}
       {/*
-        Height here is NOT just the slider's own h-[...] — it must also
-        cover HeroBanner's internal `pt-6` top padding and its dots row
-        below the slider (mt-3/mt-4 + dot height), since that content
-        renders past this placeholder's box. If this height is short,
-        the dots overflow the box and the mb-6/mb-8 below gets silently
-        absorbed by that overflow instead of producing a visible gap —
-        which is exactly the "dots touching the category pills" bug.
-        300/360/420 (slider) + 24 (pt-6) + 12/16/16 (dots mt-3/mt-4) +
-        10 (dot height) = 346 / 410 / 470.
+        sm and up: still an explicit fixed height matching HeroBanner's own
+        fixed sm/md heights — those breakpoints never changed, so this
+        reservation is safe to hand-calculate there.
+
+        Mobile: h-auto instead of a hardcoded pixel value. HeroBanner's
+        mobile layout is itself h-auto/content-driven (no fixed height,
+        no JS-measured height), so any hand-calculated number here is
+        just a second, independent guess at the same value — and the two
+        WILL drift the moment HeroBanner's mobile markup changes (image
+        height, padding, CTA, dots spacing, etc. have all changed since
+        this box was last calculated). When the guess is too short, the
+        real content (including the dots row) overflows past this box's
+        bottom edge, the mb-6 below gets silently absorbed into that
+        overflow instead of producing a visible gap, and the next section
+        lands right on top of the dots — exactly the bug reported. Letting
+        this box be h-auto removes the guess entirely: it always matches
+        HeroBanner's real rendered height, so there's nothing left to
+        drift out of sync.
       */}
-      <div className="w-full h-[346px] sm:h-[410px] md:h-[470px] mb-6 sm:mb-8">
+      <div className="w-full h-auto sm:h-[410px] md:h-[470px] mb-6 sm:mb-8">
         <HeroBanner />
       </div>
 
