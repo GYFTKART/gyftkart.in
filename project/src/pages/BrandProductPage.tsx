@@ -247,13 +247,15 @@ export default function BrandProductPage() {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [message, setMessage] = useState('');
-  const [occasion, setOccasion] = useState('Birthday');
+  const [occasion, setOccasion] = useState('');
   const [touched, setTouched] = useState(false);
 
-  // "Recipient details" vs "Buy for self" toggle. When set to 'self' and
-  // the customer is logged in, the name/email fields are prefilled (and
-  // locked) with their account details.
-  const [giftFor, setGiftFor] = useState<'recipient' | 'self'>('recipient');
+  // "Buy for self" vs "Recipient details" toggle. Defaults to 'self' so
+  // the page loads with no occasion pre-picked AND no recipient fields
+  // showing. When set to 'self' and the customer is logged in, the
+  // name/email/phone are synced (read-only) from their account details
+  // instead of being collected via visible inputs.
+  const [giftFor, setGiftFor] = useState<'recipient' | 'self'>('self');
 
   const selectRecipientMode = () => {
     setGiftFor('recipient');
@@ -272,6 +274,18 @@ export default function BrandProductPage() {
     setRecipientEmail(session.email);
     setRecipientPhone(session.phone ?? '');
   };
+
+  // Keeps self-mode's (hidden) recipient fields in sync with the logged-in
+  // session — covers the default-on-load case (giftFor starts as 'self'
+  // before any click ever fires selectSelfMode) as well as a session that
+  // finishes loading after this page has already mounted.
+  useEffect(() => {
+    if (giftFor === 'self' && session) {
+      setRecipientName(session.name);
+      setRecipientEmail(session.email);
+      setRecipientPhone(session.phone ?? '');
+    }
+  }, [giftFor, session]);
 
   useEffect(() => {
     let active = true;
@@ -448,13 +462,6 @@ export default function BrandProductPage() {
           <span>/</span>
           <span className="text-slate-800 font-medium">{brand.name}</span>
         </nav>
-
-        <button
-          onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-brand-700 mb-6 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back
-        </button>
 
         {usingFallbackData && (
           <div className="mb-6 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
@@ -651,24 +658,6 @@ export default function BrandProductPage() {
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={selectRecipientMode}
-                  className={`flex items-center gap-2.5 rounded-2xl border-2 px-4 py-3 text-sm font-semibold transition-all ${
-                    giftFor === 'recipient'
-                      ? 'border-brand-600 bg-brand-50 text-brand-700'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300'
-                  }`}
-                >
-                  <span
-                    className={`relative grid place-items-center h-4 w-4 shrink-0 rounded-full border-2 ${
-                      giftFor === 'recipient' ? 'border-brand-600' : 'border-slate-300'
-                    }`}
-                  >
-                    {giftFor === 'recipient' && <span className="h-2 w-2 rounded-full bg-brand-600" />}
-                  </span>
-                  Recipient details
-                </button>
-                <button
-                  type="button"
                   onClick={selectSelfMode}
                   className={`flex items-center gap-2.5 rounded-2xl border-2 px-4 py-3 text-sm font-semibold transition-all ${
                     giftFor === 'self'
@@ -685,84 +674,103 @@ export default function BrandProductPage() {
                   </span>
                   Buy for self
                 </button>
+                <button
+                  type="button"
+                  onClick={selectRecipientMode}
+                  className={`flex items-center gap-2.5 rounded-2xl border-2 px-4 py-3 text-sm font-semibold transition-all ${
+                    giftFor === 'recipient'
+                      ? 'border-brand-600 bg-brand-50 text-brand-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300'
+                  }`}
+                >
+                  <span
+                    className={`relative grid place-items-center h-4 w-4 shrink-0 rounded-full border-2 ${
+                      giftFor === 'recipient' ? 'border-brand-600' : 'border-slate-300'
+                    }`}
+                  >
+                    {giftFor === 'recipient' && <span className="h-2 w-2 rounded-full bg-brand-600" />}
+                  </span>
+                  Recipient details
+                </button>
               </div>
 
-              <div className="mt-4 space-y-3">
-                <div>
-                  <input
-                    value={recipientName}
-                    onChange={(e) => setRecipientName(e.target.value)}
-                    readOnly={giftFor === 'self'}
-                    placeholder="Recipient name"
-                    className={`w-full rounded-2xl border-2 px-4 py-3 text-sm outline-none transition-colors ${
-                      giftFor === 'self' ? 'bg-slate-50 text-slate-500 cursor-not-allowed' : 'bg-white'
-                    } ${
-                      touched && !nameValid
-                        ? 'border-rose-300 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
-                        : 'border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100'
-                    }`}
-                  />
-                  {touched && !nameValid && (
-                    <p className="mt-1.5 text-xs text-rose-500">Please enter the recipient's name.</p>
-                  )}
+              {/* Recipient name/email/phone inputs only ever show up once
+                  "Recipient details" is explicitly selected — in 'self'
+                  mode (the default) these stay out of the DOM entirely
+                  instead of rendering read-only/greyed-out, since the
+                  values are already synced from the session in the
+                  background (see the useEffect above). */}
+              {giftFor === 'recipient' && (
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <input
+                      value={recipientName}
+                      onChange={(e) => setRecipientName(e.target.value)}
+                      placeholder="Recipient name"
+                      className={`w-full rounded-2xl border-2 bg-white px-4 py-3 text-sm outline-none transition-colors ${
+                        touched && !nameValid
+                          ? 'border-rose-300 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
+                          : 'border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100'
+                      }`}
+                    />
+                    {touched && !nameValid && (
+                      <p className="mt-1.5 text-xs text-rose-500">Please enter the recipient's name.</p>
+                    )}
+                  </div>
+                  <div>
+                    <input
+                      type="email"
+                      value={recipientEmail}
+                      onChange={(e) => setRecipientEmail(e.target.value)}
+                      placeholder="Recipient email (where the gift card will be sent)"
+                      className={`w-full rounded-2xl border-2 bg-white px-4 py-3 text-sm outline-none transition-colors ${
+                        touched && !emailValid
+                          ? 'border-rose-300 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
+                          : 'border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100'
+                      }`}
+                    />
+                    {touched && !emailValid && (
+                      <p className="mt-1.5 text-xs text-rose-500">Enter a valid email address.</p>
+                    )}
+                  </div>
+                  <div>
+                    <input
+                      type="tel"
+                      value={recipientPhone}
+                      onChange={(e) => setRecipientPhone(e.target.value)}
+                      placeholder="Recipient phone"
+                      className={`w-full rounded-2xl border-2 bg-white px-4 py-3 text-sm outline-none transition-colors ${
+                        touched && !phoneValid
+                          ? 'border-rose-300 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
+                          : 'border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100'
+                      }`}
+                    />
+                    {touched && !phoneValid && (
+                      <p className="mt-1.5 text-xs text-rose-500">Enter a valid phone number.</p>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <input
-                    type="email"
-                    value={recipientEmail}
-                    onChange={(e) => setRecipientEmail(e.target.value)}
-                    readOnly={giftFor === 'self'}
-                    placeholder="Recipient email (where the gift card will be sent)"
-                    className={`w-full rounded-2xl border-2 px-4 py-3 text-sm outline-none transition-colors ${
-                      giftFor === 'self' ? 'bg-slate-50 text-slate-500 cursor-not-allowed' : 'bg-white'
-                    } ${
-                      touched && !emailValid
-                        ? 'border-rose-300 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
-                        : 'border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100'
-                    }`}
-                  />
-                  {touched && !emailValid && (
-                    <p className="mt-1.5 text-xs text-rose-500">Enter a valid email address.</p>
-                  )}
-                </div>
-                <div>
-                  <input
-                    type="tel"
-                    value={recipientPhone}
-                    onChange={(e) => setRecipientPhone(e.target.value)}
-                    readOnly={giftFor === 'self' && Boolean(session?.phone)}
-                    placeholder="Recipient phone"
-                    className={`w-full rounded-2xl border-2 px-4 py-3 text-sm outline-none transition-colors ${
-                      giftFor === 'self' && session?.phone
-                        ? 'bg-slate-50 text-slate-500 cursor-not-allowed'
-                        : 'bg-white'
-                    } ${
-                      touched && !phoneValid
-                        ? 'border-rose-300 focus:border-rose-400 focus:ring-2 focus:ring-rose-100'
-                        : 'border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100'
-                    }`}
-                  />
-                  {touched && !phoneValid && (
-                    <p className="mt-1.5 text-xs text-rose-500">Enter a valid phone number.</p>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
 
-            {/* Message */}
-            <div className="mt-6">
-              <label className="block text-sm font-bold text-slate-800">
-                Personalised message <span className="text-slate-400 font-normal">(optional)</span>
-              </label>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value.slice(0, 250))}
-                rows={3}
-                placeholder="Write something heartfelt…"
-                className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-colors resize-none"
-              />
-              <p className="mt-1 text-right text-[11px] text-slate-400">{message.length}/250</p>
-            </div>
+            {/* Message — grouped with recipient details: only relevant
+                when sending to someone else, so it's hidden in 'self'
+                mode along with the name/email/phone inputs above. */}
+            {giftFor === 'recipient' && (
+              <div className="mt-6">
+                <label className="block text-sm font-bold text-slate-800">
+                  Personalised message <span className="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value.slice(0, 250))}
+                  rows={3}
+                  placeholder="Write something heartfelt…"
+                  className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-colors resize-none"
+                />
+                <p className="mt-1 text-right text-[11px] text-slate-400">{message.length}/250</p>
+              </div>
+            )}
 
             {/* Summary + CTA */}
             <div className="mt-7 rounded-2xl bg-gradient-to-r from-brand-50 to-white border border-brand-100 p-5">
