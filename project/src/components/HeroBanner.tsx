@@ -205,21 +205,28 @@ export default function HeroBanner() {
     <section className="pt-0.5 sm:pt-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/*
-          sm and up: explicit fixed pixel height (NOT aspect-ratio) — the
-          viewport's box never has to be recalculated as slides change or
-          images load, which is what removes the jump/layout-shift.
+          Strict fixed pixel height at EVERY breakpoint (mobile included) —
+          NOT h-auto, NOT min-h, NOT aspect-ratio. This box's height is
+          simply never a function of slide content, so there is nothing
+          for the browser to recalculate when the track's `translateX`
+          transitions or when `index` snaps between a clone and its real
+          slide. That recalculation (however brief) was the real source
+          of the jerk: an h-auto/min-h box still asks the browser to
+          measure content on every relevant reflow, and a momentary
+          mismatch between slides — even a sub-pixel one, even just
+          during the transition frame — is exactly what shows up as the
+          dots/Categories section jumping and snapping back.
 
-          Mobile (below sm): intentionally h-auto instead of a fixed
-          height. The stacked flex-col-reverse layout (image on top, text
-          below) has a natural content height well under the old fixed
-          460px box, and centering inside that oversized box was exactly
-          what created the dead space between the header and the image.
-          Letting the box hug its content removes that gap. Slide-to-slide
-          height is stable in practice since every slide uses the same
-          2-line headline and line-clamp-2 subtext.
+          410px on mobile is sized generously for the stacked
+          flex-col-reverse layout: p-4 padding (32px) + 240px image +
+          gap-3 (12px) + the ~112px text block (see the title/subtext
+          wrapper below) ≈ 396px content, so 410px leaves headroom for
+          the longest realistic slide with zero risk of clipping.
+          `justify-center` on each slide (below) absorbs any leftover
+          slack evenly instead of pinning content to one edge.
         */}
         <div
-          className="relative h-auto sm:min-h-[360px] md:min-h-[420px] sm:h-[360px] md:h-[420px] w-full overflow-hidden rounded-3xl select-none"
+          className="relative h-[410px] sm:h-[360px] md:h-[420px] w-full overflow-hidden rounded-3xl select-none"
           style={{ backgroundColor: PAGE_CREAM }}
         >
           {/*
@@ -235,7 +242,7 @@ export default function HeroBanner() {
             fully contained and never ripple into page flow.
           */}
           <div
-            className="static sm:absolute sm:inset-0 flex h-auto sm:h-full w-full will-change-transform transform-gpu cursor-grab active:cursor-grabbing select-none"
+            className="absolute inset-0 flex h-full w-full will-change-transform transform-gpu cursor-grab active:cursor-grabbing select-none"
             style={{
               transform: `translateX(${-index * 100}%)`,
               transition: withTransition ? `transform ${TRANSITION_MS}ms ease-out` : 'none',
@@ -256,25 +263,26 @@ export default function HeroBanner() {
                 // top, text (1st child) follows below it, with NO markup
                 // reordering. sm:flex-row restores the original
                 // side-by-side layout on larger screens.
-                className="flex h-auto sm:h-full w-full flex-shrink-0 flex-col-reverse sm:flex-row items-center gap-3 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 overflow-hidden"
+                className="flex h-full w-full flex-shrink-0 flex-col-reverse sm:flex-row items-center justify-center sm:justify-start gap-3 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 overflow-hidden"
                 aria-hidden={i !== index}
               >
                 {/* Text column — full width & centered on mobile (below the image), fixed share + left-aligned from sm up */}
                 <div className="flex h-auto sm:h-full w-full sm:w-[58%] flex-shrink-0 flex-col justify-center items-center sm:items-start gap-2 sm:gap-3.5 text-center sm:text-left px-1 sm:pl-4 lg:pl-8">
                   {/*
-                    Title + subtext wrapper — this is the piece whose
-                    content length actually varies slide to slide (2-word
-                    vs 4-word titleAccent, one-line vs two-line subtext),
-                    which is what was pushing the dots/Categories section
-                    up and down on mobile as the track auto-advanced.
-                    `min-h-[112px]` reserves enough room for the tallest
-                    combination (2-line headline + 2-line clamped
-                    subtext + gap) so the box height is now constant
-                    across every slide; `justify-center` keeps shorter
-                    text vertically centered inside that reserved space
-                    instead of collapsing to the top. From `sm` up the
-                    parent column is already a fixed `sm:h-full` (set by
-                    the outer viewport box), so the min-height is
+                    Title + subtext wrapper. Its own height still varies
+                    slightly with content (2-word vs 4-word titleAccent,
+                    one-line vs two-line subtext), but that no longer
+                    matters: the slide it sits in, and the viewport box
+                    around that, both now have a hard fixed height (see
+                    above), so any variance here is absorbed as slack
+                    inside a box that never itself resizes — it can never
+                    propagate out to the dots or the page below.
+                    `min-h-[112px]` still reserves room for the tallest
+                    realistic combination purely so short-text slides
+                    don't visibly recenter/jiggle within their own
+                    wrapper; `justify-center` keeps them vertically
+                    centered inside it. From `sm` up the parent column is
+                    already sized by `sm:h-full`, so the min-height is
                     zeroed out there to avoid double-reserving space.
                   */}
                   <div className="flex w-full flex-col items-center sm:items-start justify-center gap-2 sm:gap-3.5 min-h-[112px] sm:min-h-0">
