@@ -169,7 +169,17 @@ export default function CategorySlider({
           // snap-x + snap-mandatory (real Tailwind utilities) replace the
           // old invalid `scroll-snap-x` class, and scroll-smooth makes
           // the arrow-button scrolling above glide instead of jumping.
-          className="flex flex-nowrap gap-4 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y snap-x snap-mandatory scroll-smooth pb-2 -mx-4 px-4 cursor-grab active:cursor-grabbing select-none"
+          // touch-auto (not touch-pan-y or touch-pan-x): this row needs to
+          // scroll horizontally on a swipe AND let vertical swipes fall
+          // through to scroll the page. touch-pan-y restricts recognized
+          // gestures to the y-axis only, which silently blocks horizontal
+          // swipe-to-scroll entirely — the same bug found and fixed on the
+          // brand-card carousels in HomePage.tsx. touch-pan-x would fix
+          // horizontal but then block vertical scroll over this row, same
+          // as it did there. touch-auto lets the browser handle each axis
+          // on its own merits: scroll this row horizontally (its only
+          // scrollable direction), pass vertical drags straight through.
+          className="flex flex-nowrap gap-4 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-auto snap-x snap-mandatory scroll-smooth pb-2 -mx-4 px-4 cursor-grab active:cursor-grabbing select-none"
         >
           {children.map((child, i) => (
             <div key={i} className="snap-start shrink-0">
