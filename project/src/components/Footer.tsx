@@ -18,6 +18,7 @@ const columns: { title: string; links: { label: string; to: string }[] }[] = [
       { label: 'Privacy Policy', to: '/privacy' },
       { label: 'FAQ', to: '/faq' },
       { label: 'Offer Terms', to: '/offer-terms' },
+      { label: 'Refund Policy', to: '/refund-policy' },
     ],
   },
   {
