@@ -275,10 +275,15 @@ export default function HeroBanner() {
                   <p className="max-w-xs sm:max-w-sm text-xs sm:text-sm lg:text-base text-slate-600 line-clamp-2">
                     {slide.subtext}
                   </p>
+                  {/* Original arrow + label CTA — sm and up only. On
+                      mobile this is replaced by the standalone arrow
+                      floating on the image itself (see the image card
+                      below), so this whole row is hidden below sm rather
+                      than just its text, to avoid a duplicate arrow. */}
                   <Link
                     to={slide.buttonLink}
                     tabIndex={i === index ? 0 : -1}
-                    className="group mt-1 inline-flex w-fit items-center gap-2.5 sm:gap-3"
+                    className="group mt-1 hidden sm:inline-flex w-fit items-center gap-2.5 sm:gap-3"
                   >
                     <span
                       className="grid h-8 w-8 sm:h-10 sm:w-10 lg:h-11 lg:w-11 shrink-0 place-items-center rounded-full text-white transition-transform duration-200 group-hover:scale-105"
@@ -306,6 +311,23 @@ export default function HeroBanner() {
                     loading={i === 1 ? 'eager' : 'lazy'}
                     draggable="false"
                   />
+
+                  {/* Mobile-only floating CTA — standalone circular arrow
+                      pinned to the image's bottom-right corner, matching
+                      the Woohoo.in reference (no label, just the icon).
+                      sm:hidden so it disappears entirely from sm up,
+                      where the labeled CTA above takes over instead. The
+                      image card is already `relative` (see above), so
+                      this just needs to be `absolute` within it. */}
+                  <Link
+                    to={slide.buttonLink}
+                    tabIndex={i === index ? 0 : -1}
+                    aria-label={slide.buttonText}
+                    className="sm:hidden absolute bottom-3 right-3 z-10 grid h-9 w-9 place-items-center rounded-full text-white shadow-md active:scale-95 transition-transform duration-200"
+                    style={{ backgroundColor: ACCENT_GREEN }}
+                  >
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
                 </div>
               </div>
             ))}
