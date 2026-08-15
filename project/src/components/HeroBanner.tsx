@@ -261,20 +261,38 @@ export default function HeroBanner() {
               >
                 {/* Text column — full width & centered on mobile (below the image), fixed share + left-aligned from sm up */}
                 <div className="flex h-auto sm:h-full w-full sm:w-[58%] flex-shrink-0 flex-col justify-center items-center sm:items-start gap-2 sm:gap-3.5 text-center sm:text-left px-1 sm:pl-4 lg:pl-8">
-                  <div className="leading-[1.05]">
-                    <p className="font-display font-extrabold text-xl sm:text-4xl lg:text-5xl text-slate-900">
-                      {slide.titleHead}
-                    </p>
-                    <p
-                      className="font-display font-extrabold text-xl sm:text-4xl lg:text-5xl"
-                      style={{ color: ACCENT_GREEN }}
-                    >
-                      {slide.titleAccent}
+                  {/*
+                    Title + subtext wrapper — this is the piece whose
+                    content length actually varies slide to slide (2-word
+                    vs 4-word titleAccent, one-line vs two-line subtext),
+                    which is what was pushing the dots/Categories section
+                    up and down on mobile as the track auto-advanced.
+                    `min-h-[112px]` reserves enough room for the tallest
+                    combination (2-line headline + 2-line clamped
+                    subtext + gap) so the box height is now constant
+                    across every slide; `justify-center` keeps shorter
+                    text vertically centered inside that reserved space
+                    instead of collapsing to the top. From `sm` up the
+                    parent column is already a fixed `sm:h-full` (set by
+                    the outer viewport box), so the min-height is
+                    zeroed out there to avoid double-reserving space.
+                  */}
+                  <div className="flex w-full flex-col items-center sm:items-start justify-center gap-2 sm:gap-3.5 min-h-[112px] sm:min-h-0">
+                    <div className="leading-[1.05]">
+                      <p className="font-display font-extrabold text-xl sm:text-4xl lg:text-5xl text-slate-900">
+                        {slide.titleHead}
+                      </p>
+                      <p
+                        className="font-display font-extrabold text-xl sm:text-4xl lg:text-5xl"
+                        style={{ color: ACCENT_GREEN }}
+                      >
+                        {slide.titleAccent}
+                      </p>
+                    </div>
+                    <p className="max-w-xs sm:max-w-sm text-xs sm:text-sm lg:text-base text-slate-600 line-clamp-2">
+                      {slide.subtext}
                     </p>
                   </div>
-                  <p className="max-w-xs sm:max-w-sm text-xs sm:text-sm lg:text-base text-slate-600 line-clamp-2">
-                    {slide.subtext}
-                  </p>
                   {/* Original arrow + label CTA — sm and up only. On
                       mobile this is replaced by the standalone arrow
                       floating on the image itself (see the image card
