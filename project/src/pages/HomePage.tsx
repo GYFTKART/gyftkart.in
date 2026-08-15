@@ -256,7 +256,7 @@ export default function HomePage() {
           <div className="min-h-[204px] relative">
           {categoryCrossfade.showSkeleton && (
             <div
-              className={`flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-opacity duration-300 ease-out ${
+              className={`flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-opacity duration-300 ease-out ${
                 categoryCrossfade.contentVisible ? 'opacity-0' : 'opacity-100'
               } ${!loading ? 'absolute inset-0' : ''}`}
             >
@@ -299,7 +299,7 @@ export default function HomePage() {
                   onMouseLeave={categoryDrag.onMouseLeave}
                   onClickCapture={categoryDrag.onClickCapture}
                   onDragStart={(e) => e.preventDefault()}
-                  className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
+                  className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
                 >
                   {filteredBrands.map((brand, i) => (
                     <Reveal
@@ -346,7 +346,7 @@ export default function HomePage() {
           <div className="min-h-[204px] relative">
           {trendingCrossfade.showSkeleton && (
             <div
-              className={`flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-opacity duration-300 ease-out ${
+              className={`flex flex-nowrap gap-5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-opacity duration-300 ease-out ${
                 trendingCrossfade.contentVisible ? 'opacity-0' : 'opacity-100'
               } ${!loading ? 'absolute inset-0' : ''}`}
             >
@@ -384,7 +384,7 @@ export default function HomePage() {
                 onMouseLeave={trendingDrag.onMouseLeave}
                 onClickCapture={trendingDrag.onClickCapture}
                 onDragStart={(e) => e.preventDefault()}
-                className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-y pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
+                className="flex flex-nowrap gap-5 overflow-x-auto no-scrollbar scrollbar-none overscroll-x-contain touch-pan-x pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 cursor-grab active:cursor-grabbing select-none"
               >
                 {trending.map((brand, i) => (
                   <Reveal
