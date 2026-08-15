@@ -202,7 +202,7 @@ export default function HeroBanner() {
   const onTouchCancel = () => cancelDrag();
 
   return (
-    <section className="pt-0.5 sm:pt-6">
+    <section className="h-[435px] pt-0.5 sm:h-auto sm:pt-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/*
           Strict fixed pixel height at EVERY breakpoint (mobile included) —
@@ -226,7 +226,7 @@ export default function HeroBanner() {
           slack evenly instead of pinning content to one edge.
         */}
         <div
-          className="relative h-[410px] sm:h-[360px] md:h-[420px] w-full overflow-hidden rounded-3xl select-none"
+          className="relative h-[410px] sm:h-[360px] md:h-[420px] w-full shrink-0 overflow-hidden rounded-3xl select-none"
           style={{ backgroundColor: PAGE_CREAM }}
         >
           {/*
