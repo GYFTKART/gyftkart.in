@@ -334,8 +334,12 @@ export default function HeroBanner() {
           </div>
         </div>
 
-        {/* Navigation dots — centered on mobile (under the stacked layout), left-aligned under the text column from sm up */}
-        <div className="mt-3 sm:mt-4 flex items-center justify-center sm:justify-start gap-1.5 pl-0 sm:pl-4 lg:pl-8">
+        {/* Navigation dots — centered on mobile (under the stacked layout), left-aligned under the text column from sm up.
+            mb-6 (mobile only) adds clearance below the dots so they can't
+            visually crowd/overlap whatever section follows the hero (e.g.
+            the category pill rail). sm:mb-0 keeps desktop exactly as it
+            was — it never had bottom spacing here before. */}
+        <div className="mt-3 mb-6 sm:mt-4 sm:mb-0 flex items-center justify-center sm:justify-start gap-1.5 pl-0 sm:pl-4 lg:pl-8">
           {slides.map((slide, i) => {
             const active = i === activeDotIndex;
             return (
