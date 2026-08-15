@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal, X, TrendingUp, ShoppingBag } from 'lucide-react';
+import { Search, X, TrendingUp, ShoppingBag } from 'lucide-react';
 import BrandCard from '@/components/BrandCard';
 import Reveal from '@/components/Reveal';
 import { useBrands } from '@/lib/useBrands';
@@ -55,11 +55,17 @@ export default function BrandsPage() {
 
       {/* Filters + grid */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-4 pb-10">
-        {/* Category chips */}
-        <div className="flex flex-wrap items-center gap-2 mb-6">
-          <span className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700 mr-1">
-            <SlidersHorizontal className="h-4 w-4 text-brand-600" /> Filter
-          </span>
+        {/* Category chips — single horizontal scroll row on every screen
+            size. No `flex-wrap` / `md:flex-wrap` here on purpose: the
+            "Filter" label + icon that used to sit in front of the chips
+            has been removed entirely (mobile and desktop alike), and the
+            row now always scrolls sideways instead of wrapping to a
+            second line. `no-scrollbar scrollbar-none` (same utility
+            classes CategorySlider already uses elsewhere in this app)
+            hide the scrollbar chrome while keeping the row natively
+            scrollable — mouse wheel, trackpad, and touch swipe all still
+            work, there's just nothing rendered for the scrollbar itself. */}
+        <div className="flex flex-nowrap items-center gap-2 mb-6 overflow-x-auto no-scrollbar scrollbar-none">
           {categories.map((c) => {
             const Icon = c === 'All' ? ShoppingBag : getCategoryIcon(c);
             const count = categoryCounts[c] ?? 0;
@@ -68,7 +74,7 @@ export default function BrandsPage() {
               <button
                 key={c}
                 onClick={() => setActiveCategory(c)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
                   active
                     ? 'bg-brand-600 text-white shadow-glow-sm'
                     : 'bg-white border border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-700'
@@ -82,7 +88,7 @@ export default function BrandsPage() {
           })}
           <button
             onClick={() => setOnlyTrending((v) => !v)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
+            className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
               onlyTrending
                 ? 'bg-gold-400 text-gold-950 shadow-sm'
                 : 'bg-white border border-slate-200 text-slate-600 hover:border-gold-300 hover:text-gold-700'
