@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Compass, ShoppingBag, Gift } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 
@@ -25,15 +25,26 @@ import { useCart } from '@/context/CartContext';
 // coins sitting inside the frosted chrome, not just bare icons
 // floating in the blur.
 //
-// DEFAULT SELECTION: no local "selected tab" state — `isActive`
-// comes from React Router's NavLink and reflects the real current
-// URL. On the home route ("/") that already makes Home active the
-// moment the component mounts, satisfying "Home pre-selected on
-// load" for the normal entry point without the nav ever lying about
-// where the user actually is (e.g. showing Home active while
-// deep-linked straight into /cart — confirmed against the reference
-// video, where navigating to /cart collapses Home back to an
-// icon-only circle and expands Cart instead).
+// DEFAULT SELECTION: no local "selected tab" state — active state is
+// derived from React Router's `useLocation()` on every render, so it
+// always reflects the real current URL. On the home route ("/") that
+// already makes Home active the moment the component mounts,
+// satisfying "Home pre-selected on load" for the normal entry point
+// without the nav ever lying about where the user actually is (e.g.
+// showing Home active while deep-linked straight into /cart —
+// confirmed against the reference video, where navigating to /cart
+// collapses Home back to an icon-only circle and expands Cart
+// instead).
+//
+// ACTIVE-STATE MATCHING (bugfix): React Router's `NavLink` computes
+// its injected `isActive` from PATHNAME ONLY — it ignores the query
+// string entirely. Explore ("/brands") and Offers
+// ("/brands?offers=true") share the same pathname, so relying on the
+// built-in `isActive` made both light up together any time the URL
+// was under /brands, regardless of the `offers` param. Fixed by
+// computing active state ourselves from `location.pathname` AND
+// `location.search` (see `isItemActive` below) instead of trusting
+// NavLink's render-prop `isActive` for styling.
 //
 // LABEL EXPANSION: every label stays in the DOM at all times (screen
 // readers always see it) but collapses to zero width/opacity when
@@ -60,6 +71,29 @@ const items: NavItem[] = [
 export default function BottomNavigation() {
   const { count } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Single source of truth for "is this tab active" — pathname AND
+  // search params both matter, so Explore and Offers (same pathname,
+  // different query) can never both resolve to true at once.
+  const isOffersActive = new URLSearchParams(location.search).get('offers') === 'true';
+
+  const isItemActive = (item: NavItem): boolean => {
+    switch (item.label) {
+      case 'Home':
+        return location.pathname === '/';
+      case 'Explore':
+        // Only active on /brands when NOT the offers-filtered view —
+        // otherwise this would stay lit up while Offers is also active.
+        return location.pathname === '/brands' && !isOffersActive;
+      case 'Offers':
+        return location.pathname === '/brands' && isOffersActive;
+      case 'Cart':
+        return location.pathname === '/cart';
+      default:
+        return location.pathname === item.to;
+    }
+  };
 
   return (
     <nav
@@ -71,12 +105,15 @@ export default function BottomNavigation() {
         {items.map((item) => {
           const Icon = item.icon;
           const isCart = item.to === '/cart';
+          const isActive = isItemActive(item);
+
           return (
             <NavLink
               key={item.label}
               to={item.to}
               end={item.end}
               aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
               onClick={(e) => {
                 // Offers is a filtered brands view, not its own route —
                 // navigate explicitly so the query string is always applied.
@@ -85,42 +122,40 @@ export default function BottomNavigation() {
                   navigate('/brands?offers=true');
                 }
               }}
-              className={({ isActive }) =>
-                `group flex h-11 shrink-0 items-center justify-center rounded-full transition-all duration-300 ease-out ${
-                  isActive
-                    ? 'bg-brand-900 text-white pl-3 pr-4 shadow-md shadow-brand-900/30'
-                    : 'w-11 bg-white text-brand-900 dark:bg-slate-800 dark:text-slate-200 shadow-sm hover:bg-brand-50 dark:hover:bg-slate-700'
-                }`
-              }
+              // Style purely off our own `isActive` (pathname + search),
+              // NOT the render-prop isActive NavLink would inject — that
+              // one only looks at pathname and is what caused Explore and
+              // Offers to fight over the active state.
+              className={`group flex h-11 shrink-0 items-center justify-center rounded-full transition-all duration-300 ease-out ${
+                isActive
+                  ? 'bg-brand-900 text-white pl-3 pr-4 shadow-md shadow-brand-900/30'
+                  : 'w-11 bg-white text-brand-900 dark:bg-slate-800 dark:text-slate-200 shadow-sm hover:bg-brand-50 dark:hover:bg-slate-700'
+              }`}
             >
-              {({ isActive }) => (
-                <>
-                  <span className="relative grid shrink-0 place-items-center h-5 w-5">
-                    <Icon className="h-5 w-5" strokeWidth={isActive ? 2.4 : 2} />
-                    {isCart && count > 0 && (
-                      <span
-                        className={`absolute -top-1.5 -right-2 grid place-items-center h-4 min-w-[16px] px-1 rounded-full text-[9px] font-bold ring-2 ${
-                          isActive
-                            ? 'bg-white text-brand-900 ring-brand-900'
-                            : 'bg-brand-600 text-white ring-white dark:ring-slate-800'
-                        }`}
-                      >
-                        {count}
-                      </span>
-                    )}
-                  </span>
-                  {/* Label stays in the DOM at all times (screen readers
-                      always see it) but collapses to zero width/opacity
-                      when inactive, and expands smoothly when active. */}
+              <span className="relative grid shrink-0 place-items-center h-5 w-5">
+                <Icon className="h-5 w-5" strokeWidth={isActive ? 2.4 : 2} />
+                {isCart && count > 0 && (
                   <span
-                    className={`overflow-hidden whitespace-nowrap text-[13px] font-semibold transition-all duration-300 ease-out ${
-                      isActive ? 'max-w-[80px] opacity-100 ml-1.5' : 'max-w-0 opacity-0 ml-0'
+                    className={`absolute -top-1.5 -right-2 grid place-items-center h-4 min-w-[16px] px-1 rounded-full text-[9px] font-bold ring-2 ${
+                      isActive
+                        ? 'bg-white text-brand-900 ring-brand-900'
+                        : 'bg-brand-600 text-white ring-white dark:ring-slate-800'
                     }`}
                   >
-                    {item.label}
+                    {count}
                   </span>
-                </>
-              )}
+                )}
+              </span>
+              {/* Label stays in the DOM at all times (screen readers
+                  always see it) but collapses to zero width/opacity
+                  when inactive, and expands smoothly when active. */}
+              <span
+                className={`overflow-hidden whitespace-nowrap text-[13px] font-semibold transition-all duration-300 ease-out ${
+                  isActive ? 'max-w-[80px] opacity-100 ml-1.5' : 'max-w-0 opacity-0 ml-0'
+                }`}
+              >
+                {item.label}
+              </span>
             </NavLink>
           );
         })}
