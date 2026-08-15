@@ -237,6 +237,13 @@ export default function App() {
   const { pathname } = useLocation();
   const isAdmin = pathname.startsWith('/admin');
 
+  // Cart page gets a special footer rule: hidden on mobile, visible on
+  // desktop. Every other page keeps the footer visible at all
+  // viewport widths — this flag only ever adds `hidden md:block`, it
+  // never removes the footer's normal (always-visible) behavior
+  // elsewhere.
+  const isCartPage = pathname === '/cart';
+
   return (
     <ToastProvider>
       {/*
@@ -328,7 +335,19 @@ export default function App() {
               </Routes>
             </main>
 
-            {!isAdmin && <Footer />}
+            {/*
+              Footer is visible everywhere by default. The one exception
+              is /cart on mobile: `hidden md:block` removes it below the
+              `md` breakpoint and restores it at `md` and up, so desktop
+              /cart still shows the footer while mobile /cart does not.
+              No wrapper classes are applied on any other route, so the
+              footer's own default display is untouched elsewhere.
+            */}
+            {!isAdmin && (
+              <div className={isCartPage ? 'hidden md:block' : undefined}>
+                <Footer />
+              </div>
+            )}
             {!isAdmin && <BottomNavigation />}
           </div>
         </CartProvider>
