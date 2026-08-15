@@ -76,14 +76,32 @@ export default function CartPage() {
     }
   };
 
-  // While the cart is still resolving (hard refresh, auth reattach),
-  // skip both the spinner and the empty-cart message entirely — neither
-  // is a true statement of cart state yet, and swapping between three
-  // different layouts (spinner -> empty -> real cart) is what caused
-  // the visible jump. Falling through to the normal cart UI below with
-  // items still [] just renders a quiet, stable shell that fills in
-  // once isLoading clears — no jump, no false "empty" claim.
-  if (items.length === 0 && !isLoading) {
+  // While the cart is still resolving (hard refresh, auth reattach,
+  // localStorage/context hydration), `items` is transiently `[]`
+  // regardless of what the cart actually contains — it hasn't been
+  // read yet, it isn't *really* empty. Previously this fell through to
+  // the full cart UI in that window, which is exactly what produced
+  // the flash: "Order summary" / "Proceed to Pay" briefly rendered
+  // with 0 items, then snapped to the empty-cart screen the instant
+  // isLoading cleared. Checking isLoading first, on its own, means we
+  // never render a conclusion (empty OR full) about cart contents
+  // until we actually know it — a lightweight skeleton fills this gap
+  // instead, and it's the same gap on every load so there's nothing
+  // to visibly jump between.
+  if (isLoading) {
+    return (
+      <div className="pt-16">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-20 text-center">
+          <Loader2 className="h-8 w-8 mx-auto animate-spin text-brand-600" />
+        </div>
+      </div>
+    );
+  }
+
+  // Loading has finished, so `items.length === 0` here is a true
+  // statement about the cart, not a hydration artifact — safe to show
+  // the empty-cart screen.
+  if (items.length === 0) {
     return (
       <div className="pt-16">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-20 text-center">
