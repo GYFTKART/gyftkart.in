@@ -202,18 +202,24 @@ export default function HeroBanner() {
   const onTouchCancel = () => cancelDrag();
 
   return (
-    <section className="pt-6">
+    <section className="pt-3 sm:pt-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/*
-          Explicit fixed pixel height at every breakpoint (NOT
-          aspect-ratio) — the viewport's box never has to be recalculated
-          as slides change or images load, which is what removes the
-          jump/layout-shift. The mobile height is taller than before
-          because the stacked layout (image + text underneath) needs more
-          vertical room than the old side-by-side layout did.
+          sm and up: explicit fixed pixel height (NOT aspect-ratio) — the
+          viewport's box never has to be recalculated as slides change or
+          images load, which is what removes the jump/layout-shift.
+
+          Mobile (below sm): intentionally h-auto instead of a fixed
+          height. The stacked flex-col-reverse layout (image on top, text
+          below) has a natural content height well under the old fixed
+          460px box, and centering inside that oversized box was exactly
+          what created the dead space between the header and the image.
+          Letting the box hug its content removes that gap. Slide-to-slide
+          height is stable in practice since every slide uses the same
+          2-line headline and line-clamp-2 subtext.
         */}
         <div
-          className="relative min-h-[460px] sm:min-h-[360px] md:min-h-[420px] h-[460px] sm:h-[360px] md:h-[420px] w-full overflow-hidden rounded-3xl select-none"
+          className="relative h-auto sm:min-h-[360px] md:min-h-[420px] sm:h-[360px] md:h-[420px] w-full overflow-hidden rounded-3xl select-none"
           style={{ backgroundColor: PAGE_CREAM }}
         >
           {/*
@@ -229,7 +235,7 @@ export default function HeroBanner() {
             fully contained and never ripple into page flow.
           */}
           <div
-            className="absolute inset-0 flex h-full w-full will-change-transform transform-gpu cursor-grab active:cursor-grabbing select-none"
+            className="static sm:absolute sm:inset-0 flex h-auto sm:h-full w-full will-change-transform transform-gpu cursor-grab active:cursor-grabbing select-none"
             style={{
               transform: `translateX(${-index * 100}%)`,
               transition: withTransition ? `transform ${TRANSITION_MS}ms ease-out` : 'none',
@@ -250,7 +256,7 @@ export default function HeroBanner() {
                 // top, text (1st child) follows below it, with NO markup
                 // reordering. sm:flex-row restores the original
                 // side-by-side layout on larger screens.
-                className="flex h-full w-full flex-shrink-0 flex-col-reverse sm:flex-row items-center gap-3 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 overflow-hidden"
+                className="flex h-auto sm:h-full w-full flex-shrink-0 flex-col-reverse sm:flex-row items-center gap-3 sm:gap-6 lg:gap-8 p-4 sm:p-6 lg:p-8 overflow-hidden"
                 aria-hidden={i !== index}
               >
                 {/* Text column — full width & centered on mobile (below the image), fixed share + left-aligned from sm up */}
