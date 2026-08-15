@@ -202,7 +202,7 @@ export default function HeroBanner() {
   const onTouchCancel = () => cancelDrag();
 
   return (
-    <section className="h-[435px] pt-0.5 sm:h-auto sm:pt-6">
+    <section className="h-[435px] pt-0.5 sm:h-[395px] sm:pt-6 md:h-[455px] lg:h-[455px]">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/*
           Strict fixed pixel height at EVERY breakpoint (mobile included) —
@@ -226,7 +226,7 @@ export default function HeroBanner() {
           slack evenly instead of pinning content to one edge.
         */}
         <div
-          className="relative h-[410px] sm:h-[360px] md:h-[420px] w-full shrink-0 overflow-hidden rounded-3xl select-none"
+          className="relative h-[410px] shrink-0 sm:h-[360px] md:h-[420px] w-full overflow-hidden rounded-3xl select-none"
           style={{ backgroundColor: PAGE_CREAM }}
         >
           {/*
@@ -361,7 +361,7 @@ export default function HeroBanner() {
         </div>
 
         {/* Navigation dots — centered on mobile (under the stacked layout), left-aligned under the text column from sm up */}
-        <div className="mt-3 sm:mt-4 flex items-center justify-center sm:justify-start gap-1.5 pl-0 sm:pl-4 lg:pl-8">
+        <div className="mt-3 h-2.5 shrink-0 sm:mt-4 sm:h-2.5 flex items-center justify-center sm:justify-start gap-1.5 pl-0 sm:pl-4 lg:pl-8">
           {slides.map((slide, i) => {
             const active = i === activeDotIndex;
             return (

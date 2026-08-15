@@ -203,7 +203,7 @@ export default function HomePage() {
         HeroBanner's real rendered height, so there's nothing left to
         drift out of sync.
       */}
-      <div className="w-full h-[435px] sm:h-[410px] md:h-[470px] mb-6 sm:mb-8">
+      <div className="w-full h-auto sm:h-[410px] md:h-[470px] mb-6 sm:mb-8">
         <HeroBanner />
       </div>
 
