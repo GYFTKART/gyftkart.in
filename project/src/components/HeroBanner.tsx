@@ -202,7 +202,7 @@ export default function HeroBanner() {
   const onTouchCancel = () => cancelDrag();
 
   return (
-    <section className="pt-1 sm:pt-6">
+    <section className="pt-0.5 sm:pt-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/*
           sm and up: explicit fixed pixel height (NOT aspect-ratio) — the
