@@ -94,7 +94,7 @@ export default function Footer() {
             </p>
             <div className="mt-5 space-y-2 text-sm text-brand-200">
               <p className="flex items-center gap-2.5">
-                <Mail className="h-4 w-4 text-brand-300" /> gyftkart@gmail.com
+                <Mail className="h-4 w-4 text-brand-300" /> support@gyftkart.in
               </p>
               <p className="flex items-center gap-2.5">
                 <Phone className="h-4 w-4 text-brand-300" /> 09695393786

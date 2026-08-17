@@ -31,7 +31,7 @@ const sections = [
   },
   {
     title: '8. Contact Us',
-    body: `For questions about a specific offer, please contact our support team at gyftkart@gmail.com with your order details.`,
+    body: `For questions about a specific offer, please contact our support team at support@gyftkart.in with your order details.`,
   },
 ];
 

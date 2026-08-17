@@ -6,13 +6,13 @@ const supportBlocks = [
     label: 'For Support/Enquiries',
     phone: '09695393786',
     timing: 'All days 10 am to 6 pm',
-    email: 'gyftkart@gmail.com',
+    email: 'support@gyftkart.in',
   },
   {
     label: 'For Corp Sales Enquiries',
     phone: '09695393786',
     timing: 'All days 10 am to 6 pm',
-    email: 'gyftkart@gmail.com',
+    email: 'corporate@gyftkart.in',
   },
 ];
 

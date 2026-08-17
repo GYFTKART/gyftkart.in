@@ -43,7 +43,7 @@ const sections = [
   },
   {
     title: '11. Contact Us',
-    body: `If you have questions about this Privacy Policy or how your data is handled, please write to us at gyftkart@gmail.com.`,
+    body: `If you have questions about this Privacy Policy or how your data is handled, please write to us at support@gyftkart.in.`,
   },
 ];
 

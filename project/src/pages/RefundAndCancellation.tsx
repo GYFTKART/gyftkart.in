@@ -7,7 +7,7 @@ const sections = [
   },
   {
     title: '2. Order Cancellation',
-    body: `Because gift cards are digital and generated instantly on successful payment, orders cannot be cancelled once payment has been confirmed and the voucher has been issued. If you notice an error immediately after placing an order (e.g. wrong brand, wrong denomination, duplicate order), contact our support team right away at gyftkart@gmail.com — we will do our best to assist before the voucher has been delivered or redeemed, but cancellation cannot be guaranteed once issuance has started.`,
+    body: `Because gift cards are digital and generated instantly on successful payment, orders cannot be cancelled once payment has been confirmed and the voucher has been issued. If you notice an error immediately after placing an order (e.g. wrong brand, wrong denomination, duplicate order), contact our support team right away at support@gyftkart.in — we will do our best to assist before the voucher has been delivered or redeemed, but cancellation cannot be guaranteed once issuance has started.`,
   },
   {
     title: '3. Refund Eligibility',
@@ -23,7 +23,7 @@ const sections = [
   },
   {
     title: '6. How to Request a Refund',
-    body: `To raise a refund or cancellation request, email us at gyftkart@gmail.com with your order ID, the registered email/phone number used at checkout, and a brief description of the issue. Our support team may request additional information to verify the order before processing any refund.`,
+    body: `To raise a refund or cancellation request, email us at support@gyftkart.in with your order ID, the registered email/phone number used at checkout, and a brief description of the issue. Our support team may request additional information to verify the order before processing any refund.`,
   },
   {
     title: '7. Changes to This Policy',
@@ -31,7 +31,7 @@ const sections = [
   },
   {
     title: '8. Contact Us',
-    body: `For any questions about this Refund & Cancellation Policy, please reach out to us at gyftkart@gmail.com or visit our Contact Us page.`,
+    body: `For any questions about this Refund & Cancellation Policy, please reach out to us at support@gyftkart.in or visit our Contact Us page.`,
   },
 ];
 

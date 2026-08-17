@@ -43,7 +43,7 @@ const sections = [
   },
   {
     title: '11. Contact Us',
-    body: `For any questions about these Terms of Use, please reach out to us at gyftkart@gmail.com or visit our Contact Us page.`,
+    body: `For any questions about these Terms of Use, please reach out to us at support@gyftkart.in or visit our Contact Us page.`,
   },
 ];
 
