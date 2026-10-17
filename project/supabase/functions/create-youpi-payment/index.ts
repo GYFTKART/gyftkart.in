@@ -6,12 +6,17 @@
 // merchant's gateway coordinates (YOUPI_API_URL / YOUPI_MERCHANT_ID)
 // live in Supabase secrets, never in the browser.
 //
-// Gateway contract (apps/payment-api/src/routes/payments.routes.js):
+// Gateway contract (apps/payment-api/src/routes/payments.routes.js +
+// the repo's openapi.yaml CreatePaymentRequest schema):
 //   POST <YOUPI_API_URL>/api/v1/payments
 //   headers: Content-Type, X-Merchant-Id (optional — falls back to the
-//            gateway's default merchant when omitted)
-//   body:    { orderId, amount (RUPEES — the gateway converts to paise
-//            itself), currency, customer{fullName,email,phoneNumber},
+//            gateway's default merchant when omitted), Idempotency-Key
+//            (accepted in header or body; ran per request below as the
+//            orderId so client retries can't mint duplicate sessions)
+//   body:    { orderId, amount (RUPEES — the gateway's toPaise() accepts
+//            string|number and converts), currency,
+//            customer{name,email,phoneNumber} per openapi.yaml (the
+//            implementation only persists these for customer lookup),
 //            description, metadata, returnUrl }
 //   201 ->   { paymentId, orderId, amount, amountPaise, currency,
 //            status, queuePosition, checkoutUrl }
@@ -104,6 +109,7 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Idempotency-Key': orderId,
         ...(youpiMerchantId ? { 'X-Merchant-Id': youpiMerchantId } : {}),
       },
       body: JSON.stringify({
@@ -112,7 +118,7 @@ serve(async (req) => {
         currency: 'INR',
         customer: customer
           ? {
-              fullName: customer.name ?? '',
+              name: customer.name ?? '',
               email: customer.email ?? '',
               phoneNumber: customer.phone ?? '',
             }

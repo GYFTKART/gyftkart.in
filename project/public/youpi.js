@@ -1,216 +1,760 @@
 /**
- * YOUPI PG client SDK — vendored copy for GyftKart.
- * Source contract: https://github.com/gxurav1710/YouPI-PG
- * (apps/checkout-portal — the SDK bundle the portal serves).
+ * YOUPI PG V2 — Universal One-Script Integration SDK
  *
- * Single public surface (mirrors the gateway's own embed):
+ * Official Distributable Browser Script (youpi.js / youpi-checkout.js)
+ * Provides zero-JavaScript button configuration [data-youpi-pay] and programmatic Youpi.pay({...})
+ * Launches the responsive iframe checkout modal with background blur.
+ * Emits normalized browser payment events and manages checkout modal lifecycle.
  *
- *   window.Youpi.pay({
- *     order_id, amount, currency, name, description, customer,
- *     paymentId, checkoutUrl,      <- prefilled by an authenticated
- *                                    server-side session (see
- *                                    create-youpi-payment Edge Function)
- *     handler, onSuccess, onFailed, onExpired, onCancelled, onClose
- *   }) => Promise<{ open, close, theme }>
- *
- * `pay()` opens the gateway's checkout portal (UPI QR / WhatsApp OTP /
- * app deep links) inside an iframe modal and resolves immediately with
- * an instance handle (matching YoupiCheckoutInstance in src/lib/youpi.ts).
- * The reported outcome only ever comes back via callbacks:
- *
- *   handler / onSuccess  ({ status: 'SUCCESS', order_id, utr, ... })
- *   onFailed             ({ status: 'FAILED', reason })
- *   onExpired            ({ status: 'EXPIRED' })
- *   onCancelled          ({ status: 'CANCELLED' })
- *   onClose              (customer dismissed the modal)
- *
- * The customer-facing column of the success contract is the same one the
- * YouPI README documents: { status: 'SUCCESS', order_id, amount_received,
- * utr, ... } — with `handler` and `onClose` as the primary hook names.
+ * IMPORTANT SECURITY NOTE:
+ * Browser events and client-side callbacks are strictly for UI and user experience.
+ * Authoritative proof of payment MUST ALWAYS come from server-to-server HMAC-SHA256 signed webhooks.
  */
-(function () {
+
+(function (globalScope) {
   'use strict';
 
-  var CSS = [
-    '.youpi-modal-backdrop{position:fixed;inset:0;z-index:2147483000;background:rgba(15,15,25,.6);',
-    'display:flex;align-items:center;justify-content:center;padding:12px;backdrop-filter:blur(4px)}',
-    '.youpi-modal-frame{position:relative;width:100%;max-width:480px;height:min(640px,92vh);',
-    'border-radius:18px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.35);background:#fff}',
-    '.youpi-modal-frame iframe{width:100%;height:100%;border:0;display:block}',
-    '.youpi-modal-close{position:absolute;top:10px;right:10px;z-index:2;width:32px;height:32px;',
-    'border:0;border-radius:999px;background:rgba(255,255,255,.9);color:#111;font-size:16px;',
-    'line-height:1;cursor:pointer;font-weight:700}',
-    '@media (max-width:640px){.youpi-modal-backdrop{align-items:flex-end;padding:0}',
-    '.youpi-modal-frame{max-width:none;height:92vh;border-radius:18px 18px 0 0}}'
-  ].join('');
-
-  var active = null;
-
-  function ensureStyles() {
-    if (document.getElementById('youpi-sdk-styles')) return;
-    var style = document.createElement('style');
-    style.id = 'youpi-sdk-styles';
-    style.textContent = CSS;
-    document.head.appendChild(style);
+  // Prevent multiple initializations
+  if (globalScope.__YOUPI_SDK_INITIALIZED__) {
+    return;
   }
+  globalScope.__YOUPI_SDK_INITIALIZED__ = true;
 
-  /** Lives only as long as one checkout session. */
-  function Session(options) {
-    this.options = options || {};
-    this.theme = (options && options.theme) || null;
-    this.backdrop = null;
-    this.iframe = null;
-    this.boundMessage = this.onMessage.bind(this);
-  }
+  const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
 
-  Session.prototype.open = function () {
-    ensureStyles();
-    if (this.backdrop) return;
+  /**
+   * Helper: extract configuration from the <script> tag loading this file.
+   */
+  function getScriptConfig() {
+    if (!isBrowser) return {};
 
-    var backdrop = document.createElement('div');
-    backdrop.className = 'youpi-modal-backdrop';
-    var frame = document.createElement('div');
-    frame.className = 'youpi-modal-frame';
-    var closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'youpi-modal-close';
-    closeBtn.setAttribute('aria-label', 'Close payment window');
-    closeBtn.textContent = '\u00d7';
-    var iframe = document.createElement('iframe');
-    iframe.src = this.options.checkoutUrl ?? '/youpi/';
-    iframe.allow = 'payment';
-    frame.appendChild(closeBtn);
-    frame.appendChild(iframe);
-    backdrop.appendChild(frame);
-    document.body.appendChild(backdrop);
+    const script = document.currentScript ||
+      document.querySelector('script[src*="youpi.js"], script[src*="youpi-checkout.js"]');
 
-    this.backdrop = backdrop;
-    this.iframe = iframe;
-    active = this;
+    if (!script) return {};
 
-    closeBtn.addEventListener('click', this.dismiss.bind(this));
-    backdrop.addEventListener('click', function (e) {
-      if (e.target === backdrop) this.dismiss();
-    }.bind(this));
-    window.addEventListener('message', this.boundMessage);
-  };
+    let scriptUrl = '';
+    try {
+      scriptUrl = new URL(script.src, window.location.href);
+    } catch (e) { }
 
-  Session.prototype.close = function (callback) {
-    if (this.backdrop && this.backdrop.parentNode) {
-      this.backdrop.parentNode.removeChild(this.backdrop);
-    }
-    this.backdrop = null;
-    this.iframe = null;
-    if (active === this) active = null;
-    window.removeEventListener('message', this.boundMessage);
-    if (typeof callback === 'function') callback();
-  };
+    const origin = scriptUrl ? scriptUrl.origin : (window.location.protocol + '//' + window.location.hostname + ':7000');
 
-  Session.prototype.dismiss = function () {
-    var options = this.options;
-    this.close(function () {
-      if (typeof options.onClose === 'function') {
-        options.onClose();
-        return;
-      }
-      if (typeof options.onCancelled === 'function') {
-        options.onCancelled({ status: 'CANCELLED', order_id: options.order_id });
-        return;
-      }
-      if (typeof options.onFailed === 'function') {
-        options.onFailed({ status: 'FAILED', order_id: options.order_id, reason: 'customer closed checkout' });
-      }
-    });
-  };
-
-  /** Outcome channel: the portal posts { source:'youpi', type:..., ... }. */
-  Session.prototype.onMessage = function (event) {
-    var msg = event && event.data;
-    if (!msg || msg.source !== 'youpi') return;
-
-    var options = this.options;
-    var base = {
-      order_id: msg.orderId || options.order_id || options.orderId,
-      payment_mode: msg.paymentMode,
-      amount_received: msg.amountReceived,
-      utr: msg.utr,
-      reason: msg.reason,
-      raw: msg,
+    return {
+      key: script.getAttribute('data-youpi-key') || script.getAttribute('data-key') || script.getAttribute('data-merchant-id') || '',
+      apiUrl: script.getAttribute('data-api-url') || origin,
+      portalUrl: script.getAttribute('data-portal-url') || script.getAttribute('data-checkout-url') || origin,
+      currency: script.getAttribute('data-currency') || 'INR',
+      name: script.getAttribute('data-name') || 'Merchant Store',
+      themeColor: script.getAttribute('data-theme-color') || '#0b63e5',
+      successUrl: script.getAttribute('data-success-url') || '',
+      failedUrl: script.getAttribute('data-failed-url') || '',
+      suspiciousUrl: script.getAttribute('data-suspicious-url') || '',
+      expiredUrl: script.getAttribute('data-expired-url') || '',
+      cancelledUrl: script.getAttribute('data-cancelled-url') || ''
     };
+  }
 
-    switch (msg.type) {
-      case 'PAYMENT_SUCCESS':
-        base.status = 'SUCCESS';
-        this.close(function () {
-          // `handler` is the primary hook in the gateway's README,
-          // `onSuccess` the convenience alias.
-          if (typeof options.handler === 'function') options.handler(base);
-          if (typeof options.onSuccess === 'function') options.onSuccess(base);
-        });
-        break;
-      case 'PAYMENT_FAILED':
-        base.status = 'FAILED';
-        this.close(function () {
-          if (typeof options.onFailed === 'function') options.onFailed(base);
-        });
-        break;
-      case 'PAYMENT_SUSPICIOUS':
-        base.status = 'SUSPICIOUS';
-        this.close(function () {
-          if (typeof options.onFailed === 'function') options.onFailed(base);
-        });
-        break;
-      case 'PAYMENT_EXPIRED':
-        base.status = 'EXPIRED';
-        this.close(function () {
-          if (typeof options.onExpired === 'function') options.onExpired(base);
-        });
-        break;
-      case 'MODAL_CLOSED':
-        this.close(function () {
-          if (typeof options.onClose === 'function') options.onClose();
-        });
-        break;
-      default:
-        break;
-    }
-  };
+  const scriptConfig = getScriptConfig();
 
-  function pay(options) {
-    if (!options || typeof options !== 'object') {
-      return Promise.reject(new Error('Youpi.pay requires an options object'));
+  /**
+   * YoupiCheckout class
+   */
+  class YoupiCheckout {
+    /**
+     * @param {{
+     *   key?: string,
+     *   order_id?: string,
+     *   orderId?: string,
+     *   amount?: number | string,
+     *   currency?: string,
+     *   name?: string,
+     *   description?: string,
+     *   customer?: { name?: string, email?: string, phone?: string },
+     *   metadata?: Record<string, any>,
+     *   paymentId?: string,
+     *   checkoutUrl?: string,
+     *   portalUrl?: string,
+     *   apiUrl?: string,
+     *   theme?: { color?: string },
+     *   handler?: (result: any) => void,
+     *   onSuccess?: (result: any) => void,
+     *   onFailed?: (result: any) => void,
+     *   onPaymentFailed?: (result: any) => void,
+     *   onSuspicious?: (result: any) => void,
+     *   onExpired?: (result: any) => void,
+     *   onCancelled?: (result: any) => void,
+     *   onClose?: () => void,
+     *   successUrl?: string,
+     *   failedUrl?: string,
+     *   suspiciousUrl?: string,
+     *   expiredUrl?: string,
+     *   cancelledUrl?: string
+     * }} options
+     */
+    constructor(options = {}) {
+      const defaultPortal = isBrowser
+        ? (scriptConfig.portalUrl || (window.location.protocol + '//' + window.location.hostname + ':7000'))
+        : 'http://localhost:7000';
+
+      const defaultApi = isBrowser
+        ? (scriptConfig.apiUrl || defaultPortal)
+        : 'http://localhost:6100';
+
+      this.options = Object.assign({
+        key: scriptConfig.key || '',
+        order_id: '',
+        orderId: '',
+        amount: 0,
+        currency: scriptConfig.currency || 'INR',
+        name: scriptConfig.name || 'Merchant Store',
+        description: 'Order Payment',
+        customer: {},
+        metadata: {},
+        paymentId: '',
+        checkoutUrl: '',
+        portalUrl: defaultPortal,
+        apiUrl: defaultApi,
+        theme: { color: scriptConfig.themeColor || '#0b63e5' },
+        handler: null,
+        onSuccess: null,
+        onFailed: null,
+        onPaymentFailed: null,
+        onSuspicious: null,
+        onExpired: null,
+        onCancelled: null,
+        onClose: null,
+        successUrl: scriptConfig.successUrl || '',
+        failedUrl: scriptConfig.failedUrl || '',
+        suspiciousUrl: scriptConfig.suspiciousUrl || '',
+        expiredUrl: scriptConfig.expiredUrl || '',
+        cancelledUrl: scriptConfig.cancelledUrl || ''
+      }, options);
+
+      // Normalize order ID
+      if (!this.options.orderId && this.options.order_id) {
+        this.options.orderId = this.options.order_id;
+      }
+      if (!this.options.order_id && this.options.orderId) {
+        this.options.order_id = this.options.orderId;
+      }
+
+      this.isOpen = false;
+      this.backdrop = null;
+      this.container = null;
+      this.iframe = null;
+
+      this._handleMessage = this._handleMessage.bind(this);
     }
-    if (!options.checkoutUrl && !options.portalUrl) {
-      // The authenticated session comes from create-youpi-payment; the
-      // SDK never mints one itself.
-      return Promise.reject(new Error('YouPI checkout requires a server-created checkoutUrl'));
+
+    /**
+     * Primary static programmatic entry point: Youpi.pay(options)
+     */
+    static async pay(options = {}) {
+      const instance = new YoupiCheckout(options);
+
+      // If checkoutUrl is already provided, open modal directly
+      if (instance.options.checkoutUrl) {
+        instance.open();
+        return instance;
+      }
+
+      // If paymentId is already provided, construct checkoutUrl and open
+      if (instance.options.paymentId) {
+        instance.options.checkoutUrl = `${instance.options.portalUrl}/checkout/${instance.options.paymentId}`;
+        instance.open();
+        return instance;
+      }
+
+      // Otherwise, call YOUPI PG to create the payment session
+      try {
+        const orderId = instance.options.orderId || `ORDER-${Date.now()}`;
+        instance.options.orderId = orderId;
+        instance.options.order_id = orderId;
+
+        const customer = instance.options.customer || {};
+        const custPayload = {
+          fullName: customer.name || customer.fullName || '',
+          email: customer.email || '',
+          phoneNumber: customer.phone || customer.phoneNumber || customer.mobileNumber || ''
+        };
+
+        const createRes = await fetch(`${instance.options.apiUrl}/api/v1/payments`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(instance.options.key ? { 'X-Merchant-Id': instance.options.key } : {})
+          },
+          body: JSON.stringify({
+            orderId: orderId,
+            amount: instance.options.amount,
+            currency: instance.options.currency || 'INR',
+            customer: (custPayload.email || custPayload.phoneNumber || custPayload.fullName) ? custPayload : undefined,
+            description: instance.options.description,
+            metadata: instance.options.metadata,
+            returnUrl: instance.options.successUrl || undefined
+          })
+        });
+
+        const data = await createRes.json();
+        if (!createRes.ok || !data.checkoutUrl) {
+          const errMsg = data.error || data.message || `Failed to create payment session (HTTP ${createRes.status})`;
+          const failResult = {
+            status: 'FAILED',
+            order_id: orderId,
+            reason: errMsg,
+            error: errMsg
+          };
+          YoupiCheckout._emitEvent('youpi:payment:failed', failResult);
+          YoupiCheckout._emitEvent('youpi:payment:result', failResult);
+          if (typeof instance.options.onFailed === 'function') instance.options.onFailed(failResult);
+          if (typeof instance.options.onPaymentFailed === 'function') instance.options.onPaymentFailed(failResult);
+          throw new Error(errMsg);
+        }
+
+        instance.options.paymentId = data.paymentId;
+        instance.options.checkoutUrl = data.checkoutUrl;
+        instance.open();
+        return instance;
+      } catch (err) {
+        console.error('[YouPI JS] Payment initialization error:', err.message);
+        throw err;
+      }
     }
-    if (active) active.close();
-    return new Promise(function (resolve) {
-      var session = new Session(options);
-      session.open();
-      resolve(session);
+
+    /**
+     * Backward-compatible static entry point: YoupiCheckout.open(options)
+     */
+    static open(options) {
+      const instance = new YoupiCheckout(options);
+      instance.open();
+      return instance;
+    }
+
+    /**
+     * Opens the responsive iframe checkout modal
+     */
+    open() {
+      if (!isBrowser) {
+        console.warn('YoupiCheckout.open() can only be invoked in a browser DOM environment.');
+        return;
+      }
+      if (this.isOpen) return;
+      this.isOpen = true;
+
+      YoupiCheckout._ensureStyles();
+
+      let targetUrl = '';
+      if (this.options.checkoutUrl) {
+        targetUrl = this.options.checkoutUrl;
+      } else if (this.options.paymentId) {
+        targetUrl = `${this.options.portalUrl}/checkout/${this.options.paymentId}`;
+      } else {
+        targetUrl = `${this.options.portalUrl}/checkout/demo`;
+      }
+
+      // If running on localhost / 127.0.0.1 and targetUrl points to remote domain, normalize to localhost host
+      if (isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        if (targetUrl.includes('gauravtesting.online')) {
+          try {
+            const parsed = new URL(targetUrl);
+            targetUrl = `${window.location.protocol}//${window.location.host}${parsed.pathname}${parsed.search}`;
+          } catch {}
+        }
+      }
+
+      // Add embedded flag and custom params
+      const sep = targetUrl.includes('?') ? '&' : '?';
+      targetUrl = `${targetUrl}${sep}embedded=1`;
+
+      if (this.options.amount) {
+        targetUrl += `&customAmount=${encodeURIComponent(this.options.amount)}`;
+      }
+      if (this.options.name) {
+        targetUrl += `&customName=${encodeURIComponent(this.options.name)}`;
+      }
+
+      this._injectModal(targetUrl);
+      window.addEventListener('message', this._handleMessage);
+    }
+
+    /**
+     * Closes the checkout modal
+     */
+    close(callback) {
+      if (!isBrowser || !this.isOpen) return;
+      this.isOpen = false;
+
+      window.removeEventListener('message', this._handleMessage);
+
+      if (this.container) {
+        this.container.classList.remove('active');
+        this.container.classList.add('closing');
+      }
+      if (this.backdrop) {
+        this.backdrop.classList.remove('active');
+      }
+
+      setTimeout(() => {
+        if (this.backdrop && this.backdrop.parentNode) {
+          this.backdrop.parentNode.removeChild(this.backdrop);
+        }
+        this.backdrop = null;
+        this.container = null;
+        this.iframe = null;
+
+        if (typeof this.options.onClose === 'function') {
+          this.options.onClose();
+        }
+        if (typeof callback === 'function') {
+          callback();
+        }
+      }, 350);
+    }
+
+    _injectModal(targetUrl) {
+      const backdrop = document.createElement('div');
+      backdrop.className = 'youpi-checkout-backdrop';
+
+      const container = document.createElement('div');
+      container.className = 'youpi-checkout-container';
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'youpi-checkout-close-btn';
+      closeBtn.innerHTML = '✕';
+      closeBtn.title = 'Close Checkout';
+      closeBtn.type = 'button';
+      closeBtn.onclick = () => {
+        try {
+          if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ event: 'youpi.request_cancel' }, '*');
+            return;
+          }
+        } catch (err) { }
+        this._dispatchCancelled();
+        this.close();
+      };
+
+      const iframe = document.createElement('iframe');
+      iframe.className = 'youpi-checkout-iframe';
+      iframe.src = targetUrl;
+      iframe.allow = 'payment';
+
+      container.appendChild(closeBtn);
+      container.appendChild(iframe);
+      backdrop.appendChild(container);
+      document.body.appendChild(backdrop);
+
+      backdrop.classList.add('active');
+      container.classList.add('active');
+
+      this.backdrop = backdrop;
+      this.container = container;
+      this.iframe = iframe;
+
+      // Invariant: ONLY the cross (X) button exits the payment gateway!
+      // Prevent outside touch/click on backdrop from closing the checkout modal.
+      const stopOutsideDismiss = (e) => {
+        if (e.target === backdrop) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          return false;
+        }
+      };
+      backdrop.addEventListener('click', stopOutsideDismiss, true);
+      backdrop.addEventListener('touchstart', stopOutsideDismiss, { passive: false, capture: true });
+      backdrop.addEventListener('touchend', stopOutsideDismiss, { passive: false, capture: true });
+      backdrop.addEventListener('touchmove', stopOutsideDismiss, { passive: false, capture: true });
+      backdrop.addEventListener('pointerdown', stopOutsideDismiss, true);
+      backdrop.addEventListener('pointerup', stopOutsideDismiss, true);
+      backdrop.addEventListener('mousedown', stopOutsideDismiss, true);
+      backdrop.addEventListener('mouseup', stopOutsideDismiss, true);
+    }
+
+    _handleMessage(e) {
+      if (!e.data || typeof e.data !== 'object') return;
+
+      const event = e.data.event;
+      const rawData = e.data.data || e.data;
+
+      if (event === 'youpi.payment_success') {
+        const payload = e.data.data || {};
+        const result = {
+          status: 'SUCCESS',
+          order_id: payload.orderId || this.options.orderId || this.options.order_id,
+          payment_mode: payload.method || 'UPI',
+          amount_received: Number(payload.amount || this.options.amount || 0),
+          utr: payload.bankRef || payload.utr || payload.reference || '',
+          timestamp: payload.completedAt || new Date().toISOString(),
+          metadata: payload.metadata || this.options.metadata || {},
+          raw: payload
+        };
+
+        YoupiCheckout._emitEvent('youpi:payment:success', result);
+        YoupiCheckout._emitEvent('youpi:payment:result', result);
+
+        if (typeof this.options.handler === 'function') {
+          this.options.handler(result);
+        }
+        if (typeof this.options.onSuccess === 'function') {
+          this.options.onSuccess(result);
+        }
+
+        setTimeout(() => {
+          this.close(() => {
+            if (this.options.successUrl) {
+              const delim = this.options.successUrl.includes('?') ? '&' : '?';
+              window.location.href = `${this.options.successUrl}${delim}order_id=${encodeURIComponent(result.order_id)}&amount=${encodeURIComponent(result.amount_received)}&utr=${encodeURIComponent(result.utr)}`;
+            }
+          });
+        }, 1500);
+      } else if (event === 'youpi.payment_failed') {
+        const payload = e.data.data || e.data || {};
+        const result = {
+          status: 'FAILED',
+          order_id: payload.orderId || this.options.orderId || this.options.order_id,
+          payment_mode: payload.method || 'UPI',
+          amount_received: 0,
+          utr: '',
+          reason: payload.reason || payload.status || 'PAYMENT_FAILED',
+          timestamp: new Date().toISOString(),
+          metadata: payload.metadata || this.options.metadata || {},
+          raw: payload
+        };
+
+        YoupiCheckout._emitEvent('youpi:payment:failed', result);
+        YoupiCheckout._emitEvent('youpi:payment:result', result);
+
+        if (typeof this.options.onFailed === 'function') {
+          try { this.options.onFailed(result); } catch (err) { }
+        }
+        if (typeof this.options.onPaymentFailed === 'function') {
+          try { this.options.onPaymentFailed(result); } catch (err) { }
+        }
+
+        this.close(() => {
+          if (this.options.failedUrl) {
+            const delim = this.options.failedUrl.includes('?') ? '&' : '?';
+            window.location.href = `${this.options.failedUrl}${delim}order_id=${encodeURIComponent(result.order_id)}&reason=${encodeURIComponent(result.reason)}`;
+          } else if (payload.redirectUrl && payload.redirectUrl !== window.location.href && !payload.redirectUrl.includes('/checkout')) {
+            window.location.href = payload.redirectUrl;
+          }
+        });
+      } else if (event === 'youpi.payment_blocked' || event === 'youpi.payment_blocked_exit') {
+        const payload = e.data.data || e.data || {};
+        const result = {
+          status: 'SUSPICIOUS',
+          order_id: payload.orderId || this.options.orderId || this.options.order_id,
+          payment_mode: payload.method || 'UPI',
+          amount_received: 0,
+          utr: '',
+          reason: 'SECURITY_REVIEW_FLAGGED',
+          timestamp: new Date().toISOString(),
+          metadata: payload.metadata || this.options.metadata || {},
+          raw: payload
+        };
+
+        YoupiCheckout._emitEvent('youpi:payment:suspicious', result);
+        YoupiCheckout._emitEvent('youpi:payment:result', result);
+
+        if (typeof this.options.onSuspicious === 'function') {
+          try { this.options.onSuspicious(result); } catch (err) { }
+        }
+
+        this.close(() => {
+          if (this.options.suspiciousUrl) {
+            const delim = this.options.suspiciousUrl.includes('?') ? '&' : '?';
+            window.location.href = `${this.options.suspiciousUrl}${delim}order_id=${encodeURIComponent(result.order_id)}&reason=SUSPICIOUS`;
+          }
+        });
+      } else if (event === 'youpi.payment_expired') {
+        const payload = e.data.data || e.data || {};
+        const result = {
+          status: 'EXPIRED',
+          order_id: payload.orderId || this.options.orderId || this.options.order_id,
+          timestamp: new Date().toISOString()
+        };
+
+        YoupiCheckout._emitEvent('youpi:payment:expired', result);
+        YoupiCheckout._emitEvent('youpi:payment:result', result);
+
+        if (typeof this.options.onExpired === 'function') {
+          try { this.options.onExpired(result); } catch (err) { }
+        }
+
+        this.close(() => {
+          if (this.options.expiredUrl) {
+            const delim = this.options.expiredUrl.includes('?') ? '&' : '?';
+            window.location.href = `${this.options.expiredUrl}${delim}order_id=${encodeURIComponent(result.order_id)}`;
+          }
+        });
+      } else if (event === 'youpi.modal_close' || event === 'youpi.close' || event === 'youpi.cancel' || event === 'youpi.payment_cancelled') {
+        this._dispatchCancelled();
+        const redirectUrl = e.data.redirectUrl;
+        this.close(() => {
+          if (this.options.cancelledUrl) {
+            const delim = this.options.cancelledUrl.includes('?') ? '&' : '?';
+            window.location.href = `${this.options.cancelledUrl}${delim}order_id=${encodeURIComponent(this.options.orderId || '')}`;
+          } else if (redirectUrl && redirectUrl !== window.location.href && !redirectUrl.includes('/checkout')) {
+            window.location.href = redirectUrl;
+          }
+        });
+      }
+    }
+
+    _dispatchCancelled() {
+      const result = {
+        status: 'CANCELLED',
+        order_id: this.options.orderId || this.options.order_id || '',
+        timestamp: new Date().toISOString()
+      };
+      YoupiCheckout._emitEvent('youpi:payment:cancelled', result);
+      YoupiCheckout._emitEvent('youpi:payment:result', result);
+
+      if (typeof this.options.onCancelled === 'function') {
+        try { this.options.onCancelled(result); } catch (e) { }
+      }
+    }
+
+    static _emitEvent(name, detail) {
+      if (!isBrowser) return;
+      try {
+        const ev = new CustomEvent(name, { detail, bubbles: true, cancelable: true });
+        window.dispatchEvent(ev);
+        document.dispatchEvent(ev);
+      } catch (e) { }
+    }
+
+    /**
+     * Handles clicks on elements with [data-youpi-pay] attribute
+     */
+    static handleButtonClick(btn) {
+      if (!btn) return;
+
+      const orderId = btn.getAttribute('data-order-id') || `ORDER-${Date.now()}`;
+      const amount = btn.getAttribute('data-amount') || '0';
+      const currency = btn.getAttribute('data-currency') || scriptConfig.currency || 'INR';
+      const name = btn.getAttribute('data-name') || scriptConfig.name || 'Merchant Store';
+      const description = btn.getAttribute('data-description') || 'Order Payment';
+
+      // Customer info
+      const customer = {
+        name: btn.getAttribute('data-customer-name') || '',
+        email: btn.getAttribute('data-customer-email') || '',
+        phone: btn.getAttribute('data-customer-phone') || btn.getAttribute('data-customer-mobile') || ''
+      };
+
+      // Metadata parsing
+      let metadata = {};
+      const rawMeta = btn.getAttribute('data-metadata');
+      if (rawMeta) {
+        try {
+          metadata = JSON.parse(rawMeta);
+        } catch (e) {
+          metadata = { raw: rawMeta };
+        }
+      }
+      // Gather any data-meta-* attributes
+      for (const attr of btn.attributes) {
+        if (attr.name.startsWith('data-meta-')) {
+          const key = attr.name.slice(10);
+          metadata[key] = attr.value;
+        }
+      }
+
+      const checkoutUrl = btn.getAttribute('data-checkout-url') || '';
+      const paymentId = btn.getAttribute('data-payment-id') || '';
+      const successUrl = btn.getAttribute('data-success-url') || scriptConfig.successUrl || '';
+      const failedUrl = btn.getAttribute('data-failed-url') || scriptConfig.failedUrl || '';
+      const suspiciousUrl = btn.getAttribute('data-suspicious-url') || scriptConfig.suspiciousUrl || '';
+      const expiredUrl = btn.getAttribute('data-expired-url') || scriptConfig.expiredUrl || '';
+      const cancelledUrl = btn.getAttribute('data-cancelled-url') || scriptConfig.cancelledUrl || '';
+
+      YoupiCheckout.pay({
+        order_id: orderId,
+        orderId: orderId,
+        amount: amount,
+        currency: currency,
+        name: name,
+        description: description,
+        customer: customer,
+        metadata: metadata,
+        checkoutUrl: checkoutUrl,
+        paymentId: paymentId,
+        successUrl: successUrl,
+        failedUrl: failedUrl,
+        suspiciousUrl: suspiciousUrl,
+        expiredUrl: expiredUrl,
+        cancelledUrl: cancelledUrl
+      }).catch(err => {
+        console.error('[YouPI JS] Pay error:', err);
+      });
+    }
+
+    static _ensureStyles() {
+      if (!isBrowser) return;
+      let styleEl = document.getElementById('youpi-checkout-styles');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'youpi-checkout-styles';
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = `
+        .youpi-checkout-backdrop {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          width: 100%;
+          height: 100vh;
+          height: 100dvh;
+          height: 100%;
+          background: rgba(12, 35, 64, 0.76);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          z-index: 2147483640;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          opacity: 0;
+          transition: opacity 0.25s ease-out;
+          touch-action: pan-y;
+          overscroll-behavior: contain;
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .youpi-checkout-backdrop.active {
+          opacity: 1;
+        }
+        .youpi-checkout-container {
+          position: relative;
+          width: 440px;
+          max-width: 95vw;
+          height: 680px;
+          max-height: 92vh;
+          background: #ffffff;
+          border-radius: 14px;
+          box-shadow: 0 25px 65px rgba(0, 0, 0, 0.5);
+          overflow: hidden;
+          transform: translateY(20px) scale(0.98);
+          transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          display: flex;
+          flex-direction: column;
+          touch-action: auto !important;
+          user-select: auto !important;
+          -webkit-user-select: auto !important;
+        }
+        .youpi-checkout-container.active {
+          transform: translateY(0) scale(1);
+        }
+        .youpi-checkout-container.closing {
+          transform: translateY(20px) scale(0.96);
+        }
+        .youpi-checkout-iframe {
+          width: 100%;
+          height: 100%;
+          border: none;
+          flex: 1;
+          background: #ffffff;
+          touch-action: auto !important;
+        }
+        .youpi-checkout-close-btn {
+          position: absolute;
+          top: 14px;
+          right: 14px;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.2);
+          border: none;
+          color: #ffffff;
+          font-size: 14px;
+          cursor: pointer;
+          z-index: 10;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.15s;
+        }
+        .youpi-checkout-close-btn:hover {
+          background: rgba(255, 255, 255, 0.4);
+        }
+
+        /* DESKTOP / PC MODAL STYLES (Razorpay 2-Column Exact Layout) */
+        @media (min-width: 768px) {
+          .youpi-checkout-container {
+            width: 900px;
+            max-width: 95vw;
+            height: 600px;
+            max-height: 92vh;
+            border-radius: 16px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+          }
+          .youpi-checkout-close-btn {
+            display: none; /* Native in-modal close button inside the checkout header bar */
+          }
+        }
+
+        /* MOBILE BOTTOM DRAWER / BOTTOM SHEET STYLES */
+        @media (max-width: 767px) {
+          .youpi-checkout-backdrop {
+            position: fixed !important;
+            inset: 0 !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            display: flex !important;
+            align-items: flex-end !important;
+            justify-content: center !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .youpi-checkout-container {
+            width: 100vw !important;
+            max-width: 100vw !important;
+            height: 90vh !important;
+            height: 90dvh !important;
+            max-height: 94vh !important;
+            border-bottom-left-radius: 0 !important;
+            border-bottom-right-radius: 0 !important;
+            border-top-left-radius: 20px !important;
+            border-top-right-radius: 20px !important;
+            margin: 0 !important;
+            transform: translateY(0) !important;
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
+            touch-action: auto !important;
+            overflow: hidden !important;
+          }
+          .youpi-checkout-container.closing {
+            transform: translateY(100%) !important;
+          }
+        }
+      `;
+    }
+  }
+
+  // Auto-bind click listener for all [data-youpi-pay] buttons on page
+  if (isBrowser) {
+    document.addEventListener('click', function (e) {
+      const btn = e.target && e.target.closest && e.target.closest('[data-youpi-pay]');
+      if (btn) {
+        e.preventDefault();
+        YoupiCheckout.handleButtonClick(btn);
+      }
     });
   }
 
-  var sdk = {
-    pay: pay,
-    /** Dismisses the live modal (if any). */
-    close: function (callback) {
-      if (active) {
-        active.close(callback);
-      } else if (typeof callback === 'function') {
-        callback();
-      }
-    },
-    /** Internal: lets integrators push theme overrides after load. */
-    configure: function (options) {
-      var session = active;
-      if (session && options && options.theme) session.theme = options.theme;
-    }
-  };
-
-  window.Youpi = sdk;
-  // Gateway bundles under both names historically.
-  window.YoupiCheckout = sdk;
-})();
+  // Export globals
+  globalScope.YoupiCheckout = YoupiCheckout;
+  globalScope.Youpi = YoupiCheckout;
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = YoupiCheckout;
+    module.exports.YoupiCheckout = YoupiCheckout;
+    module.exports.Youpi = YoupiCheckout;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);

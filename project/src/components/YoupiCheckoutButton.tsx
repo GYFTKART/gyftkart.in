@@ -68,18 +68,29 @@ export default function YoupiCheckoutButton({
       const Youpi = window.Youpi ?? window.YoupiCheckout;
       if (!Youpi) throw new Error('YouPI checkout failed to initialize.');
 
-      // Step 2 — open the YouPI checkout modal (UPI QR / app deep links,
-      // WhatsApp OTP — all handled inside the gateway's iframe).
+      // Open the YouPI checkout modal. The session checkoutUrl is
+      // server-minted, so the SDK skips its own create path — no
+      // amount/name/customer needed here (passing amount would append
+      // customAmount to the portal URL). The SDK fires at most one
+      // terminal callback: success -> handler/onSuccess, otherwise
+      // onFailed/onExpired/onCancelled — and onClose ALWAYS runs after
+      // any terminal outcome, so it must not double-report cancellation.
       await Youpi.pay({
         order_id: session.orderId,
         paymentId: session.paymentId,
         checkoutUrl: session.checkoutUrl,
-        amount,
-        currency: session.currency ?? 'INR',
-        name: 'GyftKart',
-        description: 'Gift card purchase',
-        customer: { name: buyerName, email: buyerEmail, phone: buyerPhone },
         onClose: () => {
+          setLoading(false);
+        },
+        onFailed: (result: YoupiPayResult) => {
+          setLoading(false);
+          onError?.(result.reason ?? 'Payment failed. Please try another method.');
+        },
+        onExpired: () => {
+          setLoading(false);
+          onError?.('Payment session expired. Please try again.');
+        },
+        onCancelled: () => {
           setLoading(false);
           onCancel?.();
         },

@@ -6,9 +6,18 @@ export interface YoupiPayResult {
   utr?: string;
   reason?: string;
   timestamp?: string;
+  metadata?: Record<string, unknown>;
   raw?: unknown;
 }
 
+/**
+ * Parameter surface of the canonical gateway SDK (public/youpi.js, the
+ * verbatim copy of apps/checkout-portal/src/sdk/youpi.js in YouPI-PG).
+ * When `checkoutUrl` is supplied, `pay()` opens the modal directly and
+ * skips the SDK's own create-payment path (our Edge Function pre-creates
+ * authenticated sessions); the remaining create-time options only apply
+ * to that self-create path.
+ */
 export interface YoupiPayOptions {
   key?: string;
   order_id?: string;
@@ -23,12 +32,18 @@ export interface YoupiPayOptions {
   checkoutUrl?: string;
   portalUrl?: string;
   apiUrl?: string;
-  theme?: { color?: string };
+  successUrl?: string;
+  failedUrl?: string;
+  expiredUrl?: string;
+  cancelledUrl?: string;
+  suspiciousUrl?: string;
   handler?: (result: YoupiPayResult) => void;
   onSuccess?: (result: YoupiPayResult) => void;
+  onPaymentFailed?: (result: YoupiPayResult) => void;
   onFailed?: (result: YoupiPayResult) => void;
   onExpired?: (result: YoupiPayResult) => void;
   onCancelled?: (result: YoupiPayResult) => void;
+  onSuspicious?: (result: YoupiPayResult) => void;
   onClose?: () => void;
 }
 
