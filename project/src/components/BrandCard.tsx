@@ -10,9 +10,16 @@ interface BrandCardProps {
 
 export default function BrandCard({ brand, className = '' }: BrandCardProps) {
   // Support either snake_case or camelCase field names for the logo image,
-  // depending on how the brand data is sourced.
+  // depending on how the brand data is sourced. The row can carry image
+  // aliases the shared Brand type doesn't declare — read them through a
+  // typed view instead of an `any` cast.
+  const imageSource = brand as unknown as Partial<{
+    image_url: string;
+    imageUrl: string;
+    logo_url: string;
+  }>;
   const logoUrl: string | null =
-    (brand as any).image_url || (brand as any).imageUrl || (brand as any).logo_url || null;
+    imageSource.image_url || imageSource.imageUrl || imageSource.logo_url || null;
 
   // Track load failure in React state rather than mutating the DOM
   // directly — this is what was causing the blank white space: a

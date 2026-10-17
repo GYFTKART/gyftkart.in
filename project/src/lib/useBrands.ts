@@ -135,10 +135,11 @@ function isMissing(value: unknown): boolean {
 // that are actually empty/broken. Existing valid URLs from the DB are
 // left untouched.
 function withFallbackLogo(brand: Brand): Brand {
-  const name = (brand as any).name ?? '';
-  const fallbackUrl = getFallbackLogo(name);
+  const fallbackUrl = getFallbackLogo(brand.name);
 
-  const next: any = { ...brand };
+  // The DB rows may carry image_url / imageUrl aliases the Brand type
+  // doesn't declare; keep them reachable while still writing valid URLs.
+  const next = { ...brand } as Brand & Record<string, unknown>;
 
   if (isMissing(next.image_url)) next.image_url = fallbackUrl;
   if (isMissing(next.imageUrl)) next.imageUrl = fallbackUrl;

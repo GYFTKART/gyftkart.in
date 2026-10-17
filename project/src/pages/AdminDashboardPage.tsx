@@ -15,7 +15,6 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  ArrowUpRight,
   Search,
   X,
   ExternalLink,
