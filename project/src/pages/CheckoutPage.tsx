@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import { getSessionId } from '@/lib/session';
 import { inr } from '@/lib/format';
 import type { CartItem, Purchase } from '@/lib/types';
+import type { OrderRow } from '@/components/RazorpayCheckoutButton';
 import RazorpayCheckoutButton from '@/components/RazorpayCheckoutButton';
 import YoupiCheckoutButton from '@/components/YoupiCheckoutButton';
 import { isYoupiConfigured } from '@/lib/youpi';
@@ -88,14 +89,20 @@ export default function CheckoutPage() {
 
   // Runs only after the chosen gateway (Razorpay or YouPI) has been
   // verified server-side (see the verify-*payment Edge Functions). This
-  // is what actually issues the gift cards.
-  const issueGiftCards = async () => {
+  // is what actually issues the gift cards. The verified gateway payment
+  // id is stamped onto every issued row — with the
+  // `uq_purchases_one_batch_per_payment` unique index this makes
+  // duplicate issuance (double callbacks, re-submits, races) impossible
+  // at the DB level for both gateways.
+  const issueGiftCards = async (verifiedOrder?: OrderRow) => {
     try {
       const sid = getSessionId();
       // Guest checkouts (no session) leave this null — the ledger
       // trigger still records the sale as company revenue, it just
       // won't have a customer wallet to debit.
       const uid = session?.id ?? null;
+      const issuedUnderPaymentId =
+        verifiedOrder?.youpi_payment_id ?? verifiedOrder?.razorpay_payment_id ?? null;
       const rows = items.map((it) => ({
         session_id: sid,
         user_id: uid,
@@ -113,6 +120,7 @@ export default function CheckoutPage() {
         gift_card_code: genCode(),
         status: 'active',
         balance: it.amount * it.quantity,
+        issued_under_payment_id: issuedUnderPaymentId,
       }));
       const { data, error } = await supabase.from('purchases').insert(rows).select('*');
       if (error) throw error;
@@ -134,8 +142,8 @@ export default function CheckoutPage() {
     }
   };
 
-  const handlePaymentSuccess = () => {
-    void issueGiftCards();
+  const handlePaymentSuccess = (verifiedOrder?: OrderRow) => {
+    void issueGiftCards(verifiedOrder);
   };
 
   const handlePaymentError = (message: string) => {

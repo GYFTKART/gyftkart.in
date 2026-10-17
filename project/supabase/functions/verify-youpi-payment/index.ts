@@ -122,6 +122,37 @@ serve(async (req) => {
       return jsonResponse({ error: 'Payment not confirmed by gateway' }, 400);
     }
 
+    // ---- 1b. Order/ownership identity checks: the gateway session must
+    // belong to the authenticated buyer and to the internal order id the
+    // client claims — preventing one user from paying against another
+    // user's session, and a foreign session (other merchant / SDK
+    // self-created) from being reconciled here at all.
+    if (youpiPayment.orderId !== order_id) {
+      console.error(
+        `Order id mismatch on YouPI session ${payment_id}: gateway recorded ${youpiPayment.orderId}, client sent ${order_id}`
+      );
+      return jsonResponse({ error: 'Order mismatch — payment not accepted' }, 400);
+    }
+
+    const sessionUserId = (youpiPayment.metadata?.user_id as string | undefined) ?? null;
+    const sessionSource = (youpiPayment.metadata?.source as string | undefined) ?? null;
+    if (
+      !sessionUserId ||
+      sessionSource !== 'gyftkart' ||
+      sessionUserId !== (userId ?? '')
+    ) {
+      console.warn(
+        `Ownership mismatch on YouPI session ${payment_id}: session(owner=${sessionUserId},source=${sessionSource}) verifier=${userId}`
+      );
+      return jsonResponse({ error: 'Order does not belong to the verifier' }, 403);
+    }
+
+    // ---- 1c. Currency check (only INR is accepted end-to-end).
+    if ((youpiPayment.currency ?? 'INR').toUpperCase() !== 'INR') {
+      console.error(`Currency mismatch on YouPI session ${payment_id}: ${youpiPayment.currency}`);
+      return jsonResponse({ error: 'Currency mismatch — payment not accepted' }, 400);
+    }
+
     // ---- 2. Amount cross-check (gateway stores paise as a string).
     const expectedPaise = Math.round(total_amount * 100);
     if (Number(youpiPayment.amountPaise) !== expectedPaise) {
