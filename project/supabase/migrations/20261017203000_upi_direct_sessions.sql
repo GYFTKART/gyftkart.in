@@ -44,8 +44,17 @@ create unique index if not exists uq_upi_sessions_bank_ref
   on public.upi_payment_sessions (bank_ref)
   where bank_ref is not null;
 
--- No anon/authenticated policies: service-role (Edge Functions) only.
+-- No anon policies: writes stay service-role (Edge Functions) only;
+-- SELECT is opened to authenticated staff rows in the `admins` table so
+-- the admin dashboard can list sessions (manual-confirm workflow).
 alter table public.upi_payment_sessions enable row level security;
+
+drop policy if exists admins_read_upi_sessions on public.upi_payment_sessions;
+create policy admins_read_upi_sessions on public.upi_payment_sessions
+  for select to authenticated
+  using (
+    exists (select 1 from public.admins a where a.id = auth.uid())
+  );
 
 create table if not exists public.upi_gateway_config (
   id boolean primary key default true check (id = true),
@@ -56,3 +65,12 @@ create table if not exists public.upi_gateway_config (
 );
 
 alter table public.upi_gateway_config enable row level security;
+
+-- Gmail observer credentials (service-role only; Edge Functions manage
+-- the row). No policies — never readable via PostgREST by clients.
+create table if not exists public.upi_observer_tokens (
+  id uuid primary key default gen_random_uuid(),
+  access_token text,
+  refresh_token text not null,
+  expires_at timestamptz
+);

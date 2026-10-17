@@ -30,6 +30,7 @@ import { useToast } from '@/components/Toast';
 import { inr, inrDecimal, formatDateTime } from '@/lib/format';
 import BrandManager from '@/components/BrandManager';
 import CompanyLedgerTab from '@/components/CompanyLedgerTab';
+import AdminPaymentsTab from '@/components/AdminPaymentsTab';
 import CustomerLedgerModal, { type LedgerCustomer } from '@/components/CustomerLedgerModal';
 import type { CompanyLedgerEntry } from '@/lib/types';
 
@@ -75,7 +76,7 @@ type Profile = {
 
 type PurchaseStat = { orders: number; spent: number; lastOrder: string; name: string };
 
-type Tab = 'overview' | 'sales' | 'inquiries' | 'brands' | 'customers' | 'ledger';
+type Tab = 'overview' | 'sales' | 'inquiries' | 'brands' | 'customers' | 'ledger' | 'payments';
 
 const tabs: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -84,6 +85,7 @@ const tabs: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'brands', label: 'Manage Brands', icon: Tag },
   { id: 'customers', label: 'Customers', icon: Users },
   { id: 'ledger', label: 'Company Ledger', icon: Banknote },
+  { id: 'payments', label: 'UPI Direct', icon: Wallet },
 ];
 
 export default function AdminDashboardPage() {
@@ -410,6 +412,8 @@ export default function AdminDashboardPage() {
             />
           ) : tab === 'brands' ? (
             <BrandManager />
+          ) : tab === 'payments' ? (
+            <AdminPaymentsTab />
           ) : tab === 'ledger' ? (
             <CompanyLedgerTab entries={companyLedger} />
           ) : (
