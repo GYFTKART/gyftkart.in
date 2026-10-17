@@ -1,0 +1,27 @@
+-- 20261017203010_upi_direct_observer_cron.sql
+--
+-- OPTIONAL wired cron for the observer Edge Function
+-- (`observe-upi-payments`). Kept DISABLED (commented) so nothing
+-- schedules itself on apply: production secrets (OBSERVER_SECRET /
+-- function URL) must exist first, and the free low-traffic path is to
+-- schedule via any external free scheduler (cron-job.org) hitting the
+-- function URL with `Authorization: Bearer <OBSERVER_SECRET>`.
+--
+-- If you later prefer Supabase-hosted pg_cron (free tier has it):
+--   1) store OBSERVER_SECRET in vault:
+--      select vault.create_secret('<OBSERVER_SECRET>', 'OBSERVER_SECRET');
+--   2) uncomment the block below and replace <PROJECT_REF> / <SECRET_ID>.
+--
+-- select cron.schedule(
+--   'observe-upi-payments',
+--   '1 minute',
+--   $$
+--   select net.http_post(
+--     url := 'https://<PROJECT_REF>.supabase.co/functions/v1/observe-upi-payments',
+--     headers := jsonb_build_array(
+--         'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where id = '<SECRET_ID>')
+--     ),
+--     body := '{}'::jsonb
+--   );
+--   $$
+-- );

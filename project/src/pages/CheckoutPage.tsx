@@ -22,10 +22,11 @@ import type { CartItem, Purchase } from '@/lib/types';
 import type { OrderRow } from '@/components/RazorpayCheckoutButton';
 import RazorpayCheckoutButton from '@/components/RazorpayCheckoutButton';
 import YoupiCheckoutButton from '@/components/YoupiCheckoutButton';
+import UpiDirectCheckoutButton from '@/components/UpiDirectCheckoutButton';
 import { isYoupiConfigured } from '@/lib/youpi';
 
 type Step = 'review' | 'pay' | 'success';
-type Gateway = 'razorpay' | 'youpi';
+type Gateway = 'razorpay' | 'youpi' | 'upi';
 
 const stepsMeta: { id: Step; label: string }[] = [
   { id: 'review', label: 'Review' },
@@ -86,6 +87,9 @@ export default function CheckoutPage() {
 
   const validBuyer = buyerName.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(buyerEmail);
   const youpiReady = isYoupiConfigured();
+  const upiDirectReady =
+    import.meta.env.VITE_UPI_DIRECT_ENABLED === 'true' ||
+    import.meta.env.VITE_UPI_DIRECT_ENABLED === '1';
 
   // Runs only after the chosen gateway (Razorpay or YouPI) has been
   // verified server-side (see the verify-*payment Edge Functions). This
@@ -352,6 +356,20 @@ export default function CheckoutPage() {
                         <p className="text-xs font-bold text-slate-900">YouPI UPI</p>
                         <p className="mt-0.5 text-[11px] text-slate-500">QR · GPay · PhonePe · Paytm</p>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setGateway('upi')}
+                        disabled={!upiDirectReady}
+                        title={upiDirectReady ? undefined : 'Direct UPI is not enabled yet'}
+                        className={`rounded-2xl border p-3 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                          gateway === 'upi'
+                            ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-500'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <p className="text-xs font-bold text-slate-900">UPI Direct</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">Pay any UPI app · 0% fee</p>
+                      </button>
                     </div>
 
                     {gateway === 'razorpay' ? (
@@ -367,7 +385,7 @@ export default function CheckoutPage() {
                           label={`Pay ${inr(total)}`}
                         />
                       </div>
-                    ) : (
+                    ) : gateway === 'youpi' ? (
                       <div className="mt-3">
                         <YoupiCheckoutButton
                           amount={total}
@@ -377,6 +395,20 @@ export default function CheckoutPage() {
                           disabled={!validBuyer}
                           onSuccess={handlePaymentSuccess}
                           onError={handlePaymentError}
+                          label={`Pay ${inr(total)}`}
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <UpiDirectCheckoutButton
+                          amount={total}
+                          items={items}
+                          buyerName={buyerName}
+                          buyerEmail={buyerEmail}
+                          disabled={!validBuyer}
+                          onSuccess={handlePaymentSuccess}
+                          onError={handlePaymentError}
+                          onCancel={() => setGateway('razorpay')}
                           label={`Pay ${inr(total)}`}
                         />
                       </div>
