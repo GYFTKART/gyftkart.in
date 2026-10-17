@@ -30,6 +30,13 @@ interface SignupResult {
   needsEmailConfirmation?: boolean;
 }
 
+interface ProfileUpdateResult {
+  ok: boolean;
+  error?: string;
+  /** true when the email change needs the person to click a confirmation link */
+  needsEmailConfirmation?: boolean;
+}
+
 interface CustomerAuthContextValue {
   session: Session | null;
   login: (email: string, password: string) => Promise<LoginResult>;
@@ -48,6 +55,17 @@ interface CustomerAuthContextValue {
    * re-attaching the token to the Supabase client is async).
    */
   authReady: boolean;
+  /**
+   * Updates the logged-in person's profile fields (name / phone in user
+   * metadata, optional email + password via Supabase Auth) and refreshes
+   * the local cached session so ProfilePage's fields reflect the change.
+   */
+  updateProfile: (profile: {
+    name: string;
+    phone: string;
+    email?: string;
+    password?: string;
+  }) => Promise<ProfileUpdateResult>;
 }
 
 const CustomerAuthContext = createContext<CustomerAuthContextValue | null>(null);
@@ -314,9 +332,62 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }, []);
 
+  const updateProfile = useCallback(
+    async (profile: {
+      name: string;
+      phone: string;
+      email?: string;
+      password?: string;
+    }): Promise<ProfileUpdateResult> => {
+      // Requires a live Supabase session on this client (login or
+      // restoreSessionOnce must have re-attached the token) — updateUser
+      // is a no-op against the anon key.
+      const trimmedName = profile.name.trim();
+      const trimmedPhone = profile.phone.trim();
+
+      const attributes: Parameters<typeof supabase.auth.updateUser>[0] = {
+        data: { name: trimmedName, phone: trimmedPhone },
+      };
+      if (profile.password) attributes.password = profile.password;
+      if (profile.email) attributes.email = profile.email.trim().toLowerCase();
+
+      const { data, error } = await supabase.auth.updateUser(attributes);
+      if (error || !data.user) {
+        return { ok: false, error: error?.message ?? 'Could not update your profile.' };
+      }
+
+      // Email changes: when "confirm email change" is on, Supabase keeps
+      // the old email on the user row until the new one is confirmed —
+      // detect that so ProfilePage can tell the person to check their
+      // inbox instead of claiming a change that hasn't taken effect yet.
+      const emailChanged = Boolean(profile.email && data.user.email !== null);
+      const confirmedNewerEmail = data.user.email === attributes.email;
+      const needsEmailConfirmation = emailChanged && attributes.email !== undefined && !confirmedNewerEmail;
+
+      // Sync the cached profile with what Supabase now knows. Only adopt
+      // the new email into the cache when Supabase actually recorded it.
+      const current = getCachedSession();
+      if (current) {
+        const updated: Session = {
+          ...current,
+          name: trimmedName,
+          phone: trimmedPhone,
+          // Keep the old email in the local cache until Supabase has
+          // actually recorded the change (confirm-email flow).
+          email: needsEmailConfirmation ? current.email : (data.user.email ?? current.email),
+        };
+        cacheSession(updated);
+        setSession(updated);
+      }
+
+      return { ok: true, needsEmailConfirmation };
+    },
+    []
+  );
+
   return (
     <CustomerAuthContext.Provider
-      value={{ session, login, signup, logout, requestPasswordReset, authReady }}
+      value={{ session, login, signup, logout, requestPasswordReset, updateProfile, authReady }}
     >
       {children}
     </CustomerAuthContext.Provider>

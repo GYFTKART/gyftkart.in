@@ -19,9 +19,12 @@ import { supabase } from '@/lib/supabase';
 import { getSessionId } from '@/lib/session';
 import { inr } from '@/lib/format';
 import type { CartItem, Purchase } from '@/lib/types';
-import RazorpayCheckoutButton, { type OrderRow } from '@/components/RazorpayCheckoutButton';
+import RazorpayCheckoutButton from '@/components/RazorpayCheckoutButton';
+import YoupiCheckoutButton from '@/components/YoupiCheckoutButton';
+import { isYoupiConfigured } from '@/lib/youpi';
 
 type Step = 'review' | 'pay' | 'success';
+type Gateway = 'razorpay' | 'youpi';
 
 const stepsMeta: { id: Step; label: string }[] = [
   { id: 'review', label: 'Review' },
@@ -52,6 +55,7 @@ export default function CheckoutPage() {
   const count = isBuyNow ? (buyNowItem as CartItem).quantity : cartCount;
 
   const [step, setStep] = useState<Step>('review');
+  const [gateway, setGateway] = useState<Gateway>('razorpay');
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [buyerName, setBuyerName] = useState('');
@@ -80,10 +84,11 @@ export default function CheckoutPage() {
   const total = subtotal + convenienceFee;
 
   const validBuyer = buyerName.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(buyerEmail);
+  const youpiReady = isYoupiConfigured();
 
-  // Runs only after Razorpay's payment has been verified server-side
-  // (see RazorpayCheckoutButton -> verify-razorpay-payment Edge
-  // Function). This is what actually issues the gift cards.
+  // Runs only after the chosen gateway (Razorpay or YouPI) has been
+  // verified server-side (see the verify-*payment Edge Functions). This
+  // is what actually issues the gift cards.
   const issueGiftCards = async () => {
     try {
       const sid = getSessionId();
@@ -129,11 +134,11 @@ export default function CheckoutPage() {
     }
   };
 
-  const handleRazorpaySuccess = (_order: OrderRow) => {
+  const handlePaymentSuccess = () => {
     void issueGiftCards();
   };
 
-  const handleRazorpayError = (message: string) => {
+  const handlePaymentError = (message: string) => {
     push(message, 'error');
   };
 
@@ -253,13 +258,20 @@ export default function CheckoutPage() {
                     </span>
                     <div>
                       <h2 className="font-display text-2xl font-bold text-slate-900">Secure payment</h2>
-                      <p className="text-xs text-slate-500">Powered by Razorpay</p>
+                      <p className="text-xs text-slate-500">
+                        {gateway === 'youpi'
+                          ? 'Powered by YouPI · direct UPI, 0% gateway fees'
+                          : 'Powered by Razorpay'}
+                      </p>
                     </div>
                   </div>
 
                   <div className="mt-6 rounded-2xl bg-slate-50 p-5 text-sm text-slate-600">
-                    You'll be able to choose UPI, card, net banking, or wallet in the next step —
-                    Razorpay's secure checkout window handles that for you.
+                    {gateway === 'youpi' ? (
+                      "You'll scan a UPI QR or tap to open GPay / PhonePe / Paytm in the next step — YouPI's secure checkout window handles that for you."
+                    ) : (
+                      "You'll be able to choose UPI, card, net banking, or wallet in the next step — Razorpay's secure checkout window handles that for you."
+                    )}
                   </div>
 
                   <div className="mt-5 flex items-center gap-2 text-xs text-slate-400">
@@ -304,16 +316,63 @@ export default function CheckoutPage() {
 
                 {step === 'pay' && (
                   <div className="mt-5">
-                    <RazorpayCheckoutButton
-                      amount={total}
-                      items={items}
-                      buyerName={buyerName}
-                      buyerEmail={buyerEmail}
-                      disabled={!validBuyer}
-                      onSuccess={handleRazorpaySuccess}
-                      onError={handleRazorpayError}
-                      label={`Pay ${inr(total)}`}
-                    />
+                    {/* Gateway selector — Razorpay (cards/netbanking/wallets) or YouPI (direct UPI) */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setGateway('razorpay')}
+                        className={`rounded-2xl border p-3 text-left transition-all ${
+                          gateway === 'razorpay'
+                            ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-500'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <p className="text-xs font-bold text-slate-900">Razorpay</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">Card · Netbanking · Wallet</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGateway('youpi')}
+                        disabled={!youpiReady}
+                        title={youpiReady ? undefined : 'YouPI UPI is not configured yet'}
+                        className={`rounded-2xl border p-3 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                          gateway === 'youpi'
+                            ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-500'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <p className="text-xs font-bold text-slate-900">YouPI UPI</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">QR · GPay · PhonePe · Paytm</p>
+                      </button>
+                    </div>
+
+                    {gateway === 'razorpay' ? (
+                      <div className="mt-3">
+                        <RazorpayCheckoutButton
+                          amount={total}
+                          items={items}
+                          buyerName={buyerName}
+                          buyerEmail={buyerEmail}
+                          disabled={!validBuyer}
+                          onSuccess={handlePaymentSuccess}
+                          onError={handlePaymentError}
+                          label={`Pay ${inr(total)}`}
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <YoupiCheckoutButton
+                          amount={total}
+                          items={items}
+                          buyerName={buyerName}
+                          buyerEmail={buyerEmail}
+                          disabled={!validBuyer}
+                          onSuccess={handlePaymentSuccess}
+                          onError={handlePaymentError}
+                          label={`Pay ${inr(total)}`}
+                        />
+                      </div>
+                    )}
                     <button
                       onClick={() => setStep('review')}
                       className="mt-3 w-full text-center text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors"
