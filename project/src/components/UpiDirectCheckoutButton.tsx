@@ -28,7 +28,8 @@ interface CreateUpiResponse {
   expiresInMinutes: number;
 }
 
-const POLL_INTERVAL_MS = 10_000;
+const POLL_INTERVAL_MS = 15_000;
+const STALL_AFTER_ATTEMPTS = 3;
 
 export default function UpiDirectCheckoutButton({
   amount,
@@ -42,9 +43,10 @@ export default function UpiDirectCheckoutButton({
   label,
   className,
 }: UpiDirectProps) {
-  const [phase, setPhase] = useState<'idle' | 'creating' | 'awaiting' | 'verifying'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'creating' | 'awaiting' | 'stalled' | 'expired' | 'verifying'>('idle');
   const [session, setSession] = useState<CreateUpiResponse | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [attempts, setAttempts] = useState(0);
   const pollRef = useRef<number | null>(null);
 
   // UPI deep links (upi://) only resolve where a UPI app intent handler
@@ -81,16 +83,22 @@ export default function UpiDirectCheckoutButton({
         total_amount: amount,
       },
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      const message = error.message ?? '';
+      if (message.includes('SESSION_EXPIRED') || message === 'EXPIRED') {
+        throw new Error('EXPIRED');
+      }
+      throw new Error(message || 'Verification failed.');
+    }
     if (data?.order) {
       return data.order as OrderRow;
     }
     return null;
   };
 
-  const drivePolling = async (created: CreateUpiResponse) => {
+  const drivePolling = async (created: CreateUpiResponse, bumpAttempt = true) => {
     try {
-      setPhase('verifying');
+      setPhase(attempts >= STALL_AFTER_ATTEMPTS ? 'stalled' : 'verifying');
       const order = await verifyNow(created);
       if (order) {
         setPhase('idle');
@@ -98,23 +106,24 @@ export default function UpiDirectCheckoutButton({
         onSuccess(order);
         return;
       }
+      const nextAttempt = bumpAttempt ? attempts + 1 : attempts;
+      setAttempts(nextAttempt);
       pollRef.current = window.setTimeout(() => void drivePolling(created), POLL_INTERVAL_MS);
-      setPhase('awaiting');
+      setPhase(nextAttempt >= STALL_AFTER_ATTEMPTS ? 'stalled' : 'awaiting');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Verification failed.';
-      if (message.includes('EXPIRED') || message.includes('SESSION_EXPIRED')) {
-        setPhase('idle');
-        setSession(null);
-        onError?.('UPI session expired. Please start the payment again.');
+      if (message === 'EXPIRED') {
+        setPhase('expired');
         return;
       }
       pollRef.current = window.setTimeout(() => void drivePolling(created), POLL_INTERVAL_MS);
-      setPhase('awaiting');
+      setPhase(attempts >= STALL_AFTER_ATTEMPTS ? 'stalled' : 'awaiting');
     }
   };
 
   const handleClick = async () => {
     setPhase('creating');
+    setAttempts(0);
     try {
       const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
         'create-upi-intent-payment',
@@ -131,7 +140,7 @@ export default function UpiDirectCheckoutButton({
       }
       const created = paymentData as CreateUpiResponse;
       setSession(created);
-      setPhase('awaiting');
+      setPhase('verifying');
       void drivePolling(created);
     } catch (err) {
       setPhase('idle');
@@ -143,7 +152,14 @@ export default function UpiDirectCheckoutButton({
     if (pollRef.current) window.clearTimeout(pollRef.current);
     setSession(null);
     setPhase('idle');
+    setAttempts(0);
     onCancel?.();
+  };
+
+  const checkNow = () => {
+    if (!session) return;
+    if (pollRef.current) window.clearTimeout(pollRef.current);
+    void drivePolling(session, false);
   };
 
   return (
@@ -167,18 +183,8 @@ export default function UpiDirectCheckoutButton({
       )}
 
       {session && phase !== 'idle' && (
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
-          <p className="text-sm font-bold text-slate-900">
-            Send <span className='text-emerald-700'>₹{session.amount}</span> to{' '}
-            <span className="font-mono select-all">{session.vpa}</span>
-          </p>
-          <p className="text-xs text-slate-600 mt-1">
-            {isMobile
-              ? 'Tap below to open your UPI app prefilled (register a UPI app like GPay/PhonePe first).'
-              : 'Scan the QR with any UPI app (GPay/PhonePe/Paytm on your phone), or copy the details below.'}
-            {isMobile ? undefined : ' The payment stays pending until the bank credit is verified — never wait longer than ' + session.expiresInMinutes + ' minutes.'}
-          </p>
-          <div className="grid gap-2 mt-3">
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:p-5">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
             {isMobile ? (
               <a
                 href={session.upiUri}
@@ -186,78 +192,95 @@ export default function UpiDirectCheckoutButton({
                   e.preventDefault();
                   try { window.location.href = session.upiUri; } catch { window.open(session.upiUri, '_blank'); }
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700"
               >
                 <Wallet className="h-4 w-4" /> Open UPI app
               </a>
             ) : (
-              <div className="flex items-center gap-3">
-                <div className="bg-white p-2 rounded-xl border border-emerald-100">
-                  <QRCodeSVG value={session.upiUri} size={112} />
-                </div>
-                <div className="min-w-0 flex-1 grid gap-1.5 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 shrink-0">Pay to</span>
-                    <span className="font-mono text-slate-900 truncate">{session.vpa}</span>
-                    <button
-                      onClick={() => copy(session.vpa, 'vpa')}
-                      className="shrink-0 rounded-md p-1 hover:bg-slate-200/70"
-                      title="Copy payee UPI ID"
-                    >
-                      {copied === 'vpa' ? <span className="text-[10px] font-bold text-emerald-700">copied</span> : <Copy className="h-3.5 w-3.5 text-slate-500" />}
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 shrink-0">Payee name</span>
-                    <span className="text-slate-900">{session.payeeName}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 shrink-0">Amount</span>
-                    <span className="font-mono text-slate-900">₹{session.amount}</span>
-                    <button
-                      onClick={() => copy(session.amount, 'amount')}
-                      className="shrink-0 rounded-md p-1 hover:bg-slate-200/70"
-                      title="Copy exact amount"
-                    >
-                      {copied === 'amount' ? <span className="text-[10px] font-bold text-emerald-700">copied</span> : <Copy className="h-3.5 w-3.5 text-slate-500" />}
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 shrink-0">Reference</span>
-                    <span className="font-mono text-slate-900 truncate">{session.orderId}</span>
-                    <button
-                      onClick={() => copy(session.orderId, 'ref')}
-                      className="shrink-0 rounded-md p-1 hover:bg-slate-200/70"
-                      title="Copy payment reference"
-                    >
-                      {copied === 'ref' ? <span className="text-[10px] font-bold text-emerald-700">copied</span> : <Copy className="h-3.5 w-3.5 text-slate-500" />}
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
-                    Your payment stays <b>pending</b> here — gift cards are only issued after the bank credit is
-                    verified (UTR), never on link clicks alone.
-                  </p>
-                </div>
+              <div className="shrink-0 rounded-xl border border-emerald-100 bg-white p-2">
+                <QRCodeSVG value={session.upiUri} size={120} />
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600`}>
-                {phase === 'verifying' || phase === 'awaiting' ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin" /> Waiting for bank confirmation…
-                  </>
-                ) : null}
-              </span>
-              <button
-                onClick={cancelSession}
-                className="ml-auto text-xs font-semibold text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
+            <div className="min-w-0 w-full space-y-1.5">
+              {[
+                ['Pay to', session.vpa, 'font-mono', 'vpa', 'Copy payee UPI ID'],
+                ['Payee name', session.payeeName, '', null, null],
+                ['Amount', `₹${session.amount}`, 'font-mono', 'amount', 'Copy exact amount'],
+                ['Reference', session.orderId, 'font-mono', 'ref', 'Copy payment reference'],
+              ].map(([lbl, val, mono, key, title]) => (
+                <div key={lbl as string} className="flex items-center gap-2 text-xs">
+                  <span className="w-20 shrink-0 text-slate-500">{lbl}</span>
+                  <span className={`min-w-0 truncate text-slate-900 ${mono}`}>{val}</span>
+                  {key && (
+                    <button
+                      onClick={() => copy(String(val), String(key))}
+                      className="shrink-0 rounded-md p-1 hover:bg-slate-200/70"
+                      title={String(title)}
+                    >
+                      {copied === key ? (
+                        <span className="text-[10px] font-bold text-emerald-700">copied</span>
+                      ) : (
+                        <Copy className="h-3.5 w-3.5 text-slate-500" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              ))}
+              <p className="pt-1 text-[11px] leading-snug text-slate-500">
+                {isMobile
+                  ? 'Opens your UPI app prefilled with these exact details.'
+                  : 'Scan with any UPI app on your phone (GPay/PhonePe/Paytm).'}
+                {' '}Gift cards are issued only after this payment is verified with the bank — links and clicks alone
+                never trigger issuance.
+              </p>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
+
+          <div
+            className={`mt-4 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${
+              phase === 'expired'
+                ? 'bg-rose-50 text-rose-700'
+                : phase === 'stalled'
+                ? 'bg-amber-50 text-amber-800'
+                : 'bg-white/70 text-slate-600'
+            }`}
+          >
+            {phase === 'verifying' || phase === 'awaiting' ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Waiting for bank confirmation… (re-checking every
+                {` ${POLL_INTERVAL_MS / 1000}s`})
+              </>
+            ) : phase === 'stalled' ? (
+              <>
+                Payment not yet found. We keep checking — already paid? It gets confirmed via the bank reference in
+                the UPI Direct admin tab, or contact support.
+              </>
+            ) : (
+              <>Session expired — could not verify this one. Start a new payment or contact support.</>
+            )}
+            {phase === 'stalled' && (
+              <button
+                onClick={checkNow}
+                className="rounded-lg border border-amber-200 bg-white px-2 py-1 font-bold text-amber-800 hover:bg-amber-50"
+              >
+                Check now
+              </button>
+            )}
+            {phase === 'expired' ? (
+              <button
+                onClick={handleClick}
+                className="rounded-lg bg-emerald-600 px-2.5 py-1.5 font-bold text-white hover:bg-emerald-700"
+              >
+                Start a new payment
+              </button>
+            ) : (
+              <button onClick={cancelSession} className="ml-auto text-slate-500 hover:text-slate-700">
+                Cancel
+              </button>
+             )}
+           </div>
+         </div>
+       )}
+     </div>
+   );
+ }
