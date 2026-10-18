@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FunctionsHttpError } from '@supabase/supabase-js';
 import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, ImageOff, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { inr, formatDateTime } from '@/lib/format';
@@ -141,35 +140,54 @@ export default function AdminPaymentsTab() {
   // the pre-flight guard stops the request — a shared/customer session
   // on the singleton is NEVER used as the admin's bearer (that silently
   // mailed a non-admin identity → 403 'Admins only' with a valid Bearer).
-  const resolveBearerHeaders = async (): Promise<Record<string, string> | null> => {
-    let token: string | undefined = authSession?.refreshToken ? undefined : authSession?.token;
+  const resolveAdminBearer = async (): Promise<{ token: string; via: 'refresh' | 'cache' } | null> => {
     const refreshToken = authSession?.refreshToken;
     if (refreshToken) {
       try {
         const { data } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
         const fresh = data.session?.access_token;
-        if (fresh) token = fresh;
+        if (fresh) return { token: fresh, via: 'refresh' };
       } catch {
-        token = authSession?.token;
+        /* refresh rejections fall through to the cached admin token */
       }
     }
-    return token ? { Authorization: `Bearer ${token}` } : null;
+    const cached = authSession?.token;
+    return cached ? { token: cached, via: 'cache' } : null;
   };
 
-  // SDK quirk: FunctionsHttpError has no .json() — parse the Response body
-  // off .context and surface the fn-level {error} message.
-  const fnBodyError = async (error: unknown): Promise<string | null> => {
-    if (!(error instanceof FunctionsHttpError)) return null;
-    try {
-      const payload: unknown = await (error.context as Response).json();
-      if (payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string') {
-        return (payload as { error: string }).error;
-      }
-      if (typeof payload === 'string' && payload.trim()) return payload;
-    } catch {
-      return null;
+  // Direct-transport debug (god-directed): makes the human's next console
+  // contact decisive. The token itself is never logged in full.
+  // TODO: REMOVE once the transport mystery is closed.
+  const adminFnDebug = (fn: string, r: { token: string; via: 'refresh' | 'cache' } | null) => {
+    console.log(
+      `[admin-fn-debug] fn:${fn} resolvedToken:${r ? 'present' : 'none'} ` +
+        `len:${r ? r.token.length : 'n/a'} tail:${r ? r.token.slice(-4) : 'n/a'} path:${r ? r.via : 'none'}`
+    );
+  };
+
+  // HTTP POST straight to the /functions/v1 endpoint — the SDK-level
+  // transport (supabase.functions.invoke) is bypassed so any remaining
+  // 401/403 is observable at the wire level.
+  const fnPost = async (
+    fn: string,
+    body: unknown
+  ): Promise<{ ok: boolean; json: Record<string, unknown> | null; status: number }> => {
+    const bearer = await resolveAdminBearer();
+    if (!bearer) {
+      return { ok: false, json: { error: 'Admin session expired — please sign in again and retry.' }, status: 0 };
     }
-    return null;
+    adminFnDebug(fn, bearer);
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${bearer.token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => null);
+    return { ok: res.ok, json, status: res.status };
   };
 
   const confirm = async (s: UpSession) => {
@@ -184,32 +202,20 @@ export default function AdminPaymentsTab() {
     }
     setConfirmingId(s.id);
     setMessage(null);
-    const bearerHeaders = await resolveBearerHeaders();
-    if (!bearerHeaders) {
-      setConfirmingId(null);
-      setMessage({ kind: 'err', text: 'Admin session expired — please sign in again and retry.' });
-      return;
-    }
-    const { data, error } = await supabase.functions.invoke(
-      'upi-manual-confirm',
-      {
-        body: {
-          payment_id: s.id,
-          order_id: s.order_id,
-          bank_ref: bankRef,
-          amount_rupees: Number(s.amount_paise) / 100,
-        },
-        headers: bearerHeaders,
-      }
-    );
+    const res = await fnPost('upi-manual-confirm', {
+      payment_id: s.id,
+      order_id: s.order_id,
+      bank_ref: bankRef,
+      amount_rupees: Number(s.amount_paise) / 100,
+    });
     setConfirmingId(null);
-    if (error) {
-      const bodyError = await fnBodyError(error);
-      setMessage({ kind: 'err', text: bodyError ?? error.message });
+    const json = res.json ?? {};
+    if (json && typeof json.error === 'string' && json.error) {
+      setMessage({ kind: 'err', text: json.error });
       return;
     }
-    if (data?.error) {
-      setMessage({ kind: 'err', text: data.error });
+    if (!res.ok) {
+      setMessage({ kind: 'err', text: `Confirmation failed (HTTP ${res.status || 'transport'})` });
       return;
     }
     setMessage({ kind: 'ok', text: `Confirmed ${s.order_id} against UTR ${bankRef}. Order recorded.` });
@@ -240,27 +246,15 @@ export default function AdminPaymentsTab() {
     }
     setRejecting(true);
     setRejectError(null);
-    const bearerHeaders = await resolveBearerHeaders();
-    if (!bearerHeaders) {
-      setRejecting(false);
-      setRejectError('Admin session expired — please sign in again and retry.');
-      return;
-    }
-    const { data, error } = await supabase.functions.invoke(
-      'upi-reject-payment',
-      {
-        body: { payment_id: rejectTarget.id, remark },
-        headers: bearerHeaders,
-      }
-    );
+    const res = await fnPost('upi-reject-payment', { payment_id: rejectTarget.id, remark });
     setRejecting(false);
-    if (error) {
-      const bodyError = await fnBodyError(error);
-      setRejectError(bodyError ?? error.message);
+    const json = res.json ?? {};
+    if (json && typeof json.error === 'string' && json.error) {
+      setRejectError(json.error);
       return;
     }
-    if (data?.error) {
-      setRejectError(data.error);
+    if (!res.ok) {
+      setRejectError(`Rejection failed (HTTP ${res.status || 'transport'})`);
       return;
     }
     setMessage({ kind: 'ok', text: `Rejected ${rejectTarget.order_id}: ${remark}` });
