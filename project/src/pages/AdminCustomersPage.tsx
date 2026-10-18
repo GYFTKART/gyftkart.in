@@ -180,27 +180,42 @@ export default function AdminCustomersPage() {
     const targetId = blockModalCustomer.id;
 
     try {
-      // 1. Try atomic RPC if installed
+      // 1. Try atomic toggle_customer_block RPC
       const { error: rpcError } = await supabase.rpc(
-        'admin_toggle_customer_block',
+        'toggle_customer_block',
         {
           target_user_id: targetId,
-          new_blocked: newBlockedState,
+          should_block: newBlockedState,
+          reason: blockReason || null,
         }
       );
 
-      // 2. If RPC not available, fallback to direct profiles table update
+      // 2. If toggle_customer_block error, try admin_toggle_customer_block fallback
       if (rpcError) {
-        console.warn('RPC admin_toggle_customer_block error, falling back to profiles update:', rpcError.message);
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({
-            is_blocked: newBlockedState,
-            status: newBlockedState ? 'inactive' : 'active',
-          })
-          .eq('id', targetId);
+        console.warn('RPC toggle_customer_block error, trying admin_toggle_customer_block:', rpcError.message);
+        const { error: fallbackRpcError } = await supabase.rpc(
+          'admin_toggle_customer_block',
+          {
+            target_user_id: targetId,
+            new_blocked: newBlockedState,
+          }
+        );
 
-        if (updateError) throw updateError;
+        // 3. Fallback to direct profiles table update
+        if (fallbackRpcError) {
+          console.warn('RPC fallback error, updating profiles directly:', fallbackRpcError.message);
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({
+              is_blocked: newBlockedState,
+              status: newBlockedState ? 'inactive' : 'active',
+              blocked_at: newBlockedState ? new Date().toISOString() : null,
+              block_reason: newBlockedState ? (blockReason || null) : null,
+            })
+            .eq('id', targetId);
+
+          if (updateError) throw updateError;
+        }
       }
 
       // Update local state immediately
@@ -383,6 +398,7 @@ export default function AdminCustomersPage() {
           .update({
             is_blocked: newBlockedState,
             status: newBlockedState ? 'inactive' : 'active',
+            blocked_at: newBlockedState ? nowIso : null,
           })
           .in('id', targetIds);
 
