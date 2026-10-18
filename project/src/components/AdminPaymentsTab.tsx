@@ -1873,11 +1873,11 @@ export default function AdminPaymentsTab() {
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-100 text-amber-700">
-                  <RotateCcw className="h-5 w-5" />
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
+                  <CheckCircle2 className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Revert Rejection</h3>
+                  <h3 className="text-sm font-bold text-slate-900">Approve Previously Rejected Request</h3>
                   <p className="text-[11px] text-slate-500">
                     Re-open request and credit customer or fulfill order
                   </p>
@@ -1926,12 +1926,12 @@ export default function AdminPaymentsTab() {
               )}
             </div>
 
-            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 p-2.5 text-[11px] text-amber-900 flex items-start gap-2">
-              <RotateCcw className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/80 p-2.5 text-[11px] text-emerald-900 flex items-start gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
               <span>
                 {reopenTarget.category === 'TOPUP'
-                  ? `Reverting this rejection will approve the top-up and immediately credit ${inr(Number(reopenTarget.amount_paise) / 100)} to the customer's wallet balance.`
-                  : `Reverting this rejection will approve the voucher order and fulfill the gift cards for the customer.`}
+                  ? `Approving this top-up will immediately credit ${inr(Number(reopenTarget.amount_paise) / 100)} to the customer's wallet balance and record a ledger transaction.`
+                  : `Approving this voucher order will mark the session as CONFIRMED and fulfill gift cards for the customer.`}
               </span>
             </div>
 
@@ -1949,7 +1949,7 @@ export default function AdminPaymentsTab() {
                 maxLength={500}
                 placeholder="Approved after review"
                 disabled={reopening}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-amber-500"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
               />
             </div>
 
@@ -1970,17 +1970,17 @@ export default function AdminPaymentsTab() {
                 type="button"
                 onClick={() => void submitReopen()}
                 disabled={reopening}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition-colors disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors disabled:opacity-60"
               >
                 {reopening ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Reverting...
+                    Approving...
                   </>
                 ) : (
                   <>
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    Confirm Revert
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Confirm Approval
                   </>
                 )}
               </button>
