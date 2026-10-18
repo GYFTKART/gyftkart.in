@@ -843,11 +843,11 @@ export default function AdminPaymentsTab() {
         <p className="mt-4 text-xs text-slate-500">{sessions.length === 0 ? 'No proof-bearing sessions yet.' : 'No sessions match these filters.'}</p>
       ) : (
         <>
-          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[1180px] text-left text-xs">
+          <div className="mt-4 overflow-x-auto w-full rounded-xl border border-slate-200 px-4 pb-4 pt-3">
+            <table className="w-full min-w-[1050px] text-left text-xs table-fixed">
               <thead>
                 <tr className="bg-slate-50">
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400 whitespace-nowrap">
+                  <th className="w-[80px] shrink-0 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400 whitespace-nowrap rounded-l-lg">
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -859,13 +859,13 @@ export default function AdminPaymentsTab() {
                       <span>S. No.</span>
                     </div>
                   </th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">User / Customer</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Order / Item</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">UTR &amp; Proof</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400 min-w-[170px] w-[180px] text-right">Actions</th>
+                  <th className="w-[18%] px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">User / Customer</th>
+                  <th className="w-[22%] px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
+                  <th className="w-[12%] px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Order / Item</th>
+                  <th className="w-[8%] px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400 text-left">Amount</th>
+                  <th className="w-[14%] px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
+                  <th className="w-[12%] px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">UTR &amp; Proof</th>
+                  <th className="w-[14%] min-w-[160px] px-3 py-2 pr-4 text-[10px] font-bold uppercase tracking-wide text-slate-400 text-right md:text-center rounded-r-lg">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -875,7 +875,7 @@ export default function AdminPaymentsTab() {
                   const displayIndex = filtered.length - ((currentPage - 1) * pageSize + index);
                   return (
                     <tr key={s.id} className={`border-t border-slate-100 align-top ${selectedIds.has(s.id) ? 'bg-emerald-50/40' : ''}`}>
-                      <td className="px-3 py-3 whitespace-nowrap text-slate-500">
+                      <td className="w-[80px] shrink-0 px-3 py-3 whitespace-nowrap text-slate-500">
                         <div className="flex items-center gap-2">
                           <input
                             type="checkbox"
@@ -889,7 +889,7 @@ export default function AdminPaymentsTab() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 min-w-[10rem]">
+                      <td className="w-[18%] px-3 py-3">
                         {buyer.name ? (
                           <p className="truncate font-semibold text-slate-600">{buyer.name}</p>
                         ) : (
@@ -897,8 +897,8 @@ export default function AdminPaymentsTab() {
                         )}
                         <p className="break-all text-[11px] text-slate-500">{buyer.email || '—'}</p>
                       </td>
-                      <td className="px-3 py-3">
-                        <p className="whitespace-nowrap font-bold text-slate-900">{displayRef(s)}</p>
+                      <td className="w-[22%] px-3 py-3">
+                        <p className="truncate font-bold text-slate-900" title={displayRef(s)}>{displayRef(s)}</p>
                         <p className="mt-0.5 flex flex-wrap items-center gap-1">
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -921,9 +921,9 @@ export default function AdminPaymentsTab() {
                           </span>
                         </p>
                       </td>
-                      <td className="px-3 py-3 min-w-[12rem]">
+                      <td className="w-[12%] px-3 py-3">
                         {s.category === 'TOPUP' ? (
-                          <p className="whitespace-nowrap font-mono text-[11px] font-semibold text-slate-900" title={s.order_id}>
+                          <p className="truncate font-mono text-[11px] font-semibold text-slate-900" title={s.order_id}>
                             {topupRef(s)}
                           </p>
                         ) : items.length === 0 ? (
@@ -936,17 +936,17 @@ export default function AdminPaymentsTab() {
                         )}
                         {!s.order_id.startsWith('UPI-') && (
                           <p
-                            className="mt-0.5 whitespace-nowrap font-mono text-[11px] font-semibold text-slate-900"
+                            className="mt-0.5 truncate font-mono text-[11px] font-semibold text-slate-900"
                             title={s.order_id}
                           >
                             Order #{shortOrderId(s.order_id)}
                           </p>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">
+                      <td className="w-[8%] whitespace-nowrap px-3 py-3 font-semibold text-slate-900 text-left">
                         {inr(Number(s.amount_paise) / 100)}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="w-[14%] px-3 py-3">
                         <p className="text-[11px] text-slate-500">
                           <span className="font-semibold text-slate-600">Created</span>{' '}
                           <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.created_at)}</span>
@@ -958,7 +958,7 @@ export default function AdminPaymentsTab() {
                           </p>
                         )}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="w-[12%] px-3 py-3">
                         {s.customer_utr ? (
                           <p className="break-all font-mono text-[11px] font-semibold text-slate-900">{s.customer_utr}</p>
                         ) : (
@@ -982,27 +982,29 @@ export default function AdminPaymentsTab() {
                           <p className="mt-1 text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
                         )}
                       </td>
-                      <td className="px-3 py-3 min-w-[170px] w-[180px] text-right">
+                      <td className="w-[14%] min-w-[160px] px-3 py-3 pr-4 text-right md:text-center">
                         {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
-                          <div className="flex items-center justify-end gap-1.5 shrink-0 whitespace-nowrap">
+                          <div className="flex items-center justify-end md:justify-center gap-2 pr-2 shrink-0 whitespace-nowrap">
                             <button
                               onClick={() => setConfirmTarget(s)}
                               disabled={confirmingId === s.id || !s.customer_utr}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs whitespace-nowrap font-medium text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" />
                               Confirm
                             </button>
                             <button
                               onClick={() => openReject(s)}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-rose-700"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-xs whitespace-nowrap font-medium text-white hover:bg-rose-700"
                             >
                               <XCircle className="h-3.5 w-3.5" />
                               Reject
                             </button>
                           </div>
                         ) : (
-                          <p className="whitespace-nowrap text-[11px] text-slate-400">No action</p>
+                          <div className="flex items-center justify-end md:justify-center pr-2">
+                            <span className="whitespace-nowrap text-[11px] text-slate-400">No action</span>
+                          </div>
                         )}
                       </td>
                     </tr>
