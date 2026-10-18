@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, ImageOff, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { inr, formatDateTime } from '@/lib/format';
 
@@ -13,6 +13,7 @@ type UpSession = {
   verification_level: string | null;
   buyer: { name?: string; email?: string } | null;
   customer_utr: string | null;
+  proof_path: string | null;
   admin_remark: string | null;
   created_at: string;
   expires_at: string;
@@ -76,6 +77,9 @@ export default function AdminPaymentsTab() {
   const [rejectRemark, setRejectRemark] = useState('');
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState(false);
+  const [proofPreview, setProofPreview] = useState<{ url: string; path: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -129,6 +133,22 @@ export default function AdminPaymentsTab() {
     setRejectTarget(s);
     setRejectRemark('');
     setRejectError(null);
+  };
+
+  const openProofPreview = async (s: UpSession) => {
+    if (!s.proof_path) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setProofPreview(null);
+    const { data, error } = await supabase.storage
+      .from('upi-payment-proofs')
+      .createSignedUrl(s.proof_path, 60);
+    setPreviewLoading(false);
+    if (error || !data?.signedUrl) {
+      setPreviewError(error?.message ?? 'Could not open the screenshot.');
+      return;
+    }
+    setProofPreview({ url: data.signedUrl, path: s.proof_path });
   };
 
   const submitReject = async () => {
@@ -397,11 +417,12 @@ export default function AdminPaymentsTab() {
       ) : (
         <>
           <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[880px] text-left text-xs">
+            <table className="w-full min-w-[960px] text-left text-xs">
               <thead>
                 <tr className="bg-slate-50">
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">User / Customer</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
                 </tr>
@@ -432,18 +453,9 @@ export default function AdminPaymentsTab() {
                             {s.verification_level === 'MANUAL' ? ' · manual' : s.verification_level === 'GMAIL' ? ' · observer' : ''}
                           </span>
                         </p>
-                        {s.customer_utr ? (
-                          <p className="mt-0.5 break-all text-[11px] text-slate-500">customer UTR {s.customer_utr}</p>
-                        ) : null}
-                        {s.bank_ref ? (
-                          <p className="mt-0.5 break-all text-[11px] text-emerald-700">verified UTR {s.bank_ref}</p>
-                        ) : null}
-                        <p className="mt-0.5 text-[11px] text-slate-500">
-                          {inr(Number(s.amount_paise) / 100)}
-                        </p>
-                        {s.admin_remark && (
-                          <p className="mt-0.5 text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
-                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">
+                        {inr(Number(s.amount_paise) / 100)}
                       </td>
                       <td className="px-3 py-3">
                         <p className="text-[11px] text-slate-500">
@@ -458,39 +470,75 @@ export default function AdminPaymentsTab() {
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
-                          <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-                            <input
-                              value={utrDrafts[s.id] ?? ''}
-                              onChange={(e) =>
-                                setUtrDrafts((d) => ({ ...d, [s.id]: e.target.value }))
-                              }
-                              placeholder="Bank ref / UTR"
-                              className="w-36 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
-                            />
+                        <div className="flex flex-wrap items-start justify-end gap-2 whitespace-nowrap">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">UTR</p>
+                            {s.customer_utr ? (
+                              <p className="break-all font-mono text-[11px] font-semibold text-slate-900">{s.customer_utr}</p>
+                            ) : (
+                              <p className="text-[11px] text-slate-400">—</p>
+                            )}
+                            {s.bank_ref && (
+                              <p className="break-all text-[11px] text-emerald-700">verified {s.bank_ref}</p>
+                            )}
                             <button
-                              onClick={() => void confirm(s)}
-                              disabled={confirmingId === s.id}
-                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                              onClick={() => void openProofPreview(s)}
+                              disabled={!s.proof_path || previewLoading}
+                              title={s.proof_path ? 'View screenshot' : 'No screenshot'}
+                              className={`mt-1 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold ${
+                                s.proof_path
+                                  ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                                  : 'border-slate-100 text-slate-400'
+                              } disabled:cursor-not-allowed disabled:opacity-70`}
                             >
-                              {confirmingId === s.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              {previewLoading ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : s.proof_path ? (
+                                <Eye className="h-3 w-3" />
                               ) : (
-                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <ImageOff className="h-3 w-3" />
                               )}
-                              Confirm
+                              {s.proof_path ? 'View screenshot' : 'No screenshot'}
                             </button>
-                            <button
-                              onClick={() => openReject(s)}
-                              className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
-                            >
-                              <XCircle className="h-3.5 w-3.5" />
-                              Reject
-                            </button>
+                            {!s.proof_path && <p className="mt-0.5 text-[10px] text-slate-400">none uploaded</p>}
                           </div>
-                        ) : (
-                          <p className="whitespace-nowrap text-[11px] text-slate-400">No action</p>
-                        )}
+                          {s.admin_remark && (
+                            <p className="w-full text-right text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
+                          )}
+                          {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
+                            <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+                              <input
+                                value={utrDrafts[s.id] ?? ''}
+                                onChange={(e) =>
+                                  setUtrDrafts((d) => ({ ...d, [s.id]: e.target.value }))
+                                }
+                                placeholder="Bank ref / UTR"
+                                className="w-36 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
+                              />
+                              <button
+                                onClick={() => void confirm(s)}
+                                disabled={confirmingId === s.id}
+                                className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                              >
+                                {confirmingId === s.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                )}
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => openReject(s)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                                Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="whitespace-nowrap text-[11px] text-slate-400">No action</p>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -555,6 +603,59 @@ export default function AdminPaymentsTab() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Screenshot preview modal (signed URL, valid 60s) */}
+      {previewError && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4" onClick={() => setPreviewError(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-center shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-xs font-semibold text-rose-600">{previewError}</p>
+            <button
+              onClick={() => setPreviewError(null)}
+              className="mt-3 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+      {(proofPreview || previewLoading) && !previewError && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4"
+          onClick={() => !previewLoading && setProofPreview(null)}
+        >
+          <div className="max-h-[85vh] w-full max-w-xl overflow-auto rounded-2xl bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-xs font-bold text-slate-900">{proofPreview?.path}</p>
+              <button
+                onClick={() => setProofPreview(null)}
+                disabled={previewLoading}
+                className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100"
+              >
+                Close
+              </button>
+            </div>
+            {previewLoading ? (
+              <div className="mt-4 grid place-items-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <>
+                <img src={proofPreview!.url} alt="Payment proof screenshot" className="mx-auto max-h-[70vh] rounded-xl" />
+                <p className="mt-2 text-center">
+                  <a
+                    href={proofPreview!.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-semibold text-brand-700 hover:text-brand-800"
+                  >
+                    open in new tab
+                  </a>
+                </p>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Reject modal */}

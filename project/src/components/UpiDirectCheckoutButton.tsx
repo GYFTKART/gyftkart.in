@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, FileImage, Loader2, Smartphone, Wallet, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Copy, FileImage, Loader2, Smartphone, ShieldCheck, Wallet, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
@@ -49,6 +50,7 @@ export default function UpiDirectCheckoutButton({
   className,
 }: UpiDirectProps) {
   const { session: authSession } = useAuth();
+  const navigate = useNavigate();
   const [phase, setPhase] = useState<'idle' | 'creating' | 'awaiting' | 'stalled' | 'expired' | 'verifying'>('idle');
   const [session, setSession] = useState<CreateUpiResponse | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -170,6 +172,19 @@ export default function UpiDirectCheckoutButton({
     setAttempts(0);
     resetProofState();
     onCancel?.();
+  };
+
+  const dismissOutcome = () => {
+    if (pollRef.current) window.clearTimeout(pollRef.current);
+    setSession(null);
+    setPhase('idle');
+    setAttempts(0);
+    resetProofState();
+  };
+
+  const viewOrders = () => {
+    dismissOutcome();
+    navigate('/orders');
   };
 
   const checkNow = () => {
@@ -306,7 +321,49 @@ export default function UpiDirectCheckoutButton({
         </button>
       )}
 
-      {session && phase !== 'idle' && (
+      {session && phase !== 'idle' && proofOk && (
+        <div className="w-full max-w-full min-w-0 overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:p-5">
+          <div className="rounded-xl border border-emerald-100 bg-white p-4">
+            <p className="flex items-center gap-2 text-sm font-bold text-emerald-700">
+              <ShieldCheck className="h-4 w-4 shrink-0" /> Order submitted — under review
+            </p>
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+              Payment proof submitted successfully! Your order is placed and under manual verification. You will
+              receive confirmation / gift card delivery within 15–30 minutes once verified.
+            </p>
+            <p className="mt-2 text-xs text-slate-600">
+              Reported UTR: <span className="font-mono font-bold tracking-wider text-slate-900">{utr}</span>
+            </p>
+            <p className="mt-2 text-[11px] leading-snug text-slate-500">
+              <span className="font-semibold text-slate-600">Wrong details?</span> Details on a submitted order can't
+              be edited — this payment reference is now protected against changes on our side. If something looks
+              wrong, cancel this payment and start a fresh one instead of trying to correct it here.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                onClick={viewOrders}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700"
+              >
+                View Orders
+              </button>
+              <button
+                onClick={dismissOutcome}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-2.5 text-xs font-bold text-white hover:shadow-glow transition-shadow"
+              >
+                Continue Shopping
+              </button>
+              <button
+                onClick={cancelSession}
+                className="rounded-lg px-2 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50"
+              >
+                Cancel &amp; start a new payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {session && phase !== 'idle' && !proofOk && (
         <div className="w-full max-w-full min-w-0 overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:p-5">
           <div className="flex flex-col items-center gap-4">
             {isMobile ? (
