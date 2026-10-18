@@ -260,7 +260,7 @@ export default function OrdersPage() {
     const [ordersRes, purchasesRes, upiRes] = await Promise.all([
       supabase
         .from('orders')
-        .select('id, total_amount, status, items, created_at, razorpay_order_id, razorpay_payment_id, upi_order_id, upi_payment_id, upi_utr')
+        .select('id, user_id, total_amount, status, items, created_at, razorpay_order_id, razorpay_payment_id')
         .eq('user_id', session.id)
         .order('created_at', { ascending: false })
         .limit(50),

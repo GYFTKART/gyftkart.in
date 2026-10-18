@@ -713,9 +713,6 @@ export default function AdminPaymentsTab() {
         user_id: s.user_id,
         total_amount: totalRupees,
         status: 'successful',
-        upi_order_id: s.order_id,
-        upi_payment_id: s.id,
-        upi_utr: s.bank_ref || s.customer_utr || null,
         items: s.items,
       });
 
