@@ -1,3 +1,17 @@
+export interface SEOProps {
+  title?: string;
+  description?: string;
+  keywords?: string;
+  canonical?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  ogType?: 'website' | 'article' | 'product';
+  twitterCard?: 'summary' | 'summary_large_image';
+  noindex?: boolean;
+  schema?: Record<string, unknown> | Array<Record<string, unknown>>;
+}
+
 /**
  * Builds standard Schema.org Product & AggregateOffer JSON-LD markup for a brand voucher.
  */

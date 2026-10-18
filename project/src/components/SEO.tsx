@@ -1,18 +1,5 @@
 import { useEffect } from 'react';
-
-export interface SEOProps {
-  title?: string;
-  description?: string;
-  keywords?: string;
-  canonical?: string;
-  ogTitle?: string;
-  ogDescription?: string;
-  ogImage?: string;
-  ogType?: 'website' | 'article' | 'product';
-  twitterCard?: 'summary' | 'summary_large_image';
-  noindex?: boolean;
-  schema?: Record<string, unknown> | Array<Record<string, unknown>>;
-}
+import type { SEOProps } from '@/lib/seo';
 
 const DEFAULT_TITLE = "GyftKart | India's Leading Digital E-Gift Cards & Instant UPI Vouchers";
 const DEFAULT_DESCRIPTION =
@@ -130,5 +117,3 @@ export function SEO({
 
   return null;
 }
-
-export default SEO;
