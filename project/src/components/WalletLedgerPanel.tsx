@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Loader2, RefreshCw, Wallet } from 'lucide-react';
+import {
+  ArrowDownLeft,
+  ArrowLeftRight,
+  ArrowUpRight,
+  Loader2,
+  RefreshCw,
+  Search,
+  Wallet,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/CustomerAuthContext';
 import { inr, inrDecimal, formatDateTime } from '@/lib/format';
@@ -64,6 +72,47 @@ export default function WalletLedgerPanel() {
   const [topupsLoading, setTopupsLoading] = useState(false);
   // Dual-tab toggle: which of the two wallet tables renders.
   const [walletTab, setWalletTab] = useState<'topups' | 'ledger'>('topups');
+
+  // Search + status filter + pagination (shared across both tabs; page
+  // resets whenever the tab, page size, or status filter changes).
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'pending' | 'rejected'>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setPage(1);
+  }, [walletTab, pageSize, statusFilter]);
+
+  const q = searchQuery.trim().toLowerCase();
+
+  const matchesSearch = (t: TopupRow | LedgerRow) => {
+    if (!q) return true;
+    if ('customer_utr' in t) {
+      return topupRef(t).toLowerCase().includes(q) || (t.customer_utr ?? '').toLowerCase().includes(q);
+    }
+    return (t.order_id ?? t.reference_id ?? '').toLowerCase().includes(q);
+  };
+
+  const matchesStatus = (t: TopupRow | LedgerRow) => {
+    if (statusFilter === 'all') return true;
+    if ('customer_utr' in t) {
+      const label = topupStatus(t).label;
+      if (statusFilter === 'confirmed') return label === 'Confirmed';
+      if (statusFilter === 'rejected') return label === 'Rejected';
+      return label === 'Pending Verification' || label === 'Awaiting your payment';
+    }
+    const credit = t.type === 'CREDIT';
+    if (statusFilter === 'confirmed') return credit;
+    if (statusFilter === 'rejected') return !credit;
+    return false;
+  };
+
+  const activeData = (walletTab === 'topups' ? topups : ledger) ?? [];
+  const filtered = activeData.filter((t) => matchesSearch(t) && matchesStatus(t));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageStart = (page - 1) * pageSize;
+  const paginated = filtered.slice(pageStart, pageStart + pageSize);
 
   // Remaining monthly top-up quota in paise (the RPC applies rollover at
   // credit time; mirror the same arithmetic for the display).
@@ -279,17 +328,53 @@ export default function WalletLedgerPanel() {
               Wallet Transaction History
             </button>
           </div>
-          <button
-            onClick={() => void (walletTab === 'topups' ? loadTopups() : loadLedger())}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            {(walletTab === 'topups' ? topupsLoading : ledgerLoading) ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            Refresh
-          </button>
+          <div className="flex items-center gap-2 flex-1 max-w-xl">
+            <div className="relative flex items-center w-full">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search Order ID, UTR…"
+                className="w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 py-1.5 text-[11px] outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400 transition-colors"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as 'all' | 'confirmed' | 'pending' | 'rejected')
+              }
+              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400"
+            >
+              <option value="all">All Status</option>
+              <option value="confirmed">Success / Confirmed</option>
+              <option value="pending">Pending Verification</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400"
+            >
+              {[10, 25, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n} per page
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => void (walletTab === 'topups' ? loadTopups() : loadLedger())}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              {(walletTab === 'topups' ? topupsLoading : ledgerLoading) ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              Refresh
+            </button>
+          </div>
         </div>
 
         {walletTab === 'topups' ? (
@@ -299,111 +384,236 @@ export default function WalletLedgerPanel() {
                 No top-up requests yet — Add Balance to start.
               </p>
             ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-xs">
-              <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Sr No.</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Order ID</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">UTR</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(topups ?? []).map((t, i) => {
-                  const st = topupStatus(t);
-                  return (
-                    <tr key={t.id} className="border-t border-slate-100">
-                      <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">{i + 1}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] font-semibold text-slate-900">
-                        {topupRef(t)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900">
-                        {inr(Number(t.amount_paise) / 100)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">{formatDateTime(t.created_at)}</td>
-                      <td className="break-all px-3 py-2.5 font-mono text-[11px] text-slate-600">
-                        {t.customer_utr ?? '—'}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${st.cls}`}>
-                          {st.label}
-                        </span>
-                        {t.status === 'REJECTED' && t.admin_remark && (
-                          <p className="mt-0.5 text-[10px] font-semibold text-rose-600">Reason: {t.admin_remark}</p>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+              <>
+                {filtered.length === 0 && (topups ?? []).length > 0 ? (
+                  <p className="mt-6 text-sm text-slate-500">No matching results</p>
+                ) : (
+                  <>
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="w-full min-w-[640px] text-left text-xs">
+                        <thead>
+                          <tr className="bg-slate-50">
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Sr No.
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Order ID
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Amount
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Date &amp; Time
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              UTR
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Status
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginated.map((t, i) => {
+                            const tr = t as TopupRow;
+                            const st = topupStatus(tr);
+                            return (
+                              <tr key={tr.id} className="border-t border-slate-100">
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
+                                  {pageStart + i + 1}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] font-semibold text-slate-900">
+                                  {topupRef(tr)}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900">
+                                  {inr(Number(tr.amount_paise) / 100)}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">
+                                  {formatDateTime(tr.created_at)}
+                                </td>
+                                <td className="break-all px-3 py-2.5 font-mono text-[11px] text-slate-600">
+                                  {tr.customer_utr ?? '—'}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${st.cls}`}>
+                                    {st.label}
+                                  </span>
+                                  {tr.status === 'REJECTED' && tr.admin_remark && (
+                                    <p className="mt-0.5 text-[10px] font-semibold text-rose-600">
+                                      Reason: {tr.admin_remark}
+                                    </p>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="mt-4 border-t border-slate-100 pt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500">
+                      <span>
+                        Showing {pageStart + 1} to{' '}
+                        {Math.min(pageStart + pageSize, filtered.length)} of {filtered.length} results
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setPage((p) => p - 1)}
+                          disabled={page === 1}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                        >
+                          ‹ Previous
+                        </button>
+                        {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
+                          <button
+                            key={p}
+                            onClick={() => setPage(p)}
+                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition-colors ${
+                              p === page
+                                ? 'bg-brand-600 border-brand-600 text-white'
+                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setPage((p) => p + 1)}
+                          disabled={page === pageCount}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                        >
+                          Next ›
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
             )}
           </>
         ) : (
           <>
             {ledger !== null && ledger.length === 0 ? (
-          <p className="mt-6 text-sm text-slate-500">
-            No wallet activity yet — add balance to get started.
-          </p>
-        ) : (
-          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-100">
-            <table className="w-full min-w-[680px] text-left text-xs">
-              <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Type</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Category</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(ledger ?? []).map((t) => {
-                  const amountRs = Number(t.amount) / 100;
-                  const credit = t.type === 'CREDIT';
-                  return (
-                    <tr key={t.id} className="border-t border-slate-100">
-                      <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">{formatDateTime(t.created_at)}</td>
-                      <td className="px-3 py-2.5">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            credit ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                          }`}
+              <p className="mt-6 text-sm text-slate-500">
+                No wallet activity yet — add balance to get started.
+              </p>
+            ) : (
+              <>
+                {filtered.length === 0 && (ledger ?? []).length > 0 ? (
+                  <p className="mt-6 text-sm text-slate-500">No matching results</p>
+                ) : (
+                  <>
+                    <div className="mt-4 overflow-x-auto rounded-xl border border-slate-100">
+                      <table className="w-full min-w-[680px] text-left text-xs">
+                        <thead>
+                          <tr className="bg-slate-50">
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Sr No.
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Date
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Type
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Category
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Amount
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Order ID / Reference
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Balance
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginated.map((t, i) => {
+                            const tl = t as LedgerRow;
+                            const amountRs = Number(tl.amount) / 100;
+                            const credit = tl.type === 'CREDIT';
+                            return (
+                              <tr key={tl.id} className="border-t border-slate-100">
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
+                                  {pageStart + i + 1}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">
+                                  {formatDateTime(tl.created_at)}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      credit ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                                    }`}
+                                  >
+                                    {credit ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+                                    {tl.type}
+                                  </span>
+                                </td>
+                                <td className="flex items-center gap-1 whitespace-nowrap px-3 py-2.5 text-slate-600">
+                                  <ArrowLeftRight className="h-3 w-3 text-slate-300" />
+                                  {categoryLabel[tl.category] ?? tl.category}
+                                </td>
+                                <td
+                                  className={`whitespace-nowrap px-3 py-2.5 font-semibold ${
+                                    credit ? 'text-emerald-700' : 'text-rose-700'
+                                  }`}
+                                >
+                                  {credit ? '+' : '−'}{inr(amountRs)}
+                                </td>
+                                <td className="break-all px-3 py-2.5 font-mono text-[11px] text-slate-500">
+                                  {tl.order_id ?? tl.reference_id ?? '—'}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900">
+                                  {inr(Number(tl.balance_after) / 100)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="mt-4 border-t border-slate-100 pt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500">
+                      <span>
+                        Showing {pageStart + 1} to{' '}
+                        {Math.min(pageStart + pageSize, filtered.length)} of {filtered.length} results
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setPage((p) => p - 1)}
+                          disabled={page === 1}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
                         >
-                          {credit ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
-                          {t.type}
-                        </span>
-                      </td>
-                      <td className="flex items-center gap-1 whitespace-nowrap px-3 py-2.5 text-slate-600">
-                        <ArrowLeftRight className="h-3 w-3 text-slate-300" />
-                        {categoryLabel[t.category] ?? t.category}
-                      </td>
-                      <td
-                        className={`whitespace-nowrap px-3 py-2.5 font-semibold ${
-                          credit ? 'text-emerald-700' : 'text-rose-700'
-                        }`}
-                      >
-                        {credit ? '+' : '−'}
-                        {inr(amountRs)}
-                      </td>
-                      <td className="break-all px-3 py-2.5 font-mono text-[11px] text-slate-500">
-                        {t.order_id ?? t.reference_id ?? '—'}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900">
-                        {inr(Number(t.balance_after) / 100)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                          ‹ Previous
+                        </button>
+                        {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
+                          <button
+                            key={p}
+                            onClick={() => setPage(p)}
+                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition-colors ${
+                              p === page
+                                ? 'bg-brand-600 border-brand-600 text-white'
+                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setPage((p) => p + 1)}
+                          disabled={page === pageCount}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                        >
+                          Next ›
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
       </div>
