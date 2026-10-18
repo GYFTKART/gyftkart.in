@@ -18,6 +18,7 @@ import CartPage from '@/pages/CartPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
+import AdminUpiDirectPage from '@/pages/AdminUpiDirectPage';
 import ProfilePage from './pages/ProfilePage';
 import OrdersPage from '@/pages/OrdersPage';
 import ContactUs from '@/pages/ContactUs';
@@ -339,6 +340,17 @@ export default function App() {
                     </AdminAuthProvider>
                   }
                 />
+                <Route
+                  path="/admin/upi-direct"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminUpiDirectPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route path="/admin/payments" element={<Navigate to="/admin/upi-direct" replace />} />
 
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>

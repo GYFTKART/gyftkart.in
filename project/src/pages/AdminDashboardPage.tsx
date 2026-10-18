@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   LayoutDashboard,
-  LogOut,
-  ShoppingBag,
   Building2,
   Users,
   TrendingUp,
@@ -17,20 +15,17 @@ import {
   Clock,
   Search,
   X,
-  ExternalLink,
   Sparkles,
   Eye,
-  Tag,
-  Banknote,
   Wallet,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/components/Toast';
 import { inr, inrDecimal, formatDateTime } from '@/lib/format';
+import { AdminTopBar, AdminNavTabs, type AdminTabId } from '@/components/AdminHeader';
 import BrandManager from '@/components/BrandManager';
 import CompanyLedgerTab from '@/components/CompanyLedgerTab';
-import AdminPaymentsTab from '@/components/AdminPaymentsTab';
 import CustomerLedgerModal, { type LedgerCustomer } from '@/components/CustomerLedgerModal';
 import type { CompanyLedgerEntry } from '@/lib/types';
 
@@ -76,24 +71,47 @@ type Profile = {
 
 type PurchaseStat = { orders: number; spent: number; lastOrder: string; name: string };
 
-type Tab = 'overview' | 'sales' | 'inquiries' | 'brands' | 'customers' | 'ledger' | 'payments';
-
-const tabs: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'sales', label: 'Gift Card Sales', icon: ShoppingBag },
-  { id: 'inquiries', label: 'Corporate Inquiries', icon: Building2 },
-  { id: 'brands', label: 'Manage Brands', icon: Tag },
-  { id: 'customers', label: 'Customers', icon: Users },
-  { id: 'ledger', label: 'Company Ledger', icon: Banknote },
-  { id: 'payments', label: 'UPI Direct', icon: Wallet },
-];
+type Tab = 'overview' | 'sales' | 'inquiries' | 'brands' | 'customers' | 'ledger';
 
 export default function AdminDashboardPage() {
-  const { admin, logout } = useAdminAuth();
+  const { admin } = useAdminAuth();
   const { push } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get('tab');
+    if (t && ['sales', 'inquiries', 'brands', 'customers', 'ledger'].includes(t)) {
+      return t as Tab;
+    }
+    return 'overview';
+  });
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'payments') {
+      navigate('/admin/upi-direct', { replace: true });
+      return;
+    }
+    if (t && ['sales', 'inquiries', 'brands', 'customers', 'ledger'].includes(t)) {
+      setTab(t as Tab);
+    } else if (!t) {
+      setTab('overview');
+    }
+  }, [searchParams, navigate]);
+
+  const handleTabChange = (newTab: AdminTabId) => {
+    if (newTab === 'payments') {
+      navigate('/admin/upi-direct');
+      return;
+    }
+    setTab(newTab as Tab);
+    if (newTab === 'overview') {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab: newTab }, { replace: true });
+    }
+  };
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -276,12 +294,6 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    push('Signed out of admin console', 'info');
-    navigate('/admin', { replace: true });
-  };
-
   if (!admin) return null;
 
   const statusBadge = (status: string) => {
@@ -296,42 +308,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Top bar */}
-      <header className="sticky top-0 z-40 glass border-b border-slate-200/70">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="grid place-items-center h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glow-sm">
-              <LayoutDashboard className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="font-display text-lg font-extrabold text-slate-900 leading-none">
-                GyftKart <span className="text-gradient">Admin</span>
-              </p>
-              <p className="text-[11px] text-slate-500">Signed in as {admin.email}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className="hidden md:inline-flex items-center rounded-full bg-slate-100 px-3 py-2 text-[11px] font-medium text-slate-500"
-              title="Currently signed-in admin identity"
-            >
-              Signed in: <span className="font-mono text-slate-700">{admin.email || '—'}</span>
-            </span>
-            <Link
-              to="/"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:border-brand-300 hover:text-brand-700 transition-colors"
-            >
-              <ExternalLink className="h-3.5 w-3.5" /> View site
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-100 transition-colors"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+      <AdminTopBar />
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         {/* Stat cards */}
@@ -367,20 +344,8 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Tabs */}
-        <div className="mt-8 flex items-center gap-2 border-b border-slate-200 overflow-x-auto no-scrollbar">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`relative inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors whitespace-nowrap ${
-                tab === t.id ? 'text-brand-700' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <t.icon className="h-4 w-4" />
-              {t.label}
-              {tab === t.id && <span className="absolute inset-x-0 -bottom-px h-0.5 bg-brand-600 rounded-full" />}
-            </button>
-          ))}
+        <div className="mt-8">
+          <AdminNavTabs activeTab={tab} onTabChange={handleTabChange} />
         </div>
 
         <div className="mt-6">
@@ -418,8 +383,6 @@ export default function AdminDashboardPage() {
             />
           ) : tab === 'brands' ? (
             <BrandManager />
-          ) : tab === 'payments' ? (
-            <AdminPaymentsTab />
           ) : tab === 'ledger' ? (
             <CompanyLedgerTab entries={companyLedger} />
           ) : (
