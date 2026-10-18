@@ -39,6 +39,7 @@ export function AdminTopBar() {
   if (!admin) return null;
 
   const isUpiDirect = location.pathname.startsWith('/admin/upi-direct');
+  const isCustomerLedger = location.pathname.startsWith('/admin/customer-ledger');
 
   return (
     <header className="sticky top-0 z-40 glass border-b border-slate-200/70">
@@ -58,6 +59,16 @@ export function AdminTopBar() {
           >
             Signed in: <span className="font-mono text-slate-700">{admin.email || '—'}</span>
           </span>
+          <Link
+            to="/admin/customer-ledger"
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
+              isCustomerLedger
+                ? 'bg-brand-600 text-white shadow-sm hover:bg-brand-700'
+                : 'border border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700'
+            }`}
+          >
+            <Banknote className="h-3.5 w-3.5" /> Customer Ledger
+          </Link>
           <Link
             to="/admin/upi-direct"
             className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-colors ${

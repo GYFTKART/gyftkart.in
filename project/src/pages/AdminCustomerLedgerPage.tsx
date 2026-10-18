@@ -1,0 +1,1109 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Search,
+  Printer,
+  ArrowUpDown,
+  ChevronRight,
+  ChevronLeft,
+  Mail,
+  Phone,
+  Wallet,
+  Banknote,
+  Clock,
+  FileSpreadsheet,
+  ArrowLeft,
+  X,
+  Loader2,
+  Copy,
+  Check,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useAdminAuth } from '@/context/AdminAuthContext';
+import { AdminTopBar } from '@/components/AdminHeader';
+import { inr, inrDecimal, formatDateTime } from '@/lib/format';
+
+export type CustomerProfile = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  created_at: string;
+  wallet_balance?: number; // rupees
+};
+
+export type LedgerTransaction = {
+  id: string;
+  date: string; // ISO timestamp
+  voucherType: string;
+  voucherNo: string;
+  particulars: string;
+  debit: number; // in rupees
+  credit: number; // in rupees
+  balance: number; // in rupees
+  balanceType: 'Cr' | 'Dr';
+  source: 'wallet_transactions' | 'orders' | 'upi_payment_sessions' | 'customer_ledger';
+  status?: string;
+  rawRef?: string;
+};
+
+// Quick date presets
+const getPresetDates = (preset: 'today' | 'this_month' | 'last_month' | 'financial_year' | 'all') => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const formatYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  if (preset === 'today') {
+    const todayStr = formatYMD(now);
+    return { from: todayStr, to: todayStr };
+  }
+  if (preset === 'this_month') {
+    const from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+    const to = formatYMD(now);
+    return { from, to };
+  }
+  if (preset === 'last_month') {
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    return {
+      from: formatYMD(prevMonthDate),
+      to: formatYMD(lastDayPrevMonth),
+    };
+  }
+  if (preset === 'financial_year') {
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-indexed (3 = April)
+    const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+    const fyEndYear = fyStartYear + 1;
+    return {
+      from: `${fyStartYear}-04-01`,
+      to: `${fyEndYear}-03-31`,
+    };
+  }
+  return { from: '', to: '' };
+};
+
+const itemsSummary = (items: unknown): string => {
+  if (!Array.isArray(items) || items.length === 0) return 'Voucher purchase';
+  try {
+    return items
+      .map((it) => {
+        const line = it as { brand_slug?: string; brand_name?: string; quantity?: number; amount?: number };
+        const label = line.brand_name || (typeof line.brand_slug === 'string' ? line.brand_slug.replace(/-/g, ' ') : 'Gift Card');
+        return `${line.quantity ?? 1}× ${label}`;
+      })
+      .join(' · ');
+  } catch {
+    return 'Voucher purchase';
+  }
+};
+
+export default function AdminCustomerLedgerPage() {
+  const { admin } = useAdminAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Authentication check
+  useEffect(() => {
+    if (!admin) {
+      navigate('/admin', { replace: true });
+    }
+  }, [admin, navigate]);
+
+  // Customer state
+  const [customers, setCustomers] = useState<CustomerProfile[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(true);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
+
+  // Filter state
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [activePreset, setActivePreset] = useState<'today' | 'this_month' | 'last_month' | 'financial_year' | 'all'>('all');
+  const [voucherSearch, setVoucherSearch] = useState('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+
+  // Raw transactions from DB
+  const [rawTransactions, setRawTransactions] = useState<LedgerTransaction[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+
+  // Load all customers with profile and wallet balance
+  const loadCustomers = useCallback(async () => {
+    setCustomersLoading(true);
+    try {
+      const [profilesRes, walletsRes] = await Promise.all([
+        supabase.from('profiles').select('id, full_name, email, phone, created_at').order('created_at', { ascending: false }),
+        supabase.from('wallets').select('id, user_id, balance'),
+      ]);
+
+      const walletMap = new Map<string, number>();
+      if (walletsRes.data) {
+        walletsRes.data.forEach((w) => {
+          walletMap.set(w.user_id, Number(w.balance || 0) / 100);
+        });
+      }
+
+      const list: CustomerProfile[] = (profilesRes.data ?? []).map((p) => ({
+        id: p.id,
+        full_name: p.full_name || 'Unnamed Customer',
+        email: p.email || '',
+        phone: p.phone || '',
+        created_at: p.created_at,
+        wallet_balance: walletMap.get(p.id) ?? 0,
+      }));
+
+      setCustomers(list);
+
+      // Check if URL specifies a customer
+      const queryCustomerId = searchParams.get('customer');
+      if (queryCustomerId) {
+        const found = list.find((c) => c.id === queryCustomerId);
+        if (found) setSelectedCustomer(found);
+      } else if (list.length > 0 && !selectedCustomer) {
+        // Default to Mohd Saad or first customer with wallet activity
+        const defaultTarget = list.find((c) => c.email.includes('shekh.saad') || c.email.includes('saad')) || list[0];
+        setSelectedCustomer(defaultTarget);
+      }
+    } catch (err) {
+      console.error('Error loading customers for ledger:', err);
+    } finally {
+      setCustomersLoading(false);
+    }
+  }, [searchParams, selectedCustomer]);
+
+  useEffect(() => {
+    void loadCustomers();
+  }, [loadCustomers]);
+
+  // Load customer ledger records
+  const loadLedgerData = useCallback(async (customerId: string) => {
+    setLedgerLoading(true);
+    try {
+      const [walletTxRes, ordersRes, upiSessionsRes, legacyLedgerRes] = await Promise.all([
+        supabase
+          .from('wallet_transactions')
+          .select('*')
+          .eq('user_id', customerId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('orders')
+          .select('*')
+          .eq('user_id', customerId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('upi_payment_sessions')
+          .select('*')
+          .eq('user_id', customerId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('customer_ledger')
+          .select('*')
+          .eq('user_id', customerId)
+          .order('created_at', { ascending: true }),
+      ]);
+
+      const walletTxList = walletTxRes.data ?? [];
+      const ordersList = ordersRes.data ?? [];
+      const upiSessionsList = upiSessionsRes.data ?? [];
+      const legacyLedgerList = legacyLedgerRes.data ?? [];
+
+      // Build session map by order_id and id for easy enrichment
+      const sessionByOrderId = new Map<string, typeof upiSessionsList[0]>();
+      const sessionById = new Map<string, typeof upiSessionsList[0]>();
+      upiSessionsList.forEach((s) => {
+        if (s.order_id) sessionByOrderId.set(s.order_id, s);
+        sessionById.set(s.id, s);
+      });
+
+      // Build orders map
+      const orderByRef = new Map<string, typeof ordersList[0]>();
+      ordersList.forEach((o) => {
+        orderByRef.set(o.id, o);
+        if (o.razorpay_order_id) orderByRef.set(o.razorpay_order_id, o);
+        if (o.youpi_order_id) orderByRef.set(o.youpi_order_id, o);
+      });
+
+      const transactions: LedgerTransaction[] = [];
+      const coveredOrderIds = new Set<string>();
+
+      // 1. Map wallet_transactions
+      walletTxList.forEach((tx) => {
+        const isCredit = tx.type === 'CREDIT';
+        const amountRs = Number(tx.amount || 0) / 100;
+        const ordId = tx.order_id || tx.reference_id || '';
+        if (ordId) coveredOrderIds.add(ordId);
+
+        let voucherType = isCredit ? 'Receipt / Top-up' : 'Payment / Voucher Purchase';
+        let particulars = tx.remark || tx.reference_id || 'Wallet transaction';
+
+        const matchedSession = sessionByOrderId.get(ordId) || sessionById.get(ordId);
+        const matchedOrder = orderByRef.get(ordId);
+
+        if (tx.category === 'TOPUP') {
+          voucherType = 'Receipt / Top-up';
+          const utr = matchedSession?.customer_utr ? ` · UTR: ${matchedSession.customer_utr}` : '';
+          particulars = `Wallet Top-up via UPI${utr}${tx.remark ? ` · ${tx.remark}` : ''}`;
+        } else if (tx.category === 'VOUCHER_PURCHASE') {
+          voucherType = 'Payment / Voucher Purchase';
+          particulars = matchedOrder
+            ? `Voucher Purchase: ${itemsSummary(matchedOrder.items)} · Order #${ordId.slice(0, 8).toUpperCase()}`
+            : `Voucher Purchase · Order #${ordId.slice(0, 8).toUpperCase()}`;
+        } else if (tx.category === 'ROLLBACK' || tx.category === 'REFUND') {
+          if (isCredit) {
+            voucherType = 'Receipt / Refund';
+            particulars = `Refund / Return Credit: ${tx.remark || tx.reference_id || 'Reversal'}`;
+          } else {
+            voucherType = 'Journal / Adjustment';
+            particulars = `Top-up Reversal / Return: ${tx.remark || tx.reference_id || 'Reversal by Admin'}`;
+          }
+        } else if (tx.category === 'ADJUSTMENT') {
+          voucherType = 'Journal / Adjustment';
+          particulars = `Admin Adjustment: ${tx.remark || tx.reference_id || 'Manual adjustment'}`;
+        }
+
+        transactions.push({
+          id: tx.id,
+          date: tx.created_at,
+          voucherType,
+          voucherNo: ordId || `WTX-${tx.id.slice(0, 8).toUpperCase()}`,
+          particulars,
+          debit: isCredit ? 0 : amountRs,
+          credit: isCredit ? amountRs : 0,
+          balance: 0,
+          balanceType: 'Cr',
+          source: 'wallet_transactions',
+          rawRef: tx.reference_id,
+        });
+      });
+
+      // 2. Map direct Orders (orders not paid through wallet debit)
+      ordersList.forEach((order) => {
+        if (!coveredOrderIds.has(order.id) && !coveredOrderIds.has(order.razorpay_order_id || '')) {
+          const amountRs = Number(order.total_amount || 0);
+          const paymentMethod = order.razorpay_payment_id
+            ? 'Razorpay'
+            : order.youpi_payment_id
+            ? 'YouPI'
+            : 'Online Payment';
+          const refNo = order.razorpay_order_id || order.youpi_order_id || `GK-${order.id.slice(0, 8).toUpperCase()}`;
+
+          // Direct sales voucher record
+          transactions.push({
+            id: order.id,
+            date: order.created_at,
+            voucherType: 'Sales / Direct Order',
+            voucherNo: refNo,
+            particulars: `Direct Order: ${itemsSummary(order.items)} · Method: ${paymentMethod} (${order.status.toUpperCase()})`,
+            debit: amountRs,
+            credit: amountRs, // Double-entry direct payment balances out
+            balance: 0,
+            balanceType: 'Cr',
+            source: 'orders',
+            status: order.status,
+            rawRef: order.razorpay_payment_id || order.youpi_payment_id,
+          });
+        }
+      });
+
+      // 3. Map legacy customer_ledger records if any unique
+      legacyLedgerList.forEach((leg) => {
+        const amountRs = Number(leg.amount || 0);
+        const isCredit = leg.transaction_type === 'credit';
+        transactions.push({
+          id: leg.id,
+          date: leg.created_at,
+          voucherType: isCredit ? 'Receipt / Credit' : 'Payment / Debit',
+          voucherNo: leg.reference_order_id ? `REF-${leg.reference_order_id.slice(0, 8).toUpperCase()}` : `LEG-${leg.id.slice(0, 8).toUpperCase()}`,
+          particulars: leg.description || 'Customer ledger record',
+          debit: isCredit ? 0 : amountRs,
+          credit: isCredit ? amountRs : 0,
+          balance: 0,
+          balanceType: 'Cr',
+          source: 'customer_ledger',
+        });
+      });
+
+      // Sort all transactions chronologically ascending to compute accurate cumulative running balances
+      transactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      let runningCumulative = 0;
+      for (const item of transactions) {
+        runningCumulative += (item.credit - item.debit);
+        item.balance = Math.abs(runningCumulative);
+        item.balanceType = runningCumulative >= 0 ? 'Cr' : 'Dr';
+      }
+
+      setRawTransactions(transactions);
+    } catch (err) {
+      console.error('Error loading ledger data:', err);
+    } finally {
+      setLedgerLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedCustomer) {
+      void loadLedgerData(selectedCustomer.id);
+      setCurrentPage(1);
+    } else {
+      setRawTransactions([]);
+    }
+  }, [selectedCustomer, loadLedgerData]);
+
+  // Handle Preset Clicks
+  const handlePresetSelect = (preset: 'today' | 'this_month' | 'last_month' | 'financial_year' | 'all') => {
+    setActivePreset(preset);
+    const { from, to } = getPresetDates(preset);
+    setFromDate(from);
+    setToDate(to);
+    setCurrentPage(1);
+  };
+
+  // Calculations: Opening Balance, Debits, Credits, Closing Balance
+  const { openingBalance, openingBalanceType, inPeriodTransactions, periodDebit, periodCredit, closingBalance, closingBalanceType } = useMemo(() => {
+    const fromTime = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
+    const toTime = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : Infinity;
+
+    let priorCumulative = 0;
+    const inPeriod: LedgerTransaction[] = [];
+    let totDebit = 0;
+    let totCredit = 0;
+
+    for (const t of rawTransactions) {
+      const tTime = new Date(t.date).getTime();
+      if (tTime < fromTime) {
+        priorCumulative += (t.credit - t.debit);
+      } else if (tTime <= toTime) {
+        // Check voucherSearch filter
+        if (voucherSearch.trim()) {
+          const q = voucherSearch.trim().toLowerCase();
+          const match =
+            t.voucherNo.toLowerCase().includes(q) ||
+            t.particulars.toLowerCase().includes(q) ||
+            t.voucherType.toLowerCase().includes(q);
+          if (!match) continue;
+        }
+        inPeriod.push(t);
+        totDebit += t.debit;
+        totCredit += t.credit;
+      }
+    }
+
+    const opBal = Math.abs(priorCumulative);
+    const opType: 'Cr' | 'Dr' = priorCumulative >= 0 ? 'Cr' : 'Dr';
+
+    const netClosing = priorCumulative + totCredit - totDebit;
+    const clBal = Math.abs(netClosing);
+    const clType: 'Cr' | 'Dr' = netClosing >= 0 ? 'Cr' : 'Dr';
+
+    return {
+      openingBalance: opBal,
+      openingBalanceType: opType,
+      inPeriodTransactions: inPeriod,
+      periodDebit: totDebit,
+      periodCredit: totCredit,
+      closingBalance: clBal,
+      closingBalanceType: clType,
+    };
+  }, [rawTransactions, fromDate, toDate, voucherSearch]);
+
+  // Display transactions sorted by chosen order
+  const sortedTransactions = useMemo(() => {
+    const list = [...inPeriodTransactions];
+    if (sortOrder === 'desc') {
+      list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    } else {
+      list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    }
+    return list;
+  }, [inPeriodTransactions, sortOrder]);
+
+  // Pagination slice
+  const totalPages = Math.max(1, Math.ceil(sortedTransactions.length / pageSize));
+  const paginatedTransactions = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedTransactions.slice(start, start + pageSize);
+  }, [sortedTransactions, currentPage, pageSize]);
+
+  // Export to CSV / Excel
+  const handleExportCsv = () => {
+    if (!selectedCustomer) return;
+    const customerName = selectedCustomer.full_name || 'Customer';
+    const periodLabel = fromDate || toDate ? `${fromDate || 'Start'}_to_${toDate || 'Now'}` : 'All_Time';
+
+    const headers = [
+      'Date & Time',
+      'Customer Name',
+      'Customer Email',
+      'Customer Phone',
+      'Customer UUID',
+      'Voucher / Type',
+      'Voucher No. / Ref ID',
+      'Particulars / Narration',
+      'Debit (INR)',
+      'Credit (INR)',
+      'Running Balance (INR)',
+      'Balance Type (Dr/Cr)',
+    ];
+
+    const rows = sortedTransactions.map((tx) => [
+      `"${formatDateTime(tx.date).replace(/"/g, '""')}"`,
+      `"${customerName.replace(/"/g, '""')}"`,
+      `"${selectedCustomer.email.replace(/"/g, '""')}"`,
+      `"${selectedCustomer.phone.replace(/"/g, '""')}"`,
+      `"${selectedCustomer.id}"`,
+      `"${tx.voucherType.replace(/"/g, '""')}"`,
+      `"${tx.voucherNo.replace(/"/g, '""')}"`,
+      `"${tx.particulars.replace(/"/g, '""')}"`,
+      tx.debit.toFixed(2),
+      tx.credit.toFixed(2),
+      tx.balance.toFixed(2),
+      tx.balanceType,
+    ]);
+
+    // Summary row
+    rows.push([
+      '"---"',
+      '""',
+      '""',
+      '""',
+      '""',
+      '"TOTALS"',
+      '""',
+      `"Opening: ${inrDecimal(openingBalance)} ${openingBalanceType} | Closing: ${inrDecimal(closingBalance)} ${closingBalanceType}"`,
+      periodDebit.toFixed(2),
+      periodCredit.toFixed(2),
+      closingBalance.toFixed(2),
+      closingBalanceType,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Customer_Ledger_${customerName.replace(/[^a-zA-Z0-9]/g, '_')}_${periodLabel}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Trigger Print View
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
+  const filteredCustomerList = useMemo(() => {
+    if (!customerSearchQuery.trim()) return customers;
+    const q = customerSearchQuery.trim().toLowerCase();
+    return customers.filter(
+      (c) =>
+        c.full_name.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        c.phone.toLowerCase().includes(q) ||
+        c.id.toLowerCase().includes(q)
+    );
+  }, [customers, customerSearchQuery]);
+
+  if (!admin) return null;
+
+  return (
+    <div className="min-h-screen bg-slate-50 print:bg-white print:p-0">
+      <div className="print:hidden">
+        <AdminTopBar />
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 print:p-0 print:max-w-none">
+        {/* Breadcrumb & Navigation */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm print:hidden">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-slate-500 font-medium">
+            <Link to="/admin/dashboard" className="hover:text-brand-700 transition-colors">
+              Admin
+            </Link>
+            <ChevronRight className="h-4 w-4 text-slate-400" />
+            <span className="text-slate-900 font-semibold">Customer Ledger</span>
+          </nav>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/admin/dashboard"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
+            </Link>
+          </div>
+        </div>
+
+        {/* Print-Only Header */}
+        <div className="hidden print:block mb-8 border-b border-slate-300 pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-black text-slate-900">GYFTKART TECHNOLOGIES</h1>
+              <p className="text-xs text-slate-600 font-medium">Customer Statement &amp; Double-Entry Reconciliation Ledger</p>
+            </div>
+            <div className="text-right text-xs text-slate-600">
+              <p>Statement Generated: {new Date().toLocaleString('en-IN')}</p>
+              <p className="font-semibold text-slate-800">Accounting / Tally Export View</p>
+            </div>
+          </div>
+        </div>
+
+        {/* 1. Customer Selection & Search Bar */}
+        <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100 print:hidden">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            {/* Customer Dropdown / Autocomplete */}
+            <div className="relative flex-1">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                Select Customer Account
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, phone, or customer UUID…"
+                  value={customerSearchQuery}
+                  onFocus={() => setIsCustomerDropdownOpen(true)}
+                  onChange={(e) => {
+                    setCustomerSearchQuery(e.target.value);
+                    setIsCustomerDropdownOpen(true);
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-10 py-2.5 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-100 transition"
+                />
+                {customerSearchQuery && (
+                  <button
+                    onClick={() => {
+                      setCustomerSearchQuery('');
+                      setIsCustomerDropdownOpen(false);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Autocomplete Dropdown List */}
+              {isCustomerDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setIsCustomerDropdownOpen(false)}
+                  />
+                  <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                    {customersLoading ? (
+                      <div className="flex items-center justify-center p-4 text-xs text-slate-500">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin text-brand-600" /> Loading customer directory…
+                      </div>
+                    ) : filteredCustomerList.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-500 font-medium">
+                        No customers found matching "{customerSearchQuery}"
+                      </div>
+                    ) : (
+                      filteredCustomerList.map((c) => {
+                        const isSelected = selectedCustomer?.id === c.id;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomer(c);
+                              setIsCustomerDropdownOpen(false);
+                              setCustomerSearchQuery('');
+                              setSearchParams({ customer: c.id });
+                            }}
+                            className={`flex w-full items-center justify-between p-3 text-left border-b border-slate-50 last:border-none transition hover:bg-brand-50/40 ${
+                              isSelected ? 'bg-brand-50/80' : ''
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="grid place-items-center h-8 w-8 shrink-0 rounded-full bg-brand-100 text-xs font-bold text-brand-800">
+                                {c.full_name.charAt(0) || c.email.charAt(0) || '?'}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-900 truncate">{c.full_name}</p>
+                                <p className="text-[11px] text-slate-500 truncate">{c.email} {c.phone ? `· ${c.phone}` : ''}</p>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0 ml-3">
+                              <span className="inline-block rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                {inr(c.wallet_balance ?? 0)} Cr
+                              </span>
+                              <p className="mt-0.5 font-mono text-[9px] text-slate-400">UUID: {c.id.slice(0, 8)}</p>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Quick Actions (Export CSV, Print) */}
+            <div className="flex items-center gap-2 pt-2 lg:pt-5">
+              <button
+                onClick={handleExportCsv}
+                disabled={!selectedCustomer || inPeriodTransactions.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-50"
+                title="Export formatted ledger for Excel / Tally"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                Export CSV / Excel
+              </button>
+              <button
+                onClick={handlePrint}
+                disabled={!selectedCustomer}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-50"
+                title="Print or save PDF statement"
+              >
+                <Printer className="h-3.5 w-3.5 text-slate-600" />
+                Print / PDF Statement
+              </button>
+            </div>
+          </div>
+
+          {/* Active Customer Identity Card */}
+          {selectedCustomer && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50/80 p-3.5 border border-slate-200/70">
+              <div className="flex items-center gap-3">
+                <span className="grid place-items-center h-10 w-10 rounded-xl bg-gradient-to-br from-brand-600 to-brand-800 text-white font-display font-bold text-sm shadow-sm">
+                  {selectedCustomer.full_name.charAt(0) || selectedCustomer.email.charAt(0) || '?'}
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-extrabold text-slate-900">{selectedCustomer.full_name}</h2>
+                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.2 text-[10px] font-bold text-emerald-800">
+                      Active Customer
+                    </span>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500 font-medium">
+                    <span className="flex items-center gap-1">
+                      <Mail className="h-3 w-3 text-slate-400" /> {selectedCustomer.email || '—'}
+                    </span>
+                    {selectedCustomer.phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-3 w-3 text-slate-400" /> {selectedCustomer.phone}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleCopyId(selectedCustomer.id)}
+                      className="flex items-center gap-1 font-mono text-[11px] text-slate-400 hover:text-slate-700 transition"
+                      title="Copy Customer UUID"
+                    >
+                      <span>UUID: {selectedCustomer.id.slice(0, 8)}…</span>
+                      {copiedId ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 font-medium">Current Ledger Balance:</span>
+                <span className="inline-flex items-center gap-1 rounded-xl bg-white px-3 py-1 text-sm font-extrabold text-slate-900 border border-slate-200 shadow-sm">
+                  <Wallet className="h-4 w-4 text-brand-600" />
+                  {inrDecimal(selectedCustomer.wallet_balance ?? 0)}
+                  <span className="text-[10px] font-bold text-emerald-700">Cr</span>
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Print-Only Customer Statement Banner */}
+        {selectedCustomer && (
+          <div className="hidden print:block mb-6 rounded-xl border border-slate-300 p-4">
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Customer Details</p>
+                <p className="font-extrabold text-sm text-slate-900">{selectedCustomer.full_name}</p>
+                <p className="text-slate-600">{selectedCustomer.email} {selectedCustomer.phone ? `· ${selectedCustomer.phone}` : ''}</p>
+                <p className="font-mono text-[10px] text-slate-500">ID: {selectedCustomer.id}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Statement Period</p>
+                <p className="font-bold text-slate-800">
+                  {fromDate || toDate ? `${fromDate || 'Beginning'} through ${toDate || 'Present'}` : 'All Recorded Transactions'}
+                </p>
+                <p className="text-slate-600">Current Ledger Balance: <span className="font-bold text-slate-900">{inrDecimal(selectedCustomer.wallet_balance ?? 0)} Cr</span></p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 2. Date Range & Quick Presets Filter */}
+        <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100 print:hidden">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            {/* Quick Presets */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Period Presets
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(
+                  [
+                    { id: 'all', label: 'All Time' },
+                    { id: 'today', label: 'Today' },
+                    { id: 'this_month', label: 'This Month' },
+                    { id: 'last_month', label: 'Last Month' },
+                    { id: 'financial_year', label: 'Financial Year (FY)' },
+                  ] as const
+                ).map((p) => {
+                  const isActive = activePreset === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => handlePresetSelect(p.id)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        isActive
+                          ? 'bg-brand-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Date Pickers */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  From Date
+                </label>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => {
+                    setFromDate(e.target.value);
+                    setActivePreset('all');
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  To Date
+                </label>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => {
+                    setToDate(e.target.value);
+                    setActivePreset('all');
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                />
+              </div>
+
+              {/* Voucher / UTR Search */}
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Search Ref / UTR / Voucher
+                </label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search UTR, Ref ID, Order #…"
+                    value={voucherSearch}
+                    onChange={(e) => {
+                      setVoucherSearch(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Accounting & Financial Summary Cards */}
+        <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Opening Balance */}
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Opening Balance</span>
+              <Clock className="h-4 w-4 text-slate-400" />
+            </div>
+            <p className="text-xl font-extrabold text-slate-900">
+              {ledgerLoading ? '…' : inrDecimal(openingBalance)}
+            </p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+              Prior to period ·{' '}
+              <span className={`inline-block font-bold ${openingBalanceType === 'Cr' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {openingBalanceType}
+              </span>
+            </p>
+          </div>
+
+          {/* Total Debit (Dr) */}
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Total Debit (Dr)</span>
+              <TrendingDown className="h-4 w-4 text-rose-500" />
+            </div>
+            <p className="text-xl font-extrabold text-rose-600">
+              {ledgerLoading ? '…' : inrDecimal(periodDebit)}
+            </p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+              Outflows · Purchases &amp; Adjustments
+            </p>
+          </div>
+
+          {/* Total Credit (Cr) */}
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Total Credit (Cr)</span>
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+            </div>
+            <p className="text-xl font-extrabold text-emerald-600">
+              {ledgerLoading ? '…' : inrDecimal(periodCredit)}
+            </p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+              Inflows · Top-ups &amp; Receipts
+            </p>
+          </div>
+
+          {/* Closing / Net Balance */}
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Closing Balance</span>
+              <Banknote className="h-4 w-4 text-brand-600" />
+            </div>
+            <p className="text-xl font-extrabold text-slate-900">
+              {ledgerLoading ? '…' : inrDecimal(closingBalance)}
+            </p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+              Net balance ·{' '}
+              <span className={`inline-block font-bold ${closingBalanceType === 'Cr' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {closingBalanceType}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        {/* 4. Tally & Accounting Standard Ledger Table */}
+        <div className="rounded-3xl border border-slate-100 bg-white shadow-card overflow-hidden">
+          {/* Table Header Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-slate-100 print:hidden">
+            <div className="flex items-center gap-3">
+              <h3 className="font-display text-sm font-extrabold text-slate-900">
+                Statement Transactions ({sortedTransactions.length})
+              </h3>
+              <button
+                onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                title="Toggle Chronological Order"
+              >
+                <ArrowUpDown className="h-3 w-3" />
+                {sortOrder === 'asc' ? 'Oldest First' : 'Newest First'}
+              </button>
+            </div>
+
+            {/* Page Size Selector */}
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span>Rows per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 focus:border-brand-500 focus:outline-none"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[850px] text-left text-xs">
+              <thead>
+                <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-3 w-[60px]">S. NO.</th>
+                  <th className="px-4 py-3 w-[160px]">DATE &amp; TIME</th>
+                  <th className="px-4 py-3 w-[150px]">VOUCHER / TYPE</th>
+                  <th className="px-4 py-3 w-[180px]">VOUCHER NO. / REF ID</th>
+                  <th className="px-4 py-3">PARTICULARS / NARRATION</th>
+                  <th className="px-4 py-3 text-right w-[110px]">DEBIT (₹)</th>
+                  <th className="px-4 py-3 text-right w-[110px]">CREDIT (₹)</th>
+                  <th className="px-4 py-3 text-right w-[130px]">BALANCE (₹)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-sans">
+                {ledgerLoading ? (
+                  <tr>
+                    <td colSpan={8} className="py-16 text-center text-slate-500">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+                        Loading double-entry ledger records…
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-16 text-center text-slate-500">
+                      No ledger transactions found for the selected customer and date range.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedTransactions.map((tx, idx) => {
+                    const rowNumber = (currentPage - 1) * pageSize + idx + 1;
+                    const isDebit = tx.debit > 0;
+                    const isCredit = tx.credit > 0;
+
+                    return (
+                      <tr key={tx.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3 font-mono text-[11px] text-slate-400">
+                          {rowNumber}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
+                          {formatDateTime(tx.date)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span
+                            className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                              tx.voucherType.includes('Receipt') || tx.voucherType.includes('Top-up')
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                : tx.voucherType.includes('Payment')
+                                ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}
+                          >
+                            {tx.voucherType}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[11px] font-semibold text-slate-900 break-all">
+                          {tx.voucherNo}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700 font-medium">
+                          {tx.particulars}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-rose-600 whitespace-nowrap">
+                          {isDebit ? inrDecimal(tx.debit) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 whitespace-nowrap">
+                          {isCredit ? inrDecimal(tx.credit) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <span className="font-mono font-bold text-slate-900 mr-1.5">
+                            {inrDecimal(tx.balance)}
+                          </span>
+                          <span
+                            className={`inline-block rounded px-1.5 py-0.2 text-[9px] font-extrabold ${
+                              tx.balanceType === 'Cr'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {tx.balanceType}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+
+              {/* Table Footer: Totals */}
+              {!ledgerLoading && sortedTransactions.length > 0 && (
+                <tfoot>
+                  <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-900">
+                    <td colSpan={5} className="px-4 py-3 text-right uppercase tracking-wider text-[11px] text-slate-600">
+                      Total for Selected Period:
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-rose-600">
+                      {inrDecimal(periodDebit)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-emerald-600">
+                      {inrDecimal(periodCredit)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs">
+                      {inrDecimal(closingBalance)}{' '}
+                      <span className="text-[10px] font-bold text-emerald-700">{closingBalanceType}</span>
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {/* Pagination Footer */}
+          {!ledgerLoading && sortedTransactions.length > 0 && (
+            <div className="border-t border-slate-100 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden">
+              <p className="text-xs text-slate-500">
+                Showing {(currentPage - 1) * pageSize + 1} to{' '}
+                {Math.min(currentPage * pageSize, sortedTransactions.length)} of {sortedTransactions.length} records
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).slice(
+                    Math.max(0, currentPage - 3),
+                    Math.min(totalPages, currentPage + 2)
+                  ).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      className={`min-w-[2rem] h-8 rounded-lg text-xs font-bold transition-colors ${
+                        p === currentPage
+                          ? 'bg-brand-600 text-white shadow-sm'
+                          : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Printable Footer Note */}
+        <div className="hidden print:block mt-8 text-[11px] text-slate-500 border-t border-slate-200 pt-3">
+          <p>
+            This statement is a computer-generated double-entry customer ledger prepared for auditing, Tally import, and accounting reconciliation.
+            All debits represent customer spending or debit adjustments; all credits represent customer fund inflows, top-ups, or refunds.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

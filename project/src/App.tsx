@@ -19,6 +19,7 @@ import NotFoundPage from '@/pages/NotFoundPage';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import AdminUpiDirectPage from '@/pages/AdminUpiDirectPage';
+import AdminCustomerLedgerPage from '@/pages/AdminCustomerLedgerPage';
 import ProfilePage from './pages/ProfilePage';
 import OrdersPage from '@/pages/OrdersPage';
 import ContactUs from '@/pages/ContactUs';
@@ -336,6 +337,16 @@ export default function App() {
                     <AdminAuthProvider>
                       <ProtectedAdminRoute>
                         <AdminDashboardPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route
+                  path="/admin/customer-ledger"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminCustomerLedgerPage />
                       </ProtectedAdminRoute>
                     </AdminAuthProvider>
                   }
