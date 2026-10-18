@@ -203,13 +203,19 @@ function StatCard({
   accent: string;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-5 shadow-soft hover:shadow-card transition-shadow">
+    <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-5 shadow-soft hover:shadow-card transition-shadow min-w-0">
       <div className="absolute -top-8 -right-8 h-24 w-24 rounded-full bg-brand-100/60 blur-2xl pointer-events-none" />
       <span className={`grid place-items-center h-11 w-11 rounded-2xl bg-gradient-to-br ${accent} text-white shadow-glow-sm`}>
         <Icon className="h-5 w-5" />
       </span>
-      <p className="mt-4 text-xs text-slate-500 font-medium">{label}</p>
-      <p className="font-display text-2xl font-extrabold text-slate-900">{value}</p>
+      {/* Labels must NEVER truncate (human saw 'Total spe…') — allow the
+          text to wrap onto two lines instead of clipping. */}
+      <p className="mt-4 text-xs font-medium text-slate-500 break-words whitespace-normal">
+        {label}
+      </p>
+      <p className="font-display text-2xl font-extrabold text-slate-900 break-words">
+        {value}
+      </p>
     </div>
   );
 }
