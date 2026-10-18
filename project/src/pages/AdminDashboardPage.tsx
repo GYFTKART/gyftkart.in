@@ -124,8 +124,8 @@ export default function AdminDashboardPage() {
 
   const quickNavCards = [
     {
-      title: 'Customers',
-      desc: 'Oversee B2C and B2B user accounts, verification flags, security blocks/suspensions, and password resets.',
+      title: 'B2C Customers',
+      desc: 'Oversee B2C user accounts, verification flags, security blocks/suspensions, and password resets.',
       to: '/admin/customers',
       icon: Users,
       accent: 'from-blue-600 to-indigo-700',

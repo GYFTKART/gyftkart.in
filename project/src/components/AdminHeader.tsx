@@ -42,7 +42,7 @@ export function AdminTopBar() {
     },
     {
       to: '/admin/customers',
-      label: 'Customers',
+      label: 'B2C Customers',
       icon: Users,
       isActive: pathname.startsWith('/admin/customers'),
     },
@@ -97,11 +97,11 @@ export function AdminTopBar() {
   ];
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-xs">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md shadow-xs">
       {/* ───── TIER 1: Top Bar (Branding & Global Actions) ───── */}
-      <div className="border-b border-slate-100">
+      <div>
         <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          {/* Left: Brand Identity + Sign-in context */}
+          {/* Left: Brand Identity */}
           <Link
             to="/admin/dashboard"
             className="flex items-center gap-3 hover:opacity-90 transition-opacity shrink-0"
@@ -109,21 +109,16 @@ export function AdminTopBar() {
             <span className="grid place-items-center h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glow-sm shrink-0">
               <LayoutDashboard className="h-5 w-5" />
             </span>
-            <div className="flex flex-col min-w-0">
-              <span className="text-base font-extrabold text-slate-900 tracking-tight leading-tight">
-                GyftKart Admin
-              </span>
-              <span className="text-xs text-slate-500 font-medium truncate mt-0.5">
-                Signed in as{' '}
-                <span className="font-semibold text-slate-700">
-                  {admin.email || 'gyftkart@gmail.com'}
-                </span>
-              </span>
-            </div>
+            <span className="text-base font-extrabold text-slate-900 tracking-tight leading-tight">
+              GyftKart Admin
+            </span>
           </Link>
 
-          {/* Right: Clean Red Sign Out Button */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Right: Signed-in context + Clean Red Sign Out Button */}
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-xs text-gray-500 font-medium">
+              Signed in as {admin.email || 'gyftkart@gmail.com'}
+            </span>
             <button
               onClick={handleLogout}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-rose-50 border border-rose-200/80 px-3.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-colors shadow-xs"
@@ -137,7 +132,7 @@ export function AdminTopBar() {
       </div>
 
       {/* ───── TIER 2: Dedicated Horizontal Sub-Navigation Bar ───── */}
-      <div className="bg-slate-50/70">
+      <div className="bg-slate-50/70 border-b border-slate-200">
         <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <nav className="flex items-center gap-2 overflow-x-auto no-scrollbar py-2.5">
             {navItems.map((item) => {
@@ -166,7 +161,7 @@ export function AdminTopBar() {
 
 const ADMIN_TABS: { id: AdminTabId; label: string; icon: React.ComponentType<{ className?: string }>; path: string }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard, path: '/admin/dashboard' },
-  { id: 'customers', label: 'Customers', icon: Users, path: '/admin/customers' },
+  { id: 'customers', label: 'B2C Customers', icon: Users, path: '/admin/customers' },
   { id: 'sales', label: 'Gift Card Sales', icon: ShoppingBag, path: '/admin/gift-card-sales' },
   { id: 'inquiries', label: 'Corporate Inquiries', icon: Building2, path: '/admin/corporate-inquiries' },
   { id: 'brands', label: 'Manage Brands', icon: Tag, path: '/admin/brands' },
