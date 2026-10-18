@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Gift, CheckCircle2, Clock, Mail, Loader2, XCircle } from 'lucide-react';
+import { ArrowLeft, Gift, CheckCircle2, Clock, Mail, Loader2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/CustomerAuthContext';
 import { inr, formatDateTime } from '@/lib/format';
@@ -88,11 +88,15 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+type FilterStatus = 'all' | 'success' | 'pending' | 'rejected';
+
 export default function OrdersPage() {
   const { session, authReady } = useAuth();
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [purchases, setPurchases] = useState<PurchaseRow[] | null>(null);
   const [pendingUpi, setPendingUpi] = useState<PendingUpiRow[] | null>(null);
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -152,6 +156,33 @@ export default function OrdersPage() {
     void load();
   }, [load]);
 
+  const itemsPerPage = 10;
+
+  const filteredUpi = useMemo(() => {
+    const list = pendingUpi ?? [];
+    if (statusFilter === 'all') return list;
+    return list.filter((s) => {
+      const st = (s.status || '').toUpperCase();
+      if (statusFilter === 'success') {
+        return st === 'SUCCESS' || st === 'CONFIRMED' || st === 'DELIVERED';
+      }
+      if (statusFilter === 'pending') {
+        return st === 'INITIATED' || st === 'ACTIVE' || st === 'PENDING_VERIFICATION';
+      }
+      if (statusFilter === 'rejected') {
+        return st === 'REJECTED' || st === 'FAILED' || st === 'CANCELLED' || st === 'REVERTED';
+      }
+      return true;
+    });
+  }, [pendingUpi, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUpi.length / itemsPerPage));
+
+  const paginatedUpi = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredUpi.slice(start, start + itemsPerPage);
+  }, [filteredUpi, currentPage]);
+
   const noData =
     (orders ?? []).length === 0 &&
     (purchases ?? []).length === 0 &&
@@ -202,63 +233,125 @@ export default function OrdersPage() {
             <div className="divide-y divide-slate-100">
               {/* ───────── UPI Direct voucher orders ───────── */}
               {(pendingUpi ?? []).length > 0 && (
-                <div className="p-5 sm:p-6 pb-2">
-                  <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">Recent Orders</h2>
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6 pb-3">
+                    <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">Recent Orders</h2>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => {
+                        setStatusFilter(e.target.value as FilterStatus);
+                        setCurrentPage(1);
+                      }}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    >
+                      <option value="all">All Orders</option>
+                      <option value="success">Success / Delivered</option>
+                      <option value="pending">Pending Verification</option>
+                      <option value="rejected">Rejected / Failed</option>
+                    </select>
+                  </div>
+
+                  {filteredUpi.length === 0 ? (
+                    <div className="py-12 px-6 text-center text-xs font-medium text-slate-500">
+                      No orders found matching this filter.
+                    </div>
+                  ) : (
+                    <>
+                      <ul className="divide-y divide-slate-100">
+                        {paginatedUpi.map((s) => {
+                          const isRejected = s.status === 'REJECTED';
+                          const isSuccess = s.status === 'SUCCESS' || s.status === 'CONFIRMED' || s.status === 'DELIVERED';
+                          return (
+                            <li
+                              key={s.id}
+                              className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 sm:p-6 hover:bg-slate-50/60 transition-colors"
+                            >
+                              <span
+                                className={`grid place-items-center h-12 w-12 shrink-0 rounded-2xl text-white shadow-glow-sm ${
+                                  isRejected
+                                    ? 'bg-gradient-to-br from-rose-500 to-rose-700'
+                                    : isSuccess
+                                    ? 'bg-gradient-to-br from-emerald-500 to-teal-700'
+                                    : 'bg-gradient-to-br from-amber-400 to-amber-600'
+                                }`}
+                              >
+                                {isRejected ? <XCircle className="h-5 w-5" /> : <Gift className="h-5 w-5" />}
+                              </span>
+
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-900">{itemsSummary(s.items)}</p>
+                                <p className="mt-1.5 text-xs font-medium text-slate-500 font-mono">Order #{s.order_id}</p>
+                                {isRejected && s.admin_remark && (
+                                  <p className="mt-1 text-xs font-semibold text-rose-600">Rejection Reason: {s.admin_remark}</p>
+                                )}
+                                <p className="mt-1 text-xs text-slate-400">{formatDateTime(s.created_at)}</p>
+                              </div>
+
+                              <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
+                                <p className="text-base font-extrabold text-slate-900">{inr(Number(s.amount_paise) / 100)}</p>
+                                {isRejected ? (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                                    <XCircle className="h-3.5 w-3.5" />
+                                    Rejected
+                                  </span>
+                                ) : isSuccess ? (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    Delivered
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                                    <Clock className="h-3.5 w-3.5" />
+                                    Pending Verification
+                                  </span>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+
+                      {/* Pagination footer */}
+                      <div className="border-t border-slate-100 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <p className="text-xs text-slate-500">
+                          Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredUpi.length)} of {filteredUpi.length} orders
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            disabled={currentPage <= 1}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                          </button>
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                              <button
+                                key={p}
+                                onClick={() => setCurrentPage(p)}
+                                className={`min-w-[2rem] h-8 rounded-lg text-xs font-bold transition-colors ${
+                                  p === currentPage
+                                    ? 'bg-brand-600 text-white shadow-sm'
+                                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={currentPage >= totalPages}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Next <ChevronRight className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
-              <ul className="divide-y divide-slate-100">
-                {(pendingUpi ?? []).map((s) => {
-                  const isRejected = s.status === 'REJECTED';
-                  const isSuccess = s.status === 'SUCCESS' || s.status === 'CONFIRMED' || s.status === 'DELIVERED';
-                  return (
-                    <li
-                      key={s.id}
-                      className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 sm:p-6 hover:bg-slate-50/60 transition-colors"
-                    >
-                      <span
-                        className={`grid place-items-center h-12 w-12 shrink-0 rounded-2xl text-white shadow-glow-sm ${
-                          isRejected
-                            ? 'bg-gradient-to-br from-rose-500 to-rose-700'
-                            : isSuccess
-                            ? 'bg-gradient-to-br from-emerald-500 to-teal-700'
-                            : 'bg-gradient-to-br from-amber-400 to-amber-600'
-                        }`}
-                      >
-                        {isRejected ? <XCircle className="h-5 w-5" /> : <Gift className="h-5 w-5" />}
-                      </span>
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-900">{itemsSummary(s.items)}</p>
-                        <p className="mt-1.5 text-xs font-medium text-slate-500 font-mono">Order #{s.order_id}</p>
-                        {isRejected && s.admin_remark && (
-                          <p className="mt-1 text-xs font-semibold text-rose-600">Rejection Reason: {s.admin_remark}</p>
-                        )}
-                        <p className="mt-1 text-xs text-slate-400">{formatDateTime(s.created_at)}</p>
-                      </div>
-
-                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
-                        <p className="text-base font-extrabold text-slate-900">{inr(Number(s.amount_paise) / 100)}</p>
-                        {isRejected ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
-                            <XCircle className="h-3.5 w-3.5" />
-                            Rejected
-                          </span>
-                        ) : isSuccess ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Delivered
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                            <Clock className="h-3.5 w-3.5" />
-                            Pending Verification
-                          </span>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
 
               {/* ─────────────── Your orders ─────────────── */}
               {(orders ?? []).length > 0 && (
