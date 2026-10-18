@@ -371,8 +371,8 @@ export default function UpiDirectCheckoutButton({
                   <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
                   <p>
                     <span className="font-bold">Proof received — pending verification.</span> It only records your
-                    evidence; a human/bank check confirms the payment next. Keep your UPI app receipt until then. You can
-                    still check the status below or resubmit if you spot a mistake.
+                    evidence; a human/bank check confirms the payment next. Keep your UPI app receipt until then. You
+                    can resubmit if you spot a mistake.
                   </p>
                 </div>
               ) : (
@@ -426,6 +426,12 @@ export default function UpiDirectCheckoutButton({
                         </>
                       )}
                     </button>
+                    <button
+                      onClick={cancelSession}
+                      className="w-full shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 sm:w-auto"
+                    >
+                      Cancel
+                    </button>
                   </div>
                   {proofFile && (
                     <p className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-slate-500">
@@ -451,49 +457,40 @@ export default function UpiDirectCheckoutButton({
             </div>
           )}
 
-          <div
-            className={`mt-4 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${
-              phase === 'expired'
-                ? 'bg-rose-50 text-rose-700'
-                : phase === 'stalled'
-                ? 'bg-amber-50 text-amber-800'
-                : 'bg-white/70 text-slate-600'
-            }`}
-          >
-            {phase === 'verifying' || phase === 'awaiting' ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Waiting for bank confirmation… (re-checking every
-                {` ${POLL_INTERVAL_MS / 1000}s`})
-              </>
-            ) : phase === 'stalled' ? (
-              <>
-                Payment not yet found. We keep checking — already paid? It gets confirmed via the bank reference in
-                the UPI Direct admin tab, or contact support.
-              </>
-            ) : (
-              <>Session expired — could not verify this one. Start a new payment or contact support.</>
-            )}
-            {phase === 'stalled' && (
-              <button
-                onClick={checkNow}
-                className="rounded-lg border border-amber-200 bg-white px-2 py-1 font-bold text-amber-800 hover:bg-amber-50"
-              >
-                Check now
-              </button>
-            )}
-            {phase === 'expired' ? (
-              <button
-                onClick={handleClick}
-                className="rounded-lg bg-emerald-600 px-2.5 py-1.5 font-bold text-white hover:bg-emerald-700"
-              >
-                Start a new payment
-              </button>
-            ) : (
-              <button onClick={cancelSession} className="ml-auto text-slate-500 hover:text-slate-700">
-                Cancel
-              </button>
-             )}
+          {(phase === 'stalled' || phase === 'expired') && (
+            <div
+              className={`mt-4 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${
+                phase === 'expired'
+                  ? 'bg-rose-50 text-rose-700'
+                  : 'bg-amber-50 text-amber-800'
+              }`}
+            >
+              {phase === 'stalled' ? (
+                <>
+                  Payment not yet found. We keep checking — already paid? Submit your proof above or use Check now; it
+                  also gets confirmed via the bank reference in the UPI Direct admin tab, or contact support.
+                </>
+              ) : (
+                <>Session expired — could not verify this one. Start a new payment or contact support.</>
+              )}
+              {phase === 'stalled' && (
+                <button
+                  onClick={checkNow}
+                  className="rounded-lg border border-amber-200 bg-white px-2 py-1 font-bold text-amber-800 hover:bg-amber-50"
+                >
+                  Check now
+                </button>
+              )}
+              {phase === 'expired' && (
+                <button
+                  onClick={handleClick}
+                  className="rounded-lg bg-emerald-600 px-2.5 py-1.5 font-bold text-white hover:bg-emerald-700"
+                >
+                  Start a new payment
+                </button>
+              )}
             </div>
+          )}
           </div>
         )}
       </div>

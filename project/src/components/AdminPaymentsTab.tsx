@@ -66,6 +66,7 @@ export default function AdminPaymentsTab() {
     const { data, error } = await supabase
       .from('upi_payment_sessions')
       .select('*')
+      .or('customer_utr.not.is.null,proof_path.not.is.null')
       .order('created_at', { ascending: false })
       .limit(50);
     if (error) {
@@ -298,8 +299,8 @@ export default function AdminPaymentsTab() {
                     <td className="px-3 py-3">
                       <p className="font-semibold text-slate-600">{buyer.name || buyer.email || 'Customer'}</p>
                       <p className="break-all text-[11px] text-slate-500">{buyer.email}</p>
-                      <p className="mt-0.5 text-[11px] text-slate-400">
-                        user <span className="font-mono">{shortUserId(s.user_id)}</span>
+                      <p className="mt-0.5 text-[11px] text-slate-400 break-all">
+                        user <span className="font-mono">{s.user_id}</span>
                       </p>
                     </td>
                     <td className="px-3 py-3">
@@ -307,10 +308,12 @@ export default function AdminPaymentsTab() {
                       <p className="mt-0.5">
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            statusStyle[s.status] ?? 'bg-slate-100 text-slate-600'
+                            s.status === 'INITIATED' || s.status === 'ACTIVE'
+                              ? 'bg-amber-100 text-amber-800'
+                              : (statusStyle[s.status] ?? 'bg-slate-100 text-slate-600')
                           }`}
                         >
-                          {s.status}
+                          {s.status === 'INITIATED' || s.status === 'ACTIVE' ? 'PENDING VERIFICATION' : s.status}
                           {s.verification_level === 'MANUAL' ? ' · manual' : s.verification_level === 'GMAIL' ? ' · observer' : ''}
                         </span>
                       </p>
@@ -332,12 +335,6 @@ export default function AdminPaymentsTab() {
                         <span className="font-semibold text-slate-600">Created</span>{' '}
                         <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.created_at)}</span>
                       </p>
-                      {s.status === 'ACTIVE' && (
-                        <p className="text-[11px] text-slate-500">
-                          <span className="font-semibold text-slate-600">Expires</span>{' '}
-                          <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.expires_at)}</span>
-                        </p>
-                      )}
                       {s.completed_at && (
                         <p className="text-[11px] text-slate-500">
                           <span className="font-semibold text-slate-600">Completed</span>{' '}
@@ -440,8 +437,4 @@ export default function AdminPaymentsTab() {
       )}
     </div>
   );
-}
-
-function shortUserId(user_id: string) {
-  return user_id ? `${user_id.slice(0, 8)}…` : '';
 }
