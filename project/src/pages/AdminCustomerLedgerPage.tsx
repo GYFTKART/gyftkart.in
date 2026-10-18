@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Search,
   Printer,
@@ -20,11 +20,14 @@ import {
   TrendingDown,
   TrendingUp,
   FileText,
+  Building2,
+  Users,
+  RefreshCw,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { AdminTopBar } from '@/components/AdminHeader';
-import { inr, inrDecimal, formatDateTime } from '@/lib/format';
+import { inrDecimal, formatDateTime } from '@/lib/format';
 import { OrderInvoiceModal } from '@/components/OrderInvoiceModal';
 import { extractInvoiceItems, type InvoiceData } from '@/lib/invoice';
 
@@ -44,6 +47,8 @@ export type CustomerProfile = {
   billing_state?: string | null;
   billing_city?: string | null;
   billing_pincode?: string | null;
+  total_orders_txns?: number;
+  last_active_date?: string | null;
 };
 
 export type LedgerTransaction = {
@@ -118,7 +123,17 @@ const itemsSummary = (items: unknown): string => {
 export default function AdminCustomerLedgerPage() {
   const { admin } = useAdminAuth();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { customerId: routeCustomerId } = useParams<{ customerId?: string }>();
+  const [searchParams] = useSearchParams();
+
+  // Active Customer ID from Route param or query param
+  const activeCustomerId = routeCustomerId || searchParams.get('customerId') || searchParams.get('customer') || null;
+
+  // View 1 (Customer Directory) state
+  const [directorySearch, setDirectorySearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'B2C' | 'B2B'>('ALL');
+  const [dirPageSize, setDirPageSize] = useState<number>(10);
+  const [dirCurrentPage, setDirCurrentPage] = useState<number>(1);
 
   // Authentication check
   useEffect(() => {
@@ -130,18 +145,16 @@ export default function AdminCustomerLedgerPage() {
   // Customer state
   const [customers, setCustomers] = useState<CustomerProfile[]>([]);
   const [customersLoading, setCustomersLoading] = useState(true);
-  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
-  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
 
-  // Filter state
+  // View 2 (Statement View) filter state
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [activePreset, setActivePreset] = useState<'today' | 'this_month' | 'last_month' | 'financial_year' | 'all'>('all');
   const [voucherSearch, setVoucherSearch] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // Pagination state
+  // Pagination state for Statement View
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(25);
 
@@ -190,17 +203,19 @@ export default function AdminCustomerLedgerPage() {
     setIsInvoiceOpen(true);
   };
 
-  // Load all customers with profile and wallet balance
-
+  // Load all customers with profile, wallet balance, and activity metrics
   const loadCustomers = useCallback(async () => {
     setCustomersLoading(true);
     try {
-      const [profilesRes, walletsRes] = await Promise.all([
+      const [profilesRes, walletsRes, ordersRes, walletTxRes, upiSessionsRes] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, email, phone, created_at, customer_type, company_name, brand_trade_name, gstin, pan, billing_address, billing_state, billing_city, billing_pincode')
           .order('created_at', { ascending: false }),
         supabase.from('wallets').select('id, user_id, balance'),
+        supabase.from('orders').select('user_id, created_at'),
+        supabase.from('wallet_transactions').select('user_id, created_at'),
+        supabase.from('upi_payment_sessions').select('user_id, created_at'),
       ]);
 
       const walletMap = new Map<string, number>();
@@ -210,46 +225,66 @@ export default function AdminCustomerLedgerPage() {
         });
       }
 
-      const list: CustomerProfile[] = (profilesRes.data ?? []).map((p) => ({
-        id: p.id,
-        full_name: p.full_name || 'Unnamed Customer',
-        email: p.email || '',
-        phone: p.phone || '',
-        created_at: p.created_at,
-        wallet_balance: walletMap.get(p.id) ?? 0,
-        customer_type: p.customer_type,
-        company_name: p.company_name,
-        brand_trade_name: p.brand_trade_name,
-        gstin: p.gstin,
-        pan: p.pan,
-        billing_address: p.billing_address,
-        billing_state: p.billing_state,
-        billing_city: p.billing_city,
-        billing_pincode: p.billing_pincode,
-      }));
+      const activityCountMap = new Map<string, number>();
+      const lastActiveMap = new Map<string, string>();
+
+      const recordActivity = (userId: string | null | undefined, createdAt: string | null | undefined) => {
+        if (!userId || !createdAt) return;
+        activityCountMap.set(userId, (activityCountMap.get(userId) || 0) + 1);
+        const currentMax = lastActiveMap.get(userId);
+        if (!currentMax || new Date(createdAt).getTime() > new Date(currentMax).getTime()) {
+          lastActiveMap.set(userId, createdAt);
+        }
+      };
+
+      (ordersRes.data ?? []).forEach((o) => recordActivity(o.user_id, o.created_at));
+      (walletTxRes.data ?? []).forEach((tx) => recordActivity(tx.user_id, tx.created_at));
+      (upiSessionsRes.data ?? []).forEach((s) => recordActivity(s.user_id, s.created_at));
+
+      const list: CustomerProfile[] = (profilesRes.data ?? []).map((p) => {
+        const lastActive = lastActiveMap.get(p.id) || p.created_at || null;
+        return {
+          id: p.id,
+          full_name: p.full_name || 'Unnamed Customer',
+          email: p.email || '',
+          phone: p.phone || '',
+          created_at: p.created_at,
+          wallet_balance: walletMap.get(p.id) ?? 0,
+          customer_type: (p.customer_type as 'B2C' | 'B2B') || 'B2C',
+          company_name: p.company_name,
+          brand_trade_name: p.brand_trade_name,
+          gstin: p.gstin,
+          pan: p.pan,
+          billing_address: p.billing_address,
+          billing_state: p.billing_state,
+          billing_city: p.billing_city,
+          billing_pincode: p.billing_pincode,
+          total_orders_txns: activityCountMap.get(p.id) || 0,
+          last_active_date: lastActive,
+        };
+      });
 
       setCustomers(list);
-
-      // Check if URL specifies a customer
-      const queryCustomerId = searchParams.get('customer');
-      if (queryCustomerId) {
-        const found = list.find((c) => c.id === queryCustomerId);
-        if (found) setSelectedCustomer(found);
-      } else if (list.length > 0 && !selectedCustomer) {
-        // Default to Mohd Saad or first customer with wallet activity
-        const defaultTarget = list.find((c) => c.email.includes('shekh.saad') || c.email.includes('saad')) || list[0];
-        setSelectedCustomer(defaultTarget);
-      }
     } catch (err) {
       console.error('Error loading customers for ledger:', err);
     } finally {
       setCustomersLoading(false);
     }
-  }, [searchParams, selectedCustomer]);
+  }, []);
 
   useEffect(() => {
     void loadCustomers();
   }, [loadCustomers]);
+
+  // Synchronize selectedCustomer with activeCustomerId
+  useEffect(() => {
+    if (!activeCustomerId) {
+      setSelectedCustomer(null);
+    } else if (customers.length > 0) {
+      const found = customers.find((c) => c.id === activeCustomerId);
+      setSelectedCustomer(found || null);
+    }
+  }, [activeCustomerId, customers]);
 
   // Load customer ledger records
   const loadLedgerData = useCallback(async (customerId: string) => {
@@ -456,7 +491,6 @@ export default function AdminCustomerLedgerPage() {
       if (tTime < fromTime) {
         priorCumulative += (t.credit - t.debit);
       } else if (tTime <= toTime) {
-        // Check voucherSearch filter
         if (voucherSearch.trim()) {
           const q = voucherSearch.trim().toLowerCase();
           const match =
@@ -500,12 +534,45 @@ export default function AdminCustomerLedgerPage() {
     return list;
   }, [inPeriodTransactions, sortOrder]);
 
-  // Pagination slice
+  // Pagination slice for Statement View
   const totalPages = Math.max(1, Math.ceil(sortedTransactions.length / pageSize));
   const paginatedTransactions = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return sortedTransactions.slice(start, start + pageSize);
   }, [sortedTransactions, currentPage, pageSize]);
+
+  // View 1 (Directory) filter and pagination calculations
+  const filteredDirectory = useMemo(() => {
+    return customers.filter((c) => {
+      if (typeFilter !== 'ALL' && c.customer_type !== typeFilter) {
+        return false;
+      }
+      if (!directorySearch.trim()) return true;
+      const q = directorySearch.trim().toLowerCase();
+      return (
+        c.full_name.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        c.phone.toLowerCase().includes(q) ||
+        c.id.toLowerCase().includes(q) ||
+        (c.company_name && c.company_name.toLowerCase().includes(q))
+      );
+    });
+  }, [customers, directorySearch, typeFilter]);
+
+  const dirTotalPages = Math.max(1, Math.ceil(filteredDirectory.length / dirPageSize));
+  const paginatedDirectory = useMemo(() => {
+    const start = (dirCurrentPage - 1) * dirPageSize;
+    return filteredDirectory.slice(start, start + dirPageSize);
+  }, [filteredDirectory, dirCurrentPage, dirPageSize]);
+
+  // Directory statistics
+  const directoryStats = useMemo(() => {
+    const totalCount = customers.length;
+    const b2cCount = customers.filter((c) => c.customer_type === 'B2C' || !c.customer_type).length;
+    const b2bCount = customers.filter((c) => c.customer_type === 'B2B').length;
+    const totalBalance = customers.reduce((sum, c) => sum + (c.wallet_balance || 0), 0);
+    return { totalCount, b2cCount, b2bCount, totalBalance };
+  }, [customers]);
 
   // Export to CSV / Excel
   const handleExportCsv = () => {
@@ -519,6 +586,8 @@ export default function AdminCustomerLedgerPage() {
       'Customer Email',
       'Customer Phone',
       'Customer UUID',
+      'Customer Type',
+      'Company Name',
       'Voucher / Type',
       'Voucher No. / Ref ID',
       'Particulars / Narration',
@@ -534,6 +603,8 @@ export default function AdminCustomerLedgerPage() {
       `"${selectedCustomer.email.replace(/"/g, '""')}"`,
       `"${selectedCustomer.phone.replace(/"/g, '""')}"`,
       `"${selectedCustomer.id}"`,
+      `"${selectedCustomer.customer_type || 'B2C'}"`,
+      `"${(selectedCustomer.company_name || '').replace(/"/g, '""')}"`,
       `"${tx.voucherType.replace(/"/g, '""')}"`,
       `"${tx.voucherNo.replace(/"/g, '""')}"`,
       `"${tx.particulars.replace(/"/g, '""')}"`,
@@ -546,6 +617,8 @@ export default function AdminCustomerLedgerPage() {
     // Summary row
     rows.push([
       '"---"',
+      '""',
+      '""',
       '""',
       '""',
       '""',
@@ -582,18 +655,6 @@ export default function AdminCustomerLedgerPage() {
     setTimeout(() => setCopiedId(false), 2000);
   };
 
-  const filteredCustomerList = useMemo(() => {
-    if (!customerSearchQuery.trim()) return customers;
-    const q = customerSearchQuery.trim().toLowerCase();
-    return customers.filter(
-      (c) =>
-        c.full_name.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q) ||
-        c.phone.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q)
-    );
-  }, [customers, customerSearchQuery]);
-
   if (!admin) return null;
 
   return (
@@ -603,601 +664,963 @@ export default function AdminCustomerLedgerPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 print:p-0 print:max-w-none">
-        {/* Breadcrumb & Navigation */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm print:hidden">
-          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-slate-500 font-medium">
-            <Link to="/admin/dashboard" className="hover:text-brand-700 transition-colors">
-              Admin
-            </Link>
-            <ChevronRight className="h-4 w-4 text-slate-400" />
-            <span className="text-slate-900 font-semibold">Customer Ledger</span>
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link
-              to="/admin/dashboard"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
-            </Link>
-          </div>
-        </div>
-
-        {/* Print-Only Header */}
-        <div className="hidden print:block mb-8 border-b border-slate-300 pb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-black text-slate-900">GYFTKART TECHNOLOGIES</h1>
-              <p className="text-xs text-slate-600 font-medium">Customer Statement &amp; Double-Entry Reconciliation Ledger</p>
-            </div>
-            <div className="text-right text-xs text-slate-600">
-              <p>Statement Generated: {new Date().toLocaleString('en-IN')}</p>
-              <p className="font-semibold text-slate-800">Accounting / Tally Export View</p>
-            </div>
-          </div>
-        </div>
-
-        {/* 1. Customer Selection & Search Bar */}
-        <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100 print:hidden">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            {/* Customer Dropdown / Autocomplete */}
-            <div className="relative flex-1">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                Select Customer Account
-              </label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name, email, phone, or customer UUID…"
-                  value={customerSearchQuery}
-                  onFocus={() => setIsCustomerDropdownOpen(true)}
-                  onChange={(e) => {
-                    setCustomerSearchQuery(e.target.value);
-                    setIsCustomerDropdownOpen(true);
-                  }}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-10 py-2.5 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-100 transition"
-                />
-                {customerSearchQuery && (
-                  <button
-                    onClick={() => {
-                      setCustomerSearchQuery('');
-                      setIsCustomerDropdownOpen(false);
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Autocomplete Dropdown List */}
-              {isCustomerDropdownOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-20"
-                    onClick={() => setIsCustomerDropdownOpen(false)}
-                  />
-                  <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
-                    {customersLoading ? (
-                      <div className="flex items-center justify-center p-4 text-xs text-slate-500">
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin text-brand-600" /> Loading customer directory…
-                      </div>
-                    ) : filteredCustomerList.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-500 font-medium">
-                        No customers found matching "{customerSearchQuery}"
-                      </div>
-                    ) : (
-                      filteredCustomerList.map((c) => {
-                        const isSelected = selectedCustomer?.id === c.id;
-                        return (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedCustomer(c);
-                              setIsCustomerDropdownOpen(false);
-                              setCustomerSearchQuery('');
-                              setSearchParams({ customer: c.id });
-                            }}
-                            className={`flex w-full items-center justify-between p-3 text-left border-b border-slate-50 last:border-none transition hover:bg-brand-50/40 ${
-                              isSelected ? 'bg-brand-50/80' : ''
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span className="grid place-items-center h-8 w-8 shrink-0 rounded-full bg-brand-100 text-xs font-bold text-brand-800">
-                                {c.full_name.charAt(0) || c.email.charAt(0) || '?'}
-                              </span>
-                              <div className="min-w-0">
-                                <p className="text-xs font-bold text-slate-900 truncate">{c.full_name}</p>
-                                <p className="text-[11px] text-slate-500 truncate">{c.email} {c.phone ? `· ${c.phone}` : ''}</p>
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0 ml-3">
-                              <span className="inline-block rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                {inr(c.wallet_balance ?? 0)} Cr
-                              </span>
-                              <p className="mt-0.5 font-mono text-[9px] text-slate-400">UUID: {c.id.slice(0, 8)}</p>
-                            </div>
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Quick Actions (Export CSV, Print) */}
-            <div className="flex items-center gap-2 pt-2 lg:pt-5">
-              <button
-                onClick={handleExportCsv}
-                disabled={!selectedCustomer || inPeriodTransactions.length === 0}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-50"
-                title="Export formatted ledger for Excel / Tally"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-                Export CSV / Excel
-              </button>
-              <button
-                onClick={handlePrint}
-                disabled={!selectedCustomer}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-50"
-                title="Print or save PDF statement"
-              >
-                <Printer className="h-3.5 w-3.5 text-slate-600" />
-                Print / PDF Statement
-              </button>
-            </div>
-          </div>
-
-          {/* Active Customer Identity Card */}
-          {selectedCustomer && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50/80 p-3.5 border border-slate-200/70">
+        {/* ========================================================================= */}
+        {/* VIEW 1: CUSTOMER DIRECTORY LIST (WHEN NO SPECIFIC CUSTOMER IS SELECTED)   */}
+        {/* ========================================================================= */}
+        {!activeCustomerId && (
+          <div>
+            {/* Breadcrumb & Navigation */}
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm">
+              <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-slate-500 font-medium">
+                <Link to="/admin/dashboard" className="hover:text-brand-700 transition-colors">
+                  Admin
+                </Link>
+                <ChevronRight className="h-4 w-4 text-slate-400" />
+                <span className="text-slate-900 font-semibold">Customer Ledger Directory</span>
+              </nav>
               <div className="flex items-center gap-3">
-                <span className="grid place-items-center h-10 w-10 rounded-xl bg-gradient-to-br from-brand-600 to-brand-800 text-white font-display font-bold text-sm shadow-sm">
-                  {selectedCustomer.full_name.charAt(0) || selectedCustomer.email.charAt(0) || '?'}
-                </span>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-extrabold text-slate-900">{selectedCustomer.full_name}</h2>
-                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.2 text-[10px] font-bold text-emerald-800">
-                      Active Customer
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500 font-medium">
-                    <span className="flex items-center gap-1">
-                      <Mail className="h-3 w-3 text-slate-400" /> {selectedCustomer.email || '—'}
-                    </span>
-                    {selectedCustomer.phone && (
-                      <span className="flex items-center gap-1">
-                        <Phone className="h-3 w-3 text-slate-400" /> {selectedCustomer.phone}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => handleCopyId(selectedCustomer.id)}
-                      className="flex items-center gap-1 font-mono text-[11px] text-slate-400 hover:text-slate-700 transition"
-                      title="Copy Customer UUID"
-                    >
-                      <span>UUID: {selectedCustomer.id.slice(0, 8)}…</span>
-                      {copiedId ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 font-medium">Current Ledger Balance:</span>
-                <span className="inline-flex items-center gap-1 rounded-xl bg-white px-3 py-1 text-sm font-extrabold text-slate-900 border border-slate-200 shadow-sm">
-                  <Wallet className="h-4 w-4 text-brand-600" />
-                  {inrDecimal(selectedCustomer.wallet_balance ?? 0)}
-                  <span className="text-[10px] font-bold text-emerald-700">Cr</span>
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Print-Only Customer Statement Banner */}
-        {selectedCustomer && (
-          <div className="hidden print:block mb-6 rounded-xl border border-slate-300 p-4">
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Customer Details</p>
-                <p className="font-extrabold text-sm text-slate-900">{selectedCustomer.full_name}</p>
-                <p className="text-slate-600">{selectedCustomer.email} {selectedCustomer.phone ? `· ${selectedCustomer.phone}` : ''}</p>
-                <p className="font-mono text-[10px] text-slate-500">ID: {selectedCustomer.id}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Statement Period</p>
-                <p className="font-bold text-slate-800">
-                  {fromDate || toDate ? `${fromDate || 'Beginning'} through ${toDate || 'Present'}` : 'All Recorded Transactions'}
-                </p>
-                <p className="text-slate-600">Current Ledger Balance: <span className="font-bold text-slate-900">{inrDecimal(selectedCustomer.wallet_balance ?? 0)} Cr</span></p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 2. Date Range & Quick Presets Filter */}
-        <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100 print:hidden">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Quick Presets */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                Period Presets
-              </label>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {(
-                  [
-                    { id: 'all', label: 'All Time' },
-                    { id: 'today', label: 'Today' },
-                    { id: 'this_month', label: 'This Month' },
-                    { id: 'last_month', label: 'Last Month' },
-                    { id: 'financial_year', label: 'Financial Year (FY)' },
-                  ] as const
-                ).map((p) => {
-                  const isActive = activePreset === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => handlePresetSelect(p.id)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                        isActive
-                          ? 'bg-brand-600 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Custom Date Pickers */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  From Date
-                </label>
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => {
-                    setFromDate(e.target.value);
-                    setActivePreset('all');
-                    setCurrentPage(1);
-                  }}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  To Date
-                </label>
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => {
-                    setToDate(e.target.value);
-                    setActivePreset('all');
-                    setCurrentPage(1);
-                  }}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
-                />
-              </div>
-
-              {/* Voucher / UTR Search */}
-              <div className="flex-1 min-w-[200px]">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Search Ref / UTR / Voucher
-                </label>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search UTR, Ref ID, Order #…"
-                    value={voucherSearch}
-                    onChange={(e) => {
-                      setVoucherSearch(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Accounting & Financial Summary Cards */}
-        <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Opening Balance */}
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
-            <div className="flex items-center justify-between text-slate-400 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Opening Balance</span>
-              <Clock className="h-4 w-4 text-slate-400" />
-            </div>
-            <p className="text-xl font-extrabold text-slate-900">
-              {ledgerLoading ? '…' : inrDecimal(openingBalance)}
-            </p>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              Prior to period ·{' '}
-              <span className={`inline-block font-bold ${openingBalanceType === 'Cr' ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {openingBalanceType}
-              </span>
-            </p>
-          </div>
-
-          {/* Total Debit (Dr) */}
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
-            <div className="flex items-center justify-between text-slate-400 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Total Debit (Dr)</span>
-              <TrendingDown className="h-4 w-4 text-rose-500" />
-            </div>
-            <p className="text-xl font-extrabold text-rose-600">
-              {ledgerLoading ? '…' : inrDecimal(periodDebit)}
-            </p>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              Outflows · Purchases &amp; Adjustments
-            </p>
-          </div>
-
-          {/* Total Credit (Cr) */}
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
-            <div className="flex items-center justify-between text-slate-400 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Total Credit (Cr)</span>
-              <TrendingUp className="h-4 w-4 text-emerald-500" />
-            </div>
-            <p className="text-xl font-extrabold text-emerald-600">
-              {ledgerLoading ? '…' : inrDecimal(periodCredit)}
-            </p>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              Inflows · Top-ups &amp; Receipts
-            </p>
-          </div>
-
-          {/* Closing / Net Balance */}
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
-            <div className="flex items-center justify-between text-slate-400 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Closing Balance</span>
-              <Banknote className="h-4 w-4 text-brand-600" />
-            </div>
-            <p className="text-xl font-extrabold text-slate-900">
-              {ledgerLoading ? '…' : inrDecimal(closingBalance)}
-            </p>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              Net balance ·{' '}
-              <span className={`inline-block font-bold ${closingBalanceType === 'Cr' ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {closingBalanceType}
-              </span>
-            </p>
-          </div>
-        </div>
-
-        {/* 4. Tally & Accounting Standard Ledger Table */}
-        <div className="rounded-3xl border border-slate-100 bg-white shadow-card overflow-hidden">
-          {/* Table Header Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-slate-100 print:hidden">
-            <div className="flex items-center gap-3">
-              <h3 className="font-display text-sm font-extrabold text-slate-900">
-                Statement Transactions ({sortedTransactions.length})
-              </h3>
-              <button
-                onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
-                title="Toggle Chronological Order"
-              >
-                <ArrowUpDown className="h-3 w-3" />
-                {sortOrder === 'asc' ? 'Oldest First' : 'Newest First'}
-              </button>
-            </div>
-
-            {/* Page Size Selector */}
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span>Rows per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 focus:border-brand-500 focus:outline-none"
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left text-xs">
-              <thead>
-                <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3 w-[60px]">S. NO.</th>
-                  <th className="px-4 py-3 w-[160px]">DATE &amp; TIME</th>
-                  <th className="px-4 py-3 w-[150px]">VOUCHER / TYPE</th>
-                  <th className="px-4 py-3 w-[180px]">VOUCHER NO. / REF ID</th>
-                  <th className="px-4 py-3">PARTICULARS / NARRATION</th>
-                  <th className="px-4 py-3 text-right w-[110px]">DEBIT (₹)</th>
-                  <th className="px-4 py-3 text-right w-[110px]">CREDIT (₹)</th>
-                  <th className="px-4 py-3 text-right w-[130px]">BALANCE (₹)</th>
-                  <th className="px-4 py-3 text-center w-[90px] print:hidden">ACTION</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-sans">
-                {ledgerLoading ? (
-                  <tr>
-                    <td colSpan={9} className="py-16 text-center text-slate-500">
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
-                        Loading double-entry ledger records…
-                      </div>
-                    </td>
-                  </tr>
-                ) : paginatedTransactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-16 text-center text-slate-500">
-                      No ledger transactions found for the selected customer and date range.
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedTransactions.map((tx, idx) => {
-                    const rowNumber = (currentPage - 1) * pageSize + idx + 1;
-                    const isDebit = tx.debit > 0;
-                    const isCredit = tx.credit > 0;
-
-                    return (
-                      <tr key={tx.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="px-4 py-3 font-mono text-[11px] text-slate-400">
-                          {rowNumber}
-                        </td>
-                        <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
-                          {formatDateTime(tx.date)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span
-                            className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                              tx.voucherType.includes('Receipt') || tx.voucherType.includes('Top-up')
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                                : tx.voucherType.includes('Payment')
-                                ? 'bg-blue-50 text-blue-700 border border-blue-100'
-                                : 'bg-slate-100 text-slate-700 border border-slate-200'
-                            }`}
-                          >
-                            {tx.voucherType}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-[11px] font-semibold text-slate-900 break-all">
-                          {tx.voucherNo}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700 font-medium">
-                          {tx.particulars}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold text-rose-600 whitespace-nowrap">
-                          {isDebit ? inrDecimal(tx.debit) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 whitespace-nowrap">
-                          {isCredit ? inrDecimal(tx.credit) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <span className="font-mono font-bold text-slate-900 mr-1.5">
-                            {inrDecimal(tx.balance)}
-                          </span>
-                          <span
-                            className={`inline-block rounded px-1.5 py-0.2 text-[9px] font-extrabold ${
-                              tx.balanceType === 'Cr'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {tx.balanceType}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center whitespace-nowrap print:hidden">
-                          <button
-                            onClick={() => handleOpenLedgerInvoice(tx)}
-                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-xs hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition"
-                            title="View and download invoice"
-                          >
-                            <FileText className="h-3 w-3 text-brand-600" />
-                            Invoice
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-
-              {/* Table Footer: Totals */}
-              {!ledgerLoading && sortedTransactions.length > 0 && (
-                <tfoot>
-                  <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-900">
-                    <td colSpan={5} className="px-4 py-3 text-right uppercase tracking-wider text-[11px] text-slate-600">
-                      Total for Selected Period:
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-rose-600">
-                      {inrDecimal(periodDebit)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-emerald-600">
-                      {inrDecimal(periodCredit)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-xs">
-                      {inrDecimal(closingBalance)}{' '}
-                      <span className="text-[10px] font-bold text-emerald-700">{closingBalanceType}</span>
-                    </td>
-                    <td className="print:hidden"></td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-
-          {/* Pagination Footer */}
-          {!ledgerLoading && sortedTransactions.length > 0 && (
-            <div className="border-t border-slate-100 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden">
-              <p className="text-xs text-slate-500">
-                Showing {(currentPage - 1) * pageSize + 1} to{' '}
-                {Math.min(currentPage * pageSize, sortedTransactions.length)} of {sortedTransactions.length} records
-              </p>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage <= 1}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                <Link
+                  to="/admin/dashboard"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"
                 >
-                  <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                  <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
+                </Link>
+              </div>
+            </div>
+
+            {/* Header Banner & High-level Statistics */}
+            <div className="mb-6 rounded-2xl bg-white p-6 shadow-card border border-slate-100">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl font-display font-extrabold text-slate-900 flex items-center gap-2">
+                    <Users className="h-5 w-5 text-brand-600" />
+                    Customer Directory &amp; Statements
+                  </h1>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Select any registered or B2B corporate customer to inspect their double-entry accounting ledger, balances, and invoices.
+                  </p>
+                </div>
+                <button
+                  onClick={() => void loadCustomers()}
+                  disabled={customersLoading}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition shrink-0 self-start md:self-center"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 text-slate-500 ${customersLoading ? 'animate-spin' : ''}`} />
+                  Refresh Balances
                 </button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).slice(
-                    Math.max(0, currentPage - 3),
-                    Math.min(totalPages, currentPage + 2)
-                  ).map((p) => (
+              </div>
+
+              {/* 4 Summary Counter Cards */}
+              <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Customers</p>
+                  <p className="mt-1 text-lg font-extrabold text-slate-900">
+                    {customersLoading ? '…' : directoryStats.totalCount}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Active directory records</p>
+                </div>
+
+                <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-sky-600">B2C Retail</p>
+                  <p className="mt-1 text-lg font-extrabold text-sky-950">
+                    {customersLoading ? '…' : directoryStats.b2cCount}
+                  </p>
+                  <p className="text-[11px] text-sky-700/80 mt-0.5">Individual accounts</p>
+                </div>
+
+                <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-purple-600">B2B Corporate</p>
+                  <p className="mt-1 text-lg font-extrabold text-purple-950">
+                    {customersLoading ? '…' : directoryStats.b2bCount}
+                  </p>
+                  <p className="text-[11px] text-purple-700/80 mt-0.5">Business &amp; enterprise accounts</p>
+                </div>
+
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Outstanding Balance</p>
+                  <p className="mt-1 text-lg font-extrabold text-emerald-950">
+                    {customersLoading ? '…' : inrDecimal(directoryStats.totalBalance)}
+                  </p>
+                  <p className="text-[11px] text-emerald-700/80 mt-0.5">Cumulative wallet liabilities (Cr)</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Directory Controls: Search, Type Filter, Rows per page */}
+            <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                {/* Search Bar */}
+                <div className="relative flex-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Search Customer Directory
+                  </label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Filter by customer name, email, phone, or UUID…"
+                      value={directorySearch}
+                      onChange={(e) => {
+                        setDirectorySearch(e.target.value);
+                        setDirCurrentPage(1);
+                      }}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-10 py-2.5 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-100 transition"
+                    />
+                    {directorySearch && (
+                      <button
+                        onClick={() => {
+                          setDirectorySearch('');
+                          setDirCurrentPage(1);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Filter Pills: All Customers, B2C, B2B */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Customer Type
+                  </label>
+                  <div className="flex items-center gap-1.5">
                     <button
-                      key={p}
-                      onClick={() => setCurrentPage(p)}
-                      className={`min-w-[2rem] h-8 rounded-lg text-xs font-bold transition-colors ${
-                        p === currentPage
+                      type="button"
+                      onClick={() => {
+                        setTypeFilter('ALL');
+                        setDirCurrentPage(1);
+                      }}
+                      className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                        typeFilter === 'ALL'
                           ? 'bg-brand-600 text-white shadow-sm'
                           : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      {p}
+                      All ({directoryStats.totalCount})
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTypeFilter('B2C');
+                        setDirCurrentPage(1);
+                      }}
+                      className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                        typeFilter === 'B2C'
+                          ? 'bg-brand-600 text-white shadow-sm'
+                          : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      B2C ({directoryStats.b2cCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTypeFilter('B2B');
+                        setDirCurrentPage(1);
+                      }}
+                      className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                        typeFilter === 'B2B'
+                          ? 'bg-brand-600 text-white shadow-sm'
+                          : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      B2B ({directoryStats.b2bCount})
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next <ChevronRight className="h-3.5 w-3.5" />
-                </button>
+
+                {/* Rows per page selector */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Rows Per Page
+                  </label>
+                  <select
+                    value={dirPageSize}
+                    onChange={(e) => {
+                      setDirPageSize(Number(e.target.value));
+                      setDirCurrentPage(1);
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value={10}>10 per page</option>
+                    <option value={25}>25 per page</option>
+                    <option value={50}>50 per page</option>
+                    <option value={100}>100 per page</option>
+                  </select>
+                </div>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Printable Footer Note */}
-        <div className="hidden print:block mt-8 text-[11px] text-slate-500 border-t border-slate-200 pt-3">
-          <p>
-            This statement is a computer-generated double-entry customer ledger prepared for auditing, Tally import, and accounting reconciliation.
-            All debits represent customer spending or debit adjustments; all credits represent customer fund inflows, top-ups, or refunds.
-          </p>
-        </div>
+            {/* View 1: Customer Directory Table */}
+            <div className="rounded-2xl border border-slate-100 bg-white shadow-card overflow-hidden">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                <p className="text-xs font-bold text-slate-800">
+                  Customers Directory ({filteredDirectory.length})
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Click 'View Ledger' on any customer to open their statement
+                </p>
+              </div>
 
-        {/* Tax Invoice / Receipt Modal */}
-        <OrderInvoiceModal
-          isOpen={isInvoiceOpen}
-          onClose={() => setIsInvoiceOpen(false)}
-          invoice={selectedInvoice}
-        />
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <th className="px-4 py-3 w-[60px]">S. NO.</th>
+                      <th className="px-4 py-3 w-[26%]">CUSTOMER</th>
+                      <th className="px-4 py-3 w-[14%]">PHONE</th>
+                      <th className="px-4 py-3 w-[10%]">TYPE</th>
+                      <th className="px-4 py-3 w-[15%]">CURRENT BALANCE</th>
+                      <th className="px-4 py-3 w-[13%]">TOTAL ORDERS / TXNS</th>
+                      <th className="px-4 py-3 w-[14%]">LAST ACTIVE DATE</th>
+                      <th className="px-4 py-3 text-right pr-6 w-[10%] min-w-[130px]">ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {customersLoading ? (
+                      <tr>
+                        <td colSpan={8} className="py-16 text-center text-slate-500">
+                          <div className="flex items-center justify-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+                            Loading customer directory and wallet balances…
+                          </div>
+                        </td>
+                      </tr>
+                    ) : paginatedDirectory.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-16 text-center text-slate-500">
+                          <p className="font-semibold text-slate-700">No customers found</p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {directorySearch
+                              ? `No customer profiles match "${directorySearch}"`
+                              : 'No customer profiles are available in this filter.'}
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedDirectory.map((c, idx) => {
+                        const rowNumber = (dirCurrentPage - 1) * dirPageSize + idx + 1;
+                        const isB2B = c.customer_type === 'B2B';
+                        const balance = c.wallet_balance ?? 0;
+
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                            {/* 1. S. NO. */}
+                            <td className="px-4 py-3.5 font-mono text-[11px] text-slate-400">
+                              {rowNumber}
+                            </td>
+
+                            {/* 2. CUSTOMER */}
+                            <td className="px-4 py-3.5">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="grid place-items-center h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-white font-display font-bold text-xs shadow-xs">
+                                  {c.full_name.charAt(0) || c.email.charAt(0) || '?'}
+                                </span>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-bold text-slate-900 truncate">{c.full_name}</span>
+                                    {isB2B && c.company_name && (
+                                      <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-100">
+                                        <Building2 className="h-2.5 w-2.5" />
+                                        {c.company_name}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 truncate">{c.email || '—'}</p>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* 3. PHONE */}
+                            <td className="px-4 py-3.5 text-slate-700 font-medium">
+                              {c.phone ? (
+                                <span className="flex items-center gap-1">
+                                  <Phone className="h-3 w-3 text-slate-400 shrink-0" />
+                                  {c.phone}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+
+                            {/* 4. TYPE */}
+                            <td className="px-4 py-3.5">
+                              {isB2B ? (
+                                <span className="inline-block rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-[10px] font-bold text-purple-700">
+                                  B2B Corporate
+                                </span>
+                              ) : (
+                                <span className="inline-block rounded-full bg-sky-50 border border-sky-100 px-2.5 py-0.5 text-[10px] font-bold text-sky-700">
+                                  B2C Retail
+                                </span>
+                              )}
+                            </td>
+
+                            {/* 5. CURRENT BALANCE */}
+                            <td className="px-4 py-3.5 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1">
+                                <Wallet className="h-3.5 w-3.5 text-slate-400" />
+                                <span className="font-mono font-bold text-slate-900">
+                                  {inrDecimal(Math.abs(balance))}
+                                </span>
+                                <span
+                                  className={`rounded px-1.5 py-0.2 text-[9px] font-extrabold ${
+                                    balance >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                  }`}
+                                >
+                                  {balance >= 0 ? 'Cr' : 'Dr'}
+                                </span>
+                              </span>
+                            </td>
+
+                            {/* 6. TOTAL ORDERS / TXNS */}
+                            <td className="px-4 py-3.5">
+                              <span className="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                                {c.total_orders_txns ?? 0} txns
+                              </span>
+                            </td>
+
+                            {/* 7. LAST ACTIVE DATE */}
+                            <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap text-[11px] font-medium">
+                              {c.last_active_date ? formatDateTime(c.last_active_date) : '—'}
+                            </td>
+
+                            {/* 8. ACTION */}
+                            <td className="px-4 py-3.5 text-right pr-6 whitespace-nowrap">
+                              <Link
+                                to={`/admin/customer-ledger/${c.id}`}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-700 transition"
+                              >
+                                View Ledger
+                                <ChevronRight className="h-3 w-3" />
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* View 1: Directory Pagination Footer */}
+              {!customersLoading && filteredDirectory.length > 0 && (
+                <div className="border-t border-slate-100 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <p className="text-xs text-slate-500">
+                    Showing {(dirCurrentPage - 1) * dirPageSize + 1} to{' '}
+                    {Math.min(dirCurrentPage * dirPageSize, filteredDirectory.length)} of {filteredDirectory.length} customers
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setDirCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={dirCurrentPage <= 1}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: dirTotalPages }, (_, i) => i + 1).slice(
+                        Math.max(0, dirCurrentPage - 3),
+                        Math.min(dirTotalPages, dirCurrentPage + 2)
+                      ).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setDirCurrentPage(p)}
+                          className={`min-w-[2rem] h-8 rounded-lg text-xs font-bold transition-colors ${
+                            p === dirCurrentPage
+                              ? 'bg-brand-600 text-white shadow-sm'
+                              : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setDirCurrentPage((p) => Math.min(dirTotalPages, p + 1))}
+                      disabled={dirCurrentPage >= dirTotalPages}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* VIEW 2: DETAILED CUSTOMER LEDGER STATEMENT                                */}
+        {/* ========================================================================= */}
+        {activeCustomerId && (
+          <div>
+            {/* Top Navigation & Breadcrumbs */}
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm print:hidden">
+              <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-slate-500 font-medium">
+                <Link to="/admin/dashboard" className="hover:text-brand-700 transition-colors">
+                  Admin
+                </Link>
+                <ChevronRight className="h-4 w-4 text-slate-400" />
+                <Link to="/admin/customer-ledger" className="hover:text-brand-700 transition-colors">
+                  Customer Directory
+                </Link>
+                <ChevronRight className="h-4 w-4 text-slate-400" />
+                <span className="text-slate-900 font-semibold truncate max-w-[200px] sm:max-w-none">
+                  {selectedCustomer ? selectedCustomer.full_name : 'Customer Statement'}
+                </span>
+              </nav>
+              <div className="flex items-center gap-3">
+                <Link
+                  to="/admin/customer-ledger"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 hover:underline transition-colors bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Back to Customer Directory
+                </Link>
+              </div>
+            </div>
+
+            {/* Loading state for customer record */}
+            {customersLoading && (
+              <div className="rounded-2xl bg-white p-12 text-center border border-slate-100 shadow-card">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin text-brand-600 mb-3" />
+                <p className="text-sm font-semibold text-slate-800">Loading customer account details…</p>
+              </div>
+            )}
+
+            {/* Customer Not Found Error State */}
+            {!customersLoading && !selectedCustomer && (
+              <div className="rounded-2xl bg-white p-12 text-center border border-slate-200 shadow-card">
+                <Users className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+                <h2 className="text-base font-extrabold text-slate-900">Customer Profile Not Found</h2>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  Could not find customer profile matching ID <span className="font-mono text-slate-700">{activeCustomerId}</span>. The customer may have been removed or the link is invalid.
+                </p>
+                <div className="mt-6">
+                  <Link
+                    to="/admin/customer-ledger"
+                    className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-brand-700 transition"
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Return to Customer Directory
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Print-Only Header */}
+            {selectedCustomer && (
+              <div className="hidden print:block mb-8 border-b border-slate-300 pb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900">GYFTKART TECHNOLOGIES</h1>
+                    <p className="text-xs text-slate-600 font-medium">Customer Statement &amp; Double-Entry Reconciliation Ledger</p>
+                  </div>
+                  <div className="text-right text-xs text-slate-600">
+                    <p>Statement Generated: {new Date().toLocaleString('en-IN')}</p>
+                    <p className="font-semibold text-slate-800">Accounting / Tally Export View</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Customer Header Card */}
+            {selectedCustomer && (
+              <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100 print:hidden">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  {/* Left: Customer Identity */}
+                  <div className="flex items-start sm:items-center gap-3 min-w-0">
+                    <span className="grid place-items-center h-12 w-12 shrink-0 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white font-display font-bold text-base shadow-sm">
+                      {selectedCustomer.full_name.charAt(0) || selectedCustomer.email.charAt(0) || '?'}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="text-base font-extrabold text-slate-900 truncate">
+                          {selectedCustomer.full_name}
+                        </h2>
+                        {selectedCustomer.customer_type === 'B2B' ? (
+                          <span className="inline-flex items-center rounded-full bg-purple-100 border border-purple-200 px-2.5 py-0.5 text-[10px] font-bold text-purple-800">
+                            B2B Corporate
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-sky-100 border border-sky-200 px-2.5 py-0.5 text-[10px] font-bold text-sky-800">
+                            B2C Retail
+                          </span>
+                        )}
+                        {selectedCustomer.company_name && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                            <Building2 className="h-3 w-3 text-slate-400" />
+                            {selectedCustomer.company_name}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 font-medium">
+                        <span className="flex items-center gap-1">
+                          <Mail className="h-3.5 w-3.5 text-slate-400" /> {selectedCustomer.email || '—'}
+                        </span>
+                        {selectedCustomer.phone && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="h-3.5 w-3.5 text-slate-400" /> {selectedCustomer.phone}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleCopyId(selectedCustomer.id)}
+                          className="flex items-center gap-1 font-mono text-[11px] text-slate-400 hover:text-slate-700 transition"
+                          title="Copy Customer UUID"
+                        >
+                          <span>UUID: {selectedCustomer.id.slice(0, 8)}…</span>
+                          {copiedId ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Current Balance & Export Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200/80 px-3.5 py-2">
+                      <span className="text-xs text-slate-500 font-medium">Wallet Balance:</span>
+                      <span className="inline-flex items-center gap-1 font-mono text-sm font-extrabold text-slate-900">
+                        <Wallet className="h-4 w-4 text-brand-600" />
+                        {inrDecimal(selectedCustomer.wallet_balance ?? 0)}
+                        <span className="text-[10px] font-bold text-emerald-700">Cr</span>
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={handleExportCsv}
+                      disabled={inPeriodTransactions.length === 0}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-50"
+                      title="Export formatted ledger for Excel / Tally"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                      Download Statement CSV
+                    </button>
+                    <button
+                      onClick={handlePrint}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 transition"
+                      title="Print or save PDF statement"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-slate-600" />
+                      Print Statement
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Print-Only Customer Statement Banner */}
+            {selectedCustomer && (
+              <div className="hidden print:block mb-6 rounded-xl border border-slate-300 p-4">
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Customer Details</p>
+                    <p className="font-extrabold text-sm text-slate-900">{selectedCustomer.full_name}</p>
+                    <p className="text-slate-600">{selectedCustomer.email} {selectedCustomer.phone ? `· ${selectedCustomer.phone}` : ''}</p>
+                    <p className="font-mono text-[10px] text-slate-500">ID: {selectedCustomer.id}</p>
+                    {selectedCustomer.company_name && (
+                      <p className="text-slate-700 font-semibold mt-1">Company: {selectedCustomer.company_name}</p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Statement Period</p>
+                    <p className="font-bold text-slate-800">
+                      {fromDate || toDate ? `${fromDate || 'Beginning'} through ${toDate || 'Present'}` : 'All Recorded Transactions'}
+                    </p>
+                    <p className="text-slate-600">Current Ledger Balance: <span className="font-bold text-slate-900">{inrDecimal(selectedCustomer.wallet_balance ?? 0)} Cr</span></p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Financial KPI Summary Cards (4 Cards) */}
+            {selectedCustomer && (
+              <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Opening Balance */}
+                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
+                  <div className="flex items-center justify-between text-slate-400 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Opening Balance</span>
+                    <Clock className="h-4 w-4 text-slate-400" />
+                  </div>
+                  <p className="text-xl font-extrabold text-slate-900">
+                    {ledgerLoading ? '…' : inrDecimal(openingBalance)}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                    Prior to period ·{' '}
+                    <span className={`inline-block font-bold ${openingBalanceType === 'Cr' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {openingBalanceType}
+                    </span>
+                  </p>
+                </div>
+
+                {/* 2. Total Debit (Dr) */}
+                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
+                  <div className="flex items-center justify-between text-slate-400 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Total Debit (Dr)</span>
+                    <TrendingDown className="h-4 w-4 text-rose-500" />
+                  </div>
+                  <p className="text-xl font-extrabold text-rose-600">
+                    {ledgerLoading ? '…' : inrDecimal(periodDebit)}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                    Outflows · Purchases &amp; Adjustments
+                  </p>
+                </div>
+
+                {/* 3. Total Credit (Cr) */}
+                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
+                  <div className="flex items-center justify-between text-slate-400 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Total Credit (Cr)</span>
+                    <TrendingUp className="h-4 w-4 text-emerald-500" />
+                  </div>
+                  <p className="text-xl font-extrabold text-emerald-600">
+                    {ledgerLoading ? '…' : inrDecimal(periodCredit)}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                    Inflows · Top-ups &amp; Receipts
+                  </p>
+                </div>
+
+                {/* 4. Closing Balance */}
+                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card">
+                  <div className="flex items-center justify-between text-slate-400 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Closing Balance</span>
+                    <Banknote className="h-4 w-4 text-brand-600" />
+                  </div>
+                  <p className="text-xl font-extrabold text-slate-900">
+                    {ledgerLoading ? '…' : inrDecimal(closingBalance)}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                    Net balance ·{' '}
+                    <span className={`inline-block font-bold ${closingBalanceType === 'Cr' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {closingBalanceType}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Date Range Presets & Voucher Search Filter */}
+            {selectedCustomer && (
+              <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100 print:hidden">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  {/* Quick Presets */}
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                      Period Presets
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(
+                        [
+                          { id: 'all', label: 'All Time' },
+                          { id: 'today', label: 'Today' },
+                          { id: 'this_month', label: 'This Month' },
+                          { id: 'last_month', label: 'Last Month' },
+                          { id: 'financial_year', label: 'Financial Year (FY)' },
+                        ] as const
+                      ).map((p) => {
+                        const isActive = activePreset === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => handlePresetSelect(p.id)}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                              isActive
+                                ? 'bg-brand-600 text-white shadow-sm'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom Date Pickers & Voucher Search */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                        From Date
+                      </label>
+                      <input
+                        type="date"
+                        value={fromDate}
+                        onChange={(e) => {
+                          setFromDate(e.target.value);
+                          setActivePreset('all');
+                          setCurrentPage(1);
+                        }}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                        To Date
+                      </label>
+                      <input
+                        type="date"
+                        value={toDate}
+                        onChange={(e) => {
+                          setToDate(e.target.value);
+                          setActivePreset('all');
+                          setCurrentPage(1);
+                        }}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                      />
+                    </div>
+
+                    {/* Voucher / UTR Search */}
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                        Search Ref / UTR / Voucher
+                      </label>
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search UTR, Ref ID, Order #…"
+                          value={voucherSearch}
+                          onChange={(e) => {
+                            setVoucherSearch(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Statement Table (Tally Format) */}
+            {selectedCustomer && (
+              <div className="rounded-3xl border border-slate-100 bg-white shadow-card overflow-hidden">
+                {/* Table Header Controls */}
+                <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-slate-100 print:hidden">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-display text-sm font-extrabold text-slate-900">
+                      Statement Transactions ({sortedTransactions.length})
+                    </h3>
+                    <button
+                      onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                      title="Toggle Chronological Order"
+                    >
+                      <ArrowUpDown className="h-3 w-3" />
+                      {sortOrder === 'asc' ? 'Oldest First' : 'Newest First'}
+                    </button>
+                  </div>
+
+                  {/* Page Size Selector */}
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span>Rows per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 focus:border-brand-500 focus:outline-none"
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[850px] text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        <th className="px-4 py-3 w-[60px]">S. NO.</th>
+                        <th className="px-4 py-3 w-[160px]">DATE &amp; TIME</th>
+                        <th className="px-4 py-3 w-[150px]">VOUCHER / TYPE</th>
+                        <th className="px-4 py-3 w-[180px]">VOUCHER NO. / REF ID</th>
+                        <th className="px-4 py-3">PARTICULARS / NARRATION</th>
+                        <th className="px-4 py-3 text-right w-[110px]">DEBIT (₹)</th>
+                        <th className="px-4 py-3 text-right w-[110px]">CREDIT (₹)</th>
+                        <th className="px-4 py-3 text-right w-[130px]">BALANCE (₹)</th>
+                        <th className="px-4 py-3 text-center w-[90px] print:hidden">ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {ledgerLoading ? (
+                        <tr>
+                          <td colSpan={9} className="py-16 text-center text-slate-500">
+                            <div className="flex items-center justify-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+                              Loading double-entry ledger records…
+                            </div>
+                          </td>
+                        </tr>
+                      ) : paginatedTransactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="py-16 text-center text-slate-500">
+                            No ledger transactions found for the selected customer and date range.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedTransactions.map((tx, idx) => {
+                          const rowNumber = (currentPage - 1) * pageSize + idx + 1;
+                          const isDebit = tx.debit > 0;
+                          const isCredit = tx.credit > 0;
+
+                          return (
+                            <tr key={tx.id} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="px-4 py-3 font-mono text-[11px] text-slate-400">
+                                {rowNumber}
+                              </td>
+                              <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
+                                {formatDateTime(tx.date)}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <span
+                                  className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                                    tx.voucherType.includes('Receipt') || tx.voucherType.includes('Top-up')
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                      : tx.voucherType.includes('Payment')
+                                      ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                      : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                  }`}
+                                >
+                                  {tx.voucherType}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 font-mono text-[11px] font-semibold text-slate-900 break-all">
+                                {tx.voucherNo}
+                              </td>
+                              <td className="px-4 py-3 text-slate-700 font-medium">
+                                {tx.particulars}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-semibold text-rose-600 whitespace-nowrap">
+                                {isDebit ? inrDecimal(tx.debit) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 whitespace-nowrap">
+                                {isCredit ? inrDecimal(tx.credit) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <span className="font-mono font-bold text-slate-900 mr-1.5">
+                                  {inrDecimal(tx.balance)}
+                                </span>
+                                <span
+                                  className={`inline-block rounded px-1.5 py-0.2 text-[9px] font-extrabold ${
+                                    tx.balanceType === 'Cr'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-rose-100 text-rose-800'
+                                  }`}
+                                >
+                                  {tx.balanceType}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-center whitespace-nowrap print:hidden">
+                                <button
+                                  onClick={() => handleOpenLedgerInvoice(tx)}
+                                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-xs hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition"
+                                  title="View and download invoice"
+                                >
+                                  <FileText className="h-3 w-3 text-brand-600" />
+                                  Invoice
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+
+                    {/* Table Footer: Totals */}
+                    {!ledgerLoading && sortedTransactions.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-900">
+                          <td colSpan={5} className="px-4 py-3 text-right uppercase tracking-wider text-[11px] text-slate-600">
+                            Total for Selected Period:
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-xs text-rose-600">
+                            {inrDecimal(periodDebit)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-xs text-emerald-600">
+                            {inrDecimal(periodCredit)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-xs">
+                            {inrDecimal(closingBalance)}{' '}
+                            <span className="text-[10px] font-bold text-emerald-700">{closingBalanceType}</span>
+                          </td>
+                          <td className="print:hidden"></td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+
+                {/* Pagination Footer */}
+                {!ledgerLoading && sortedTransactions.length > 0 && (
+                  <div className="border-t border-slate-100 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden">
+                    <p className="text-xs text-slate-500">
+                      Showing {(currentPage - 1) * pageSize + 1} to{' '}
+                      {Math.min(currentPage * pageSize, sortedTransactions.length)} of {sortedTransactions.length} records
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={currentPage <= 1}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                      </button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).slice(
+                          Math.max(0, currentPage - 3),
+                          Math.min(totalPages, currentPage + 2)
+                        ).map((p) => (
+                          <button
+                            key={p}
+                            onClick={() => setCurrentPage(p)}
+                            className={`min-w-[2rem] h-8 rounded-lg text-xs font-bold transition-colors ${
+                              p === currentPage
+                                ? 'bg-brand-600 text-white shadow-sm'
+                                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={currentPage >= totalPages}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Printable Footer Note */}
+            <div className="hidden print:block mt-8 text-[11px] text-slate-500 border-t border-slate-200 pt-3">
+              <p>
+                This statement is a computer-generated double-entry customer ledger prepared for auditing, Tally import, and accounting reconciliation.
+                All debits represent customer spending or debit adjustments; all credits represent customer fund inflows, top-ups, or refunds.
+              </p>
+            </div>
+
+            {/* Tax Invoice / Receipt Modal */}
+            <OrderInvoiceModal
+              isOpen={isInvoiceOpen}
+              onClose={() => setIsInvoiceOpen(false)}
+              invoice={selectedInvoice}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
