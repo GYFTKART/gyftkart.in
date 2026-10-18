@@ -47,12 +47,9 @@ export function AdminTopBar() {
           <span className="grid place-items-center h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glow-sm">
             <LayoutDashboard className="h-5 w-5" />
           </span>
-          <div>
-            <p className="font-display text-lg font-extrabold text-slate-900 leading-none">
-              GyftKart <span className="text-gradient">Admin</span>
-            </p>
-            <p className="text-[11px] text-slate-500">Signed in as {admin.email}</p>
-          </div>
+          <p className="font-display text-lg font-extrabold text-slate-900 leading-none">
+            GyftKart <span className="text-gradient">Admin</span>
+          </p>
         </Link>
         <div className="flex items-center gap-2">
           <span
