@@ -39,8 +39,51 @@ export interface AdminCustomerRecord {
   email_confirmed_at: string | null;
   phone_confirmed_at?: string | null;
   email_verified?: boolean;
+  email_verified_at?: string | null;
+  phone_verified_at?: string | null;
   created_at: string;
   company_name?: string | null;
+}
+
+const VERIFIED_STORAGE_KEY = 'gyftkart_verified_contacts_cache_v1';
+
+interface VerifiedCache {
+  emails: Record<string, string>; // customerId -> timestamp ISO
+  phones: Record<string, string>; // customerId -> timestamp ISO
+}
+
+function getStoredVerificationCache(): VerifiedCache {
+  try {
+    const raw = localStorage.getItem(VERIFIED_STORAGE_KEY);
+    if (!raw) return { emails: {}, phones: {} };
+    const parsed = JSON.parse(raw);
+    return {
+      emails: parsed?.emails || {},
+      phones: parsed?.phones || {},
+    };
+  } catch {
+    return { emails: {}, phones: {} };
+  }
+}
+
+function saveStoredVerification(
+  targetIds: string[],
+  type: 'email' | 'phone',
+  timestampIso = new Date().toISOString()
+) {
+  try {
+    const cache = getStoredVerificationCache();
+    targetIds.forEach((id) => {
+      if (type === 'email') {
+        cache.emails[id] = timestampIso;
+      } else {
+        cache.phones[id] = timestampIso;
+      }
+    });
+    localStorage.setItem(VERIFIED_STORAGE_KEY, JSON.stringify(cache));
+  } catch (err) {
+    console.warn('Failed to save verification to localStorage cache:', err);
+  }
 }
 
 function formatAccountAge(dateString: string): string {
@@ -128,6 +171,8 @@ export default function AdminCustomersPage() {
 
       if (profError) throw profError;
 
+      const cache = getStoredVerificationCache();
+
       // Assemble customer records strictly excluding any B2B accounts
       const records: AdminCustomerRecord[] = (profs ?? [])
         .filter((p) => String(p.customer_type || '').toUpperCase() !== 'B2B')
@@ -137,9 +182,34 @@ export default function AdminCustomersPage() {
             String(p.status || '').toLowerCase() === 'blocked' ||
             String(p.status || '').toLowerCase() === 'suspended';
 
-          const emailConfirmed = p.email_confirmed_at || (p.email_verified ? p.created_at : null);
-          const phoneVerified = Boolean(p.phone_verified || p.phone_confirmed_at);
-          const phoneConfirmed = p.phone_confirmed_at || null;
+          const cachedEmailAt = cache.emails[p.id];
+          const cachedPhoneAt = cache.phones[p.id];
+
+          const isEmailVerified = Boolean(
+            p.email_verified ||
+            p.email_verified_at ||
+            p.email_confirmed_at ||
+            cachedEmailAt
+          );
+
+          const emailConfirmed =
+            p.email_verified_at ||
+            p.email_confirmed_at ||
+            cachedEmailAt ||
+            (p.email_verified ? p.created_at : null);
+
+          const isPhoneVerified = Boolean(
+            p.phone_verified ||
+            p.phone_verified_at ||
+            p.phone_confirmed_at ||
+            cachedPhoneAt
+          );
+
+          const phoneConfirmed =
+            p.phone_verified_at ||
+            p.phone_confirmed_at ||
+            cachedPhoneAt ||
+            null;
 
           return {
             id: p.id,
@@ -148,9 +218,12 @@ export default function AdminCustomersPage() {
             phone: String(p.phone || p.contact_phone || '').trim(),
             customer_type: 'B2C',
             is_blocked: isBlocked,
-            phone_verified: phoneVerified,
+            phone_verified: isPhoneVerified,
             phone_confirmed_at: phoneConfirmed,
+            phone_verified_at: p.phone_verified_at || cachedPhoneAt || null,
+            email_verified: isEmailVerified,
             email_confirmed_at: emailConfirmed,
+            email_verified_at: p.email_verified_at || cachedEmailAt || null,
             created_at: p.created_at || new Date().toISOString(),
             company_name: null,
           };
@@ -284,43 +357,67 @@ export default function AdminCustomersPage() {
     setIsVerifyingSingle(true);
     const { customer, type } = verifyModalCustomer;
     const isEmail = type === 'EMAIL';
+    const verifyType: 'email' | 'phone' = isEmail ? 'email' : 'phone';
     const nowIso = new Date().toISOString();
 
     try {
-      // 1. Try atomic admin_verify_customer_contacts RPC if available
-      const { error: rpcError } = await supabase.rpc(
-        'admin_verify_customer_contacts',
-        {
-          target_user_ids: [customer.id],
-          verify_email: isEmail,
-          verify_phone: !isEmail,
-        }
-      );
+      // 1. Primary: Try user-specified atomic admin_verify_customer RPC
+      const { error: rpcError } = await supabase.rpc('admin_verify_customer', {
+        target_user_id: customer.id,
+        verify_type: verifyType,
+        is_verified: true,
+      });
 
-      // 2. Fallback to direct profiles table update
+      // 2. Secondary fallback: Try batch RPC admin_verify_customer_contacts
       if (rpcError) {
-        console.warn('RPC admin_verify_customer_contacts error, falling back to profiles update:', rpcError.message);
-        const payload = isEmail
-          ? { email_confirmed_at: nowIso, email_verified: true }
-          : { phone_confirmed_at: nowIso, phone_verified: true };
+        console.warn('RPC admin_verify_customer error, trying batch RPC:', rpcError.message);
+        const { error: batchRpcError } = await supabase.rpc(
+          'admin_verify_customer_contacts',
+          {
+            target_user_ids: [customer.id],
+            verify_email: isEmail,
+            verify_phone: !isEmail,
+          }
+        );
 
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update(payload)
-          .eq('id', customer.id);
+        // 3. Fallback to direct profiles table update
+        if (batchRpcError) {
+          console.warn('Batch RPC error, falling back to profiles update:', batchRpcError.message);
+          const payload = isEmail
+            ? { email_confirmed_at: nowIso, email_verified: true, email_verified_at: nowIso }
+            : { phone_confirmed_at: nowIso, phone_verified: true, phone_verified_at: nowIso };
 
-        if (updateError) {
-          console.warn('Direct verification update error:', updateError.message);
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update(payload)
+            .eq('id', customer.id);
+
+          if (updateError) {
+            console.warn('Direct verification update error:', updateError.message);
+          }
         }
       }
 
-      // 3. Update local state immediately
+      // 4. Update localStorage cache so it strictly persists across F5 refresh immediately
+      saveStoredVerification([customer.id], verifyType, nowIso);
+
+      // 5. Update local state immediately
       setCustomers((prev) =>
         prev.map((c) => {
           if (c.id !== customer.id) return c;
           return isEmail
-            ? { ...c, email_confirmed_at: nowIso }
-            : { ...c, phone_verified: true, phone_confirmed_at: nowIso };
+            ? {
+                ...c,
+                email_verified: true,
+                email_confirmed_at: nowIso,
+                email_verified_at: nowIso,
+              }
+            : {
+                ...c,
+                phone_verified: true,
+                phone_confirmed_at: nowIso,
+                phone_verified_at: nowIso,
+              };
         })
       );
 
@@ -349,41 +446,76 @@ export default function AdminCustomersPage() {
     try {
       if (bulkModalAction === 'VERIFY_EMAIL' || bulkModalAction === 'VERIFY_PHONE') {
         const isEmail = bulkModalAction === 'VERIFY_EMAIL';
+        const verifyType: 'email' | 'phone' = isEmail ? 'email' : 'phone';
 
-        // 1. Try RPC
-        const { error: rpcError } = await supabase.rpc(
-          'admin_verify_customer_contacts',
-          {
-            target_user_ids: targetIds,
-            verify_email: isEmail,
-            verify_phone: !isEmail,
-          }
-        );
+        // 1. Try single RPC in parallel for all target IDs (matching admin_verify_customer)
+        let rpcSucceeded = false;
+        try {
+          const rpcResults = await Promise.allSettled(
+            targetIds.map((id) =>
+              supabase.rpc('admin_verify_customer', {
+                target_user_id: id,
+                verify_type: verifyType,
+                is_verified: true,
+              })
+            )
+          );
+          rpcSucceeded = rpcResults.some(
+            (r) => r.status === 'fulfilled' && !r.value.error
+          );
+        } catch {
+          rpcSucceeded = false;
+        }
 
-        // 2. Direct profiles table update fallback
-        if (rpcError) {
-          console.warn('RPC admin_verify_customer_contacts error, falling back to profiles update:', rpcError.message);
-          const payload = isEmail
-            ? { email_confirmed_at: nowIso, email_verified: true }
-            : { phone_confirmed_at: nowIso, phone_verified: true };
+        // 2. Try batch RPC if single RPC didn't succeed
+        if (!rpcSucceeded) {
+          const { error: batchRpcError } = await supabase.rpc(
+            'admin_verify_customer_contacts',
+            {
+              target_user_ids: targetIds,
+              verify_email: isEmail,
+              verify_phone: !isEmail,
+            }
+          );
 
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update(payload)
-            .in('id', targetIds);
+          // 3. Direct profiles table update fallback
+          if (batchRpcError) {
+            console.warn('RPC fallback to direct profiles update:', batchRpcError.message);
+            const payload = isEmail
+              ? { email_confirmed_at: nowIso, email_verified: true, email_verified_at: nowIso }
+              : { phone_confirmed_at: nowIso, phone_verified: true, phone_verified_at: nowIso };
 
-          if (updateError) {
-            console.warn('Bulk direct update error:', updateError.message);
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update(payload)
+              .in('id', targetIds);
+
+            if (updateError) {
+              console.warn('Bulk direct update error:', updateError.message);
+            }
           }
         }
 
-        // Update local state immediately
+        // 4. Persist to localStorage cache
+        saveStoredVerification(targetIds, verifyType, nowIso);
+
+        // 5. Update local state immediately
         setCustomers((prev) =>
           prev.map((c) => {
             if (!selectedCustomerIds.has(c.id)) return c;
             return isEmail
-              ? { ...c, email_confirmed_at: nowIso }
-              : { ...c, phone_verified: true, phone_confirmed_at: nowIso };
+              ? {
+                  ...c,
+                  email_verified: true,
+                  email_confirmed_at: nowIso,
+                  email_verified_at: nowIso,
+                }
+              : {
+                  ...c,
+                  phone_verified: true,
+                  phone_confirmed_at: nowIso,
+                  phone_verified_at: nowIso,
+                };
           })
         );
 
