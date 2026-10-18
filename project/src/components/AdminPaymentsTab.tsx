@@ -47,7 +47,7 @@ const statusStyle: Record<string, string> = {
   FAILED: 'bg-rose-100 text-rose-700',
   CANCELLED: 'bg-rose-100 text-rose-700',
   REJECTED: 'bg-rose-100 text-rose-700',
-  REVERTED: 'bg-orange-100 text-orange-800 border border-orange-200',
+  REVERTED: 'bg-slate-100 text-slate-700 border border-slate-200',
 };
 
 const REJECT_REASONS = ['Invalid UTR', 'Amount mismatch', 'Screenshot unreadable'];
@@ -441,14 +441,13 @@ export default function AdminPaymentsTab() {
         }
 
         const remarkNote = `Reverted by Admin: ${effectiveReason}`;
-        const newRemark = s.admin_remark ? `${s.admin_remark} | ${remarkNote}` : remarkNote;
 
         // Update session status: try REVERTED, then REJECTED if check constraint limits
         let updResult = await supabase
           .from('upi_payment_sessions')
           .update({
             status: 'REVERTED',
-            admin_remark: newRemark,
+            admin_remark: remarkNote,
             completed_at: new Date().toISOString(),
           })
           .eq('id', s.id);
@@ -458,10 +457,15 @@ export default function AdminPaymentsTab() {
             .from('upi_payment_sessions')
             .update({
               status: 'REJECTED',
-              admin_remark: newRemark,
+              admin_remark: remarkNote,
               completed_at: new Date().toISOString(),
             })
             .eq('id', s.id);
+        }
+
+        if (updResult.error) {
+          setRevertError(`Session status update failed: ${updResult.error.message}`);
+          return;
         }
 
         setRevertTarget(null);
@@ -476,12 +480,11 @@ export default function AdminPaymentsTab() {
 
       // For non-topup (voucher) sessions:
       const remarkNote = `Reverted by Admin: ${effectiveReason}`;
-      const newRemark = s.admin_remark ? `${s.admin_remark} | ${remarkNote}` : remarkNote;
       let updResult = await supabase
         .from('upi_payment_sessions')
         .update({
           status: 'REVERTED',
-          admin_remark: newRemark,
+          admin_remark: remarkNote,
           completed_at: new Date().toISOString(),
         })
         .eq('id', s.id);
@@ -491,7 +494,7 @@ export default function AdminPaymentsTab() {
           .from('upi_payment_sessions')
           .update({
             status: 'REJECTED',
-            admin_remark: newRemark,
+            admin_remark: remarkNote,
             completed_at: new Date().toISOString(),
           })
           .eq('id', s.id);
@@ -1425,20 +1428,20 @@ export default function AdminPaymentsTab() {
                             <button
                               onClick={() => openReopen(s)}
                               disabled={reopeningId === s.id}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs whitespace-nowrap font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                              title="Revert rejection and re-open request"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs whitespace-nowrap font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              title="Approve previously rejected request"
                             >
                               {reopeningId === s.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
                               ) : (
-                                <RotateCcw className="h-3.5 w-3.5 text-amber-600" />
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                               )}
-                              Revert
+                              Approve
                             </button>
                           </div>
                         ) : s.status === 'REVERTED' ? (
                           <div className="flex items-center justify-end md:justify-center pr-2">
-                            <span className="inline-block rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800">
+                            <span className="inline-block rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
                               Reverted
                             </span>
                           </div>

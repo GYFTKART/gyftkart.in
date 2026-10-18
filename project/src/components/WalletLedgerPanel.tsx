@@ -50,9 +50,9 @@ const topupRef = (s: Pick<TopupRow, 'id'>) => `TOP-${s.id.slice(0, 8).toUpperCas
 const categoryLabel: Record<LedgerRow['category'], string> = {
   TOPUP: 'Top-up',
   VOUCHER_PURCHASE: 'Purchase',
-  REFUND: 'Refund',
-  ADJUSTMENT: 'Adjustment',
-  ROLLBACK: 'Reversal',
+  REFUND: 'Return',
+  ADJUSTMENT: 'Return',
+  ROLLBACK: 'Return',
 };
 
 const currentMonthStart = () => {
@@ -60,8 +60,25 @@ const currentMonthStart = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
+// Status mapping for the top-up request block:
+// CONFIRMED→Confirmed; REJECTED→Rejected (+admin_remark reason);
+// REVERTED→Reverted; CANCELLED→Cancelled; ACTIVE+UTR→Pending verification (UTR shown);
+// ACTIVE no UTR→Awaiting your payment; anything else → raw status.
+const topupStatus = (t: TopupRow): { label: string; cls: string } => {
+  if (t.status === 'REVERTED') return { label: 'Reverted', cls: 'bg-slate-100 text-slate-600 border border-slate-200' };
+  if (t.status === 'CONFIRMED' || t.status === 'SUCCESS') return { label: 'Confirmed', cls: 'bg-emerald-100 text-emerald-700' };
+  if (t.status === 'REJECTED') return { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' };
+  if (t.status === 'CANCELLED') return { label: 'Cancelled', cls: 'bg-slate-100 text-slate-500' };
+  if (t.status === 'ACTIVE') {
+    return t.customer_utr
+      ? { label: 'Pending Verification', cls: 'bg-amber-100 text-amber-700' }
+      : { label: 'Awaiting your payment', cls: 'bg-amber-100 text-amber-700' };
+  }
+  return { label: t.status, cls: 'bg-slate-100 text-slate-500' };
+};
+
 export default function WalletLedgerPanel() {
-  const { session: authSession } = useAuth();
+  const { session: authSession, authReady } = useAuth();
   const [wallet, setWallet] = useState<WalletRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +118,7 @@ export default function WalletLedgerPanel() {
     if ('customer_utr' in t) {
       const label = topupStatus(t).label;
       if (statusFilter === 'confirmed') return label === 'Confirmed';
-      if (statusFilter === 'rejected') return label === 'Rejected';
+      if (statusFilter === 'rejected') return label === 'Rejected' || label === 'Reverted';
       return label === 'Pending Verification' || label === 'Awaiting your payment';
     }
     const credit = t.type === 'CREDIT';
@@ -128,6 +145,11 @@ export default function WalletLedgerPanel() {
   })();
 
   const loadWallet = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     const { data, error: err } = await supabase.rpc('ensure_wallet');
@@ -141,7 +163,12 @@ export default function WalletLedgerPanel() {
   }, []);
 
   const loadLedger = useCallback(async () => {
-    if (!authSession?.token) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setLedger([]);
+      setLedgerLoading(false);
+      return;
+    }
     setLedgerLoading(true);
     const { data, error: err } = await supabase
       .from('wallet_transactions')
@@ -154,22 +181,15 @@ export default function WalletLedgerPanel() {
       setLedger((data ?? []) as LedgerRow[]);
     }
     setLedgerLoading(false);
-  }, [authSession?.token]);
+  }, []);
 
-  useEffect(() => {
-    void loadWallet();
-  }, [loadWallet]);
-
-  useEffect(() => {
-    void loadLedger();
-  }, [loadLedger]);
-
-  // Top-up requests (upi_payment_sessions, category TOPUP) — read under
-  // the CUSTOMER'S OWN session; the owner-select RLS policy
-  // ('owner reads own upi session') authorizes user_id = auth.uid() via
-  // the shared singleton. No admin-token reuse, no manual headers.
   const loadTopups = useCallback(async () => {
-    if (!authSession?.token) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setTopups([]);
+      setTopupsLoading(false);
+      return;
+    }
     setTopupsLoading(true);
     const { data, error: err } = await supabase
       .from('upi_payment_sessions')
@@ -183,28 +203,47 @@ export default function WalletLedgerPanel() {
       setTopups((data ?? []) as TopupRow[]);
     }
     setTopupsLoading(false);
-  }, [authSession?.token]);
+  }, []);
+
+  const fetchWalletData = useCallback(async (userId?: string) => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const { data, error: err } = await supabase.rpc('ensure_wallet');
+    if (err) {
+      setError(err.message || 'Could not load wallet.');
+      setLoading(false);
+      return;
+    }
+    setWallet(data as unknown as WalletRow);
+    setLoading(false);
+    void loadLedger();
+    void loadTopups();
+  }, [loadLedger, loadTopups]);
 
   useEffect(() => {
-    void loadTopups();
-  }, [loadTopups]);
+    const initWallet = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        await fetchWalletData(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    };
+    void initWallet();
+  }, [fetchWalletData]);
 
-  // Status mapping for the top-up request block:
-  // CONFIRMED→Confirmed; REJECTED→Rejected (+admin_remark reason);
-  // CANCELLED→Cancelled; ACTIVE+UTR→Pending verification (UTR shown);
-  // ACTIVE no UTR→Awaiting your payment; anything else → raw status.
-  const topupStatus = (t: TopupRow): { label: string; cls: string } => {
-    if (t.status === 'CONFIRMED' || t.status === 'SUCCESS') return { label: 'Confirmed', cls: 'bg-emerald-100 text-emerald-700' };
-    if (t.status === 'REJECTED') return { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' };
-    if (t.status === 'REVERTED') return { label: 'Reverted', cls: 'bg-orange-100 text-orange-700' };
-    if (t.status === 'CANCELLED') return { label: 'Cancelled', cls: 'bg-slate-100 text-slate-500' };
-    if (t.status === 'ACTIVE') {
-      return t.customer_utr
-        ? { label: 'Pending Verification', cls: 'bg-amber-100 text-amber-700' }
-        : { label: 'Awaiting your payment', cls: 'bg-amber-100 text-amber-700' };
+  useEffect(() => {
+    if (!authReady) return;
+    if (authSession?.id) {
+      void fetchWalletData(authSession.id);
+    } else {
+      setLoading(false);
     }
-    return { label: t.status, cls: 'bg-slate-100 text-slate-500' };
-  };
+  }, [authReady, authSession?.id, fetchWalletData]);
 
   const rupees = Number(amountInput);
   const toUpPaise = Math.round(rupees * 100);
@@ -441,9 +480,9 @@ export default function WalletLedgerPanel() {
                                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${st.cls}`}>
                                     {st.label}
                                   </span>
-                                  {tr.status === 'REJECTED' && tr.admin_remark && (
-                                    <p className="mt-0.5 text-[10px] font-semibold text-rose-600">
-                                      Reason: {tr.admin_remark}
+                                  {(tr.status === 'REJECTED' || tr.status === 'REVERTED') && tr.admin_remark && (
+                                    <p className={`mt-0.5 text-[10px] font-semibold ${tr.status === 'REJECTED' ? 'text-rose-600' : 'text-slate-500'}`}>
+                                      {tr.admin_remark.startsWith('Reverted by') ? tr.admin_remark : `Reason: ${tr.admin_remark}`}
                                     </p>
                                   )}
                                 </td>
