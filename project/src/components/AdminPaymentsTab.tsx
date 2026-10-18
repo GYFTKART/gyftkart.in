@@ -93,6 +93,7 @@ function itemsOf(s: UpSession): ItemView[] {
 const shortOrderId = (id: string) => (id.length > 13 ? `${id.slice(0, 13)}…` : id);
 
 type DateMode = 'all' | 'today' | 'yesterday' | 'week' | 'custom';
+type StatusFilter = 'all' | 'pending' | 'success' | 'rejected';
 
 export default function AdminPaymentsTab() {
   // Admin tokens come from the ISOLATED admin session cache (separate
@@ -109,6 +110,7 @@ export default function AdminPaymentsTab() {
   const [confirmTarget, setConfirmTarget] = useState<UpSession | null>(null);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateMode, setDateMode] = useState<DateMode>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -121,6 +123,14 @@ export default function AdminPaymentsTab() {
   const [proofPreview, setProofPreview] = useState<{ url: string; path: string } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // Bulk select & batch action state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchAction, setBatchAction] = useState<'confirm' | 'reject' | null>(null);
+  const [batchRejectOpen, setBatchRejectOpen] = useState(false);
+  const [batchRejectRemark, setBatchRejectRemark] = useState('');
+  const [batchRejectError, setBatchRejectError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -354,9 +364,21 @@ export default function AdminPaymentsTab() {
     [dateMode, customFrom, customTo]
   );
 
+  const inStatusMatch = useCallback(
+    (status: string) => {
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'pending') return status === 'INITIATED' || status === 'ACTIVE';
+      if (statusFilter === 'success') return status === 'SUCCESS';
+      if (statusFilter === 'rejected') return status === 'REJECTED';
+      return true;
+    },
+    [statusFilter]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return sessions.filter((s) => {
+      if (!inStatusMatch(s.status)) return false;
       if (!inDateRange(s.created_at)) return false;
       if (!q) return true;
       const buyer = buyerOf(s.buyer);
@@ -369,7 +391,7 @@ export default function AdminPaymentsTab() {
         buyer.email.toLowerCase().includes(q)
       );
     });
-  }, [sessions, search, inDateRange]);
+  }, [sessions, search, inStatusMatch, inDateRange]);
 
   const stats = useMemo(() => {
     let confirmedPaise = 0;
@@ -397,6 +419,167 @@ export default function AdminPaymentsTab() {
     () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
     [filtered, currentPage, pageSize]
   );
+
+  const selectedPendingCount = useMemo(() => {
+    return sessions.filter(
+      (s) => selectedIds.has(s.id) && (s.status === 'INITIATED' || s.status === 'ACTIVE')
+    ).length;
+  }, [sessions, selectedIds]);
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = visible.length > 0 && visible.every((s) => next.has(s.id));
+      if (allSelected) {
+        for (const s of visible) {
+          next.delete(s.id);
+        }
+      } else {
+        for (const s of visible) {
+          next.add(s.id);
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleBatchConfirm = async () => {
+    const targets = sessions.filter(
+      (s) => selectedIds.has(s.id) && (s.customer_utr ?? '').trim()
+    );
+    if (targets.length === 0) {
+      setMessage({
+        kind: 'err',
+        text: 'None of the selected sessions have a customer UTR available to confirm.',
+      });
+      return;
+    }
+    if (!authSession?.token) {
+      setMessage({
+        kind: 'err',
+        text: 'Admin session expired — please sign in again and retry.',
+      });
+      return;
+    }
+
+    setBatchBusy(true);
+    setBatchAction('confirm');
+    setMessage(null);
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
+
+    for (const s of targets) {
+      const bankRef = (s.customer_utr ?? '').trim();
+      const res = await fnPost('upi-manual-confirm', {
+        payment_id: s.id,
+        order_id: s.order_id,
+        bank_ref: bankRef,
+        amount_rupees: Number(s.amount_paise) / 100,
+      });
+      if (res.ok) {
+        successCount++;
+      } else {
+        failCount++;
+        const json = res.json ?? {};
+        const errText = typeof json.error === 'string' ? json.error : `HTTP ${res.status || 'transport'}`;
+        errors.push(`${s.order_id}: ${errText}`);
+      }
+    }
+
+    setBatchBusy(false);
+    setBatchAction(null);
+    clearSelection();
+    void load();
+
+    if (failCount === 0) {
+      setMessage({
+        kind: 'ok',
+        text: `Successfully confirmed ${successCount} session${successCount === 1 ? '' : 's'}.`,
+      });
+    } else {
+      setMessage({
+        kind: successCount > 0 ? 'ok' : 'err',
+        text: `Batch confirm finished: ${successCount} succeeded, ${failCount} failed. ${errors.slice(0, 2).join('; ')}`,
+      });
+    }
+  };
+
+  const handleBatchReject = async () => {
+    const remark = batchRejectRemark.trim();
+    if (remark.length < 3) {
+      setBatchRejectError('Rejection remark is mandatory (min 3 chars).');
+      return;
+    }
+    if (remark.length > 500) {
+      setBatchRejectError('Rejection remark too long (max 500 chars).');
+      return;
+    }
+    const targets = sessions.filter(
+      (s) => selectedIds.has(s.id) && (s.status === 'INITIATED' || s.status === 'ACTIVE')
+    );
+    if (targets.length === 0) {
+      setBatchRejectError('No pending sessions selected to reject.');
+      return;
+    }
+    if (!authSession?.token) {
+      setBatchRejectError('Admin session expired — please sign in again and retry.');
+      return;
+    }
+
+    setBatchBusy(true);
+    setBatchAction('reject');
+    setBatchRejectError(null);
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
+
+    for (const s of targets) {
+      const res = await fnPost('upi-reject-payment', { payment_id: s.id, remark });
+      if (res.ok) {
+        successCount++;
+      } else {
+        failCount++;
+        const json = res.json ?? {};
+        const errText = typeof json.error === 'string' ? json.error : `HTTP ${res.status || 'transport'}`;
+        errors.push(`${s.order_id}: ${errText}`);
+      }
+    }
+
+    setBatchBusy(false);
+    setBatchAction(null);
+    setBatchRejectOpen(false);
+    clearSelection();
+    void load();
+
+    if (failCount === 0) {
+      setMessage({
+        kind: 'ok',
+        text: `Successfully rejected ${successCount} session${successCount === 1 ? '' : 's'}: ${remark}`,
+      });
+    } else {
+      setMessage({
+        kind: successCount > 0 ? 'ok' : 'err',
+        text: `Batch reject finished: ${successCount} succeeded, ${failCount} failed. ${errors.slice(0, 2).join('; ')}`,
+      });
+    }
+  };
   const showingFrom = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const showingTo = Math.min(currentPage * pageSize, filtered.length);
 
@@ -501,7 +684,7 @@ export default function AdminPaymentsTab() {
         </button>
       </div>
 
-      {/* Search + date filter + rows-per-page (combined AND) */}
+      {/* Search + status filter + date filter + rows-per-page (combined AND) */}
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1 min-w-0">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -515,7 +698,20 @@ export default function AdminPaymentsTab() {
             className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-slate-400"
           />
         </div>
-        <div className="flex flex-nowrap items-center gap-2">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as StatusFilter);
+              setPage(1);
+            }}
+            className={`${topSelectClass} shrink-0`}
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending Verification</option>
+            <option value="success">Confirmed / Success</option>
+            <option value="rejected">Rejected</option>
+          </select>
           <select
             value={dateMode}
             onChange={(e) => {
@@ -572,6 +768,54 @@ export default function AdminPaymentsTab() {
         </div>
       </div>
 
+      {/* Bulk actions bar */}
+      {selectedIds.size > 0 && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-emerald-900">
+              {selectedIds.size} session{selectedIds.size === 1 ? '' : 's'} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => void handleBatchConfirm()}
+              disabled={batchBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {batchBusy && batchAction === 'confirm' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              )}
+              Batch Confirm
+            </button>
+            <button
+              onClick={() => {
+                setBatchRejectOpen(true);
+                setBatchRejectRemark('');
+                setBatchRejectError(null);
+              }}
+              disabled={batchBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+            >
+              {batchBusy && batchAction === 'reject' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <XCircle className="h-3.5 w-3.5" />
+              )}
+              Batch Reject
+            </button>
+            <button
+              onClick={clearSelection}
+              disabled={batchBusy}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {message && (
         <div
           className={`mt-3 text-xs font-semibold rounded-lg px-3 py-2 ${
@@ -600,9 +844,21 @@ export default function AdminPaymentsTab() {
       ) : (
         <>
           <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[1120px] text-left text-xs">
+            <table className="w-full min-w-[1180px] text-left text-xs">
               <thead>
                 <tr className="bg-slate-50">
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={visible.length > 0 && visible.every((s) => selectedIds.has(s.id))}
+                        onChange={toggleSelectAll}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        aria-label="Select all"
+                      />
+                      <span>S. No.</span>
+                    </div>
+                  </th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">User / Customer</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Order / Item</th>
@@ -613,11 +869,25 @@ export default function AdminPaymentsTab() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((s) => {
+                {visible.map((s, index) => {
                   const buyer = buyerOf(s.buyer);
                   const items = itemsOf(s);
                   return (
-                    <tr key={s.id} className="border-t border-slate-100 align-top">
+                    <tr key={s.id} className={`border-t border-slate-100 align-top ${selectedIds.has(s.id) ? 'bg-emerald-50/40' : ''}`}>
+                      <td className="px-3 py-3 whitespace-nowrap text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(s.id)}
+                            onChange={() => toggleSelect(s.id)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            aria-label={`Select session ${s.order_id}`}
+                          />
+                          <span className="font-mono text-xs text-slate-600">
+                            {(currentPage - 1) * pageSize + index + 1}
+                          </span>
+                        </div>
+                      </td>
                       <td className="px-3 py-3 min-w-[10rem]">
                         {buyer.name ? (
                           <p className="truncate font-semibold text-slate-600">{buyer.name}</p>
@@ -945,6 +1215,67 @@ export default function AdminPaymentsTab() {
               >
                 {rejecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
                 Reject session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Reject modal */}
+      {batchRejectOpen && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4"
+          onClick={() => !batchBusy && setBatchRejectOpen(false)}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-slate-900">
+              Batch Reject ({selectedPendingCount} pending session{selectedPendingCount === 1 ? '' : 's'})
+            </h3>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Marks selected pending sessions REJECTED with the remark below (min 3 chars). Non-pending sessions will be skipped.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {REJECT_REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setBatchRejectRemark(r)}
+                  className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={batchRejectRemark}
+              onChange={(e) => {
+                setBatchRejectRemark(e.target.value);
+                setBatchRejectError(null);
+              }}
+              rows={3}
+              maxLength={500}
+              placeholder="Rejection remark (mandatory, min 3 chars)"
+              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-slate-400"
+            />
+            {batchRejectError && (
+              <p className="mt-1 text-[11px] font-semibold text-rose-600">
+                {batchRejectError}
+              </p>
+            )}
+            <div className="mt-3 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setBatchRejectOpen(false)}
+                disabled={batchBusy}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleBatchReject()}
+                disabled={batchBusy || selectedPendingCount === 0}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                {batchBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                Reject {selectedPendingCount} Selected
               </button>
             </div>
           </div>
