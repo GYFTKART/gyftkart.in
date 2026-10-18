@@ -40,6 +40,7 @@ type UpSession = {
 
 const statusStyle: Record<string, string> = {
   SUCCESS: 'bg-emerald-100 text-emerald-800',
+  CONFIRMED: 'bg-emerald-100 text-emerald-800',
   ACTIVE: 'bg-amber-100 text-amber-800',
   INITIATED: 'bg-slate-100 text-slate-700',
   EXPIRED: 'bg-slate-100 text-slate-500',
@@ -148,6 +149,11 @@ export default function AdminPaymentsTab() {
   const [revertError, setRevertError] = useState<string | null>(null);
   const [reverting, setReverting] = useState(false);
   const [revertingId, setRevertingId] = useState<string | null>(null);
+  const [reopenTarget, setReopenTarget] = useState<UpSession | null>(null);
+  const [reopenNote, setReopenNote] = useState('');
+  const [reopenError, setReopenError] = useState<string | null>(null);
+  const [reopening, setReopening] = useState(false);
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [proofPreview, setProofPreview] = useState<{ url: string; path: string } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -506,6 +512,201 @@ export default function AdminPaymentsTab() {
     } finally {
       setReverting(false);
       setRevertingId(null);
+    }
+  };
+
+  const openReopen = (s: UpSession) => {
+    setReopenTarget(s);
+    setReopenNote('');
+    setReopenError(null);
+  };
+
+  const submitReopen = async () => {
+    if (!reopenTarget) return;
+    const s = reopenTarget;
+    const rawNote = reopenNote.trim();
+    const effectiveNote = rawNote || 'Approved after review';
+
+    if (!authSession?.token) {
+      setReopenError('Admin session expired — please sign in again and retry.');
+      return;
+    }
+
+    setReopening(true);
+    setReopeningId(s.id);
+    setReopenError(null);
+
+    try {
+      // 1. Dedicated Edge Function upi-reopen-payment
+      const edgeRes = await fnPost('upi-reopen-payment', {
+        payment_id: s.id,
+        order_id: s.order_id,
+        reason: effectiveNote,
+      });
+
+      if (edgeRes.ok) {
+        setReopenTarget(null);
+        push('Session approved and processed successfully', 'success');
+        setMessage({
+          kind: 'ok',
+          text: `Session ${displayRef(s)} approved successfully.`,
+        });
+        void load();
+        return;
+      }
+
+      if (edgeRes.status !== 404 && edgeRes.status !== 0 && edgeRes.json && typeof edgeRes.json.error === 'string') {
+        setReopenError(edgeRes.json.error);
+        return;
+      }
+
+      // 2. Direct atomic execution fallback: RPC admin_reopen_payment_session
+      const { data: rpcData, error: rpcError } = await supabase.rpc('admin_reopen_payment_session', {
+        p_payment_id: s.id,
+        p_reason: effectiveNote,
+      });
+
+      if (!rpcError && rpcData?.ok) {
+        setReopenTarget(null);
+        push('Session approved and processed successfully', 'success');
+        setMessage({
+          kind: 'ok',
+          text: `Session ${displayRef(s)} approved successfully.`,
+        });
+        void load();
+        return;
+      }
+
+      // 3. Fallback: For TOPUP sessions, call existing wallet_credit RPC directly
+      if (s.category === 'TOPUP') {
+        const amountPaise = Number(s.amount_paise);
+        const { data: balanceAfter, error: creditError } = await supabase.rpc('wallet_credit', {
+          p_user: s.user_id,
+          p_amount: amountPaise,
+          p_reference: `Approved after review: ${s.order_id}`,
+          p_order: s.order_id,
+        });
+
+        if (creditError) {
+          setReopenError(creditError.message || 'Failed to credit customer wallet balance.');
+          return;
+        }
+
+        // Update session status: try CONFIRMED, then SUCCESS if check constraint limits
+        let updResult = await supabase
+          .from('upi_payment_sessions')
+          .update({
+            status: 'CONFIRMED',
+            admin_remark: effectiveNote,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', s.id);
+
+        if (updResult.error) {
+          updResult = await supabase
+            .from('upi_payment_sessions')
+            .update({
+              status: 'SUCCESS',
+              admin_remark: effectiveNote,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', s.id);
+        }
+
+        setReopenTarget(null);
+        push('Session approved and customer wallet credited', 'success');
+        setMessage({
+          kind: 'ok',
+          text: `Session ${displayRef(s)} approved. Customer balance updated to ₹${(Number(balanceAfter) / 100).toFixed(2)}.`,
+        });
+        void load();
+        return;
+      }
+
+      // For non-topup (voucher) sessions:
+      let updResult = await supabase
+        .from('upi_payment_sessions')
+        .update({
+          status: 'CONFIRMED',
+          admin_remark: effectiveNote,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', s.id);
+
+      if (updResult.error) {
+        updResult = await supabase
+          .from('upi_payment_sessions')
+          .update({
+            status: 'SUCCESS',
+            admin_remark: effectiveNote,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', s.id);
+      }
+
+      if (updResult.error) {
+        setReopenError(`Session update failed: ${updResult.error.message}`);
+        return;
+      }
+
+      // Reconcile order & gift cards
+      const totalRupees = Number(s.amount_paise) / 100;
+      await supabase.from('orders').insert({
+        user_id: s.user_id,
+        total_amount: totalRupees,
+        status: 'successful',
+        youpi_order_id: s.order_id,
+        youpi_payment_id: s.id,
+        youpi_utr: s.bank_ref || s.customer_utr || null,
+        items: s.items,
+      });
+
+      const items = Array.isArray(s.items) ? s.items : [];
+      if (items.length > 0) {
+        const seg = () => Math.random().toString(16).slice(2, 6).toUpperCase();
+        const rows = items.map((raw) => {
+          const it = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {};
+          const brandName = String(it.brand_name || it.brand || it.name || 'Gift Card').trim();
+          const brandSlug = String(it.brand_slug || it.slug || brandName.toLowerCase().replace(/\s+/g, '-'));
+          const denom = Number(it.amount || it.denomination || 0) || totalRupees;
+          const qty = Math.max(1, Number(it.quantity || it.qty || 1));
+          return {
+            session_id: s.order_id,
+            user_id: s.user_id,
+            brand_slug: brandSlug,
+            brand_name: brandName,
+            brand_color: String(it.brand_color || '#6b21a8'),
+            brand_color2: String(it.brand_color2 || '#3b0764'),
+            amount: denom,
+            quantity: qty,
+            recipient_name: String(it.recipient_name || ''),
+            recipient_email: String(it.recipient_email || ''),
+            recipient_phone: String(it.recipient_phone || ''),
+            message: String(it.message || ''),
+            occasion: String(it.occasion || ''),
+            gift_card_code: `${seg()}-${seg()}-${seg()}-${seg()}`,
+            status: 'active',
+            balance: denom * qty,
+            issued_under_payment_id: s.id,
+          };
+        });
+        try {
+          await supabase.from('purchases').insert(rows);
+        } catch (e) {
+          console.warn('Could not insert purchases rows:', e);
+        }
+      }
+
+      setReopenTarget(null);
+      push('Session approved and gift card order fulfilled', 'success');
+      setMessage({ kind: 'ok', text: `Session ${displayRef(s)} approved and order fulfilled.` });
+      void load();
+    } catch (err) {
+      console.error('Re-approval exception:', err);
+      setReopenError(err instanceof Error ? err.message : 'Re-approval failed unexpectedly.');
+    } finally {
+      setReopening(false);
+      setReopeningId(null);
     }
   };
 
@@ -1185,30 +1386,30 @@ export default function AdminPaymentsTab() {
                         )}
                       </td>
                       <td className="w-[14%] min-w-[160px] px-3 py-3 pr-4 text-right md:text-center">
-                        {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
-                          <div className="flex items-center justify-end md:justify-center gap-2 pr-2 shrink-0 whitespace-nowrap">
+                        {(s.status === 'ACTIVE' || s.status === 'INITIATED' || s.status === 'PENDING_VERIFICATION') ? (
+                          <div className="flex items-center justify-end md:justify-center gap-1.5 pr-2 shrink-0 whitespace-nowrap">
                             <button
                               onClick={() => setConfirmTarget(s)}
                               disabled={confirmingId === s.id || !s.customer_utr}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs whitespace-nowrap font-medium text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs whitespace-nowrap font-medium text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" />
                               Confirm
                             </button>
                             <button
                               onClick={() => openReject(s)}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-xs whitespace-nowrap font-medium text-white hover:bg-rose-700"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-xs whitespace-nowrap font-medium text-white hover:bg-rose-700"
                             >
                               <XCircle className="h-3.5 w-3.5" />
                               Reject
                             </button>
                           </div>
-                        ) : (s.status === 'SUCCESS' || s.status === 'CONFIRMED') ? (
+                        ) : (s.status === 'CONFIRMED' || s.status === 'SUCCESS' || s.status === 'SUCCESS-manual') ? (
                           <div className="flex items-center justify-end md:justify-center pr-2 shrink-0 whitespace-nowrap">
                             <button
                               onClick={() => openRevert(s)}
                               disabled={revertingId === s.id}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs whitespace-nowrap font-medium text-amber-800 hover:bg-amber-100 hover:border-amber-400 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs whitespace-nowrap font-semibold text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                               title="Revert / Rollback confirmed payment session"
                             >
                               {revertingId === s.id ? (
@@ -1219,6 +1420,22 @@ export default function AdminPaymentsTab() {
                               Revert
                             </button>
                           </div>
+                        ) : s.status === 'REJECTED' ? (
+                          <div className="flex items-center justify-end md:justify-center pr-2 shrink-0 whitespace-nowrap">
+                            <button
+                              onClick={() => openReopen(s)}
+                              disabled={reopeningId === s.id}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs whitespace-nowrap font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              title="Approve previously rejected request"
+                            >
+                              {reopeningId === s.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                              ) : (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              )}
+                              Approve
+                            </button>
+                          </div>
                         ) : s.status === 'REVERTED' ? (
                           <div className="flex items-center justify-end md:justify-center pr-2">
                             <span className="inline-block rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800">
@@ -1227,7 +1444,7 @@ export default function AdminPaymentsTab() {
                           </div>
                         ) : (
                           <div className="flex items-center justify-end md:justify-center pr-2">
-                            <span className="whitespace-nowrap text-[11px] text-slate-400">No action</span>
+                            <span className="whitespace-nowrap text-xs text-gray-400">No action</span>
                           </div>
                         )}
                       </td>
@@ -1636,6 +1853,131 @@ export default function AdminPaymentsTab() {
                   <>
                     <RotateCcw className="h-3.5 w-3.5" />
                     Confirm Revert
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Re-approval modal for rejected sessions */}
+      {reopenTarget && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4"
+          onClick={() => !reopening && setReopenTarget(null)}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Approve Previously Rejected Request</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Re-open request and credit customer or fulfill order
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => !reopening && setReopenTarget(null)}
+                disabled={reopening}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Reference:</span>
+                <span className="font-mono font-semibold text-slate-900">{displayRef(reopenTarget)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Customer:</span>
+                <span className="font-medium text-slate-700 truncate max-w-[200px]">
+                  {buyerOf(reopenTarget.buyer).email || reopenTarget.user_id}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Amount:</span>
+                <span className="font-bold text-slate-900">{inr(Number(reopenTarget.amount_paise) / 100)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Category:</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  reopenTarget.category === 'TOPUP' ? 'bg-sky-100 text-sky-700' : 'bg-purple-100 text-purple-700'
+                }`}>
+                  {reopenTarget.category === 'TOPUP' ? 'Wallet Top-up' : 'Voucher Purchase'}
+                </span>
+              </div>
+              {reopenTarget.admin_remark && (
+                <div className="flex items-start justify-between gap-2 pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-500">Previous Remark:</span>
+                  <span className="text-rose-600 font-medium text-right text-[11px]">
+                    {reopenTarget.admin_remark.replace(/^Remark:\s*/i, '')}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/80 p-2.5 text-[11px] text-emerald-900 flex items-start gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
+              <span>
+                {reopenTarget.category === 'TOPUP'
+                  ? `Approving this top-up will immediately credit ${inr(Number(reopenTarget.amount_paise) / 100)} to the customer's wallet balance and record a ledger transaction.`
+                  : `Approving this voucher order will mark the session as CONFIRMED and fulfill gift cards for the order.`}
+              </span>
+            </div>
+
+            <div className="mt-3">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Reason for re-approval (optional)
+              </label>
+              <textarea
+                value={reopenNote}
+                onChange={(e) => {
+                  setReopenNote(e.target.value);
+                  setReopenError(null);
+                }}
+                rows={2}
+                maxLength={500}
+                placeholder="Approved after review"
+                disabled={reopening}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {reopenError && (
+              <p className="mt-2 text-[11px] font-semibold text-rose-600">{reopenError}</p>
+            )}
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReopenTarget(null)}
+                disabled={reopening}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitReopen()}
+                disabled={reopening}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors disabled:opacity-60"
+              >
+                {reopening ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Approving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Confirm Approval
                   </>
                 )}
               </button>
