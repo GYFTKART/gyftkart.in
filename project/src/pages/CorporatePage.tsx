@@ -15,6 +15,7 @@ import {
   PiggyBank,
 } from 'lucide-react';
 import Reveal from '@/components/Reveal';
+import { SEO } from '@/components/SEO';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/Toast';
 
@@ -99,6 +100,12 @@ export default function CorporatePage() {
 
   return (
     <div className="pt-16">
+      <SEO
+        title="Corporate Gift Cards & Bulk Employee Rewards | GyftKart Corporate"
+        description="Empower employee recognition and client appreciation with GyftKart Corporate. Bulk discounts, custom branding, GST invoices, and instant digital vouchers."
+        canonical="https://gyftkart.in/corporate"
+        keywords="corporate gift cards, bulk vouchers India, employee reward gift cards, client gifting, GST gift vouchers, GyftKart corporate"
+      />
       {/* ===== HERO ===== */}
       <section className="relative overflow-hidden bg-brand-950 text-white">
         <div className="absolute inset-0 bg-grid opacity-[0.08] pointer-events-none" />

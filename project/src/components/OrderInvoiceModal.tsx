@@ -8,9 +8,11 @@ import {
   Building2,
   FileText,
   ShieldCheck,
+  Share2,
 } from 'lucide-react';
 import { inrDecimal, formatDateTime, numberToWordsINR } from '@/lib/format';
 import type { InvoiceData } from '@/lib/invoice';
+import { createWhatsAppShareUrl, formatInvoiceWhatsAppMessage } from '@/lib/whatsapp';
 
 export type { InvoiceData, InvoiceItem, InvoiceCustomer } from '@/lib/invoice';
 
@@ -55,6 +57,19 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleShareWhatsApp = () => {
+    if (!invoice) return;
+    const shareText = formatInvoiceWhatsAppMessage({
+      invoiceNumber: invoice.invoiceNumber,
+      orderId: invoice.orderId,
+      totalAmount: invoice.totalAmount,
+      date: formatDateTime(invoice.date),
+      customerName: invoice.customer?.name,
+    });
+    const url = createWhatsAppShareUrl(shareText, invoice.customer?.phone);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   if (!isOpen || !invoice) return null;
 
   const invoiceDate = invoice.completedAt || invoice.date;
@@ -84,6 +99,14 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleShareWhatsApp}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-xs hover:bg-emerald-100 transition"
+              title="Share Invoice on WhatsApp"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              WhatsApp
+            </button>
             <button
               onClick={handleCopyInvoiceNumber}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"

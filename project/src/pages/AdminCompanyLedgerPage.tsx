@@ -894,7 +894,7 @@ export default function AdminCompanyLedgerPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[850px]">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <th className="py-3 px-4">Date &amp; Time</th>
@@ -931,11 +931,11 @@ export default function AdminCompanyLedgerPage() {
                     const isCredit = tx.credit > 0 && tx.debit === 0;
                     const isDebit = tx.debit > 0 && tx.credit === 0;
 
-                    let badgeColor = 'bg-slate-100 text-slate-700';
-                    if (tx.category === 'revenue') badgeColor = 'bg-emerald-100 text-emerald-800';
-                    else if (tx.category === 'brand_payout') badgeColor = 'bg-amber-100 text-amber-800';
-                    else if (tx.category === 'expense') badgeColor = 'bg-rose-100 text-rose-800';
-                    else if (tx.category === 'refund') badgeColor = 'bg-purple-100 text-purple-800';
+                    let badgeColor = 'bg-slate-100 text-slate-700 border border-slate-200';
+                    if (tx.category === 'revenue') badgeColor = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
+                    else if (tx.category === 'brand_payout') badgeColor = 'bg-amber-50 text-amber-800 border border-amber-200';
+                    else if (tx.category === 'expense') badgeColor = 'bg-rose-50 text-rose-800 border border-rose-200';
+                    else if (tx.category === 'refund') badgeColor = 'bg-amber-50 text-amber-800 border border-amber-200';
 
                     return (
                       <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">

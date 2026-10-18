@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, ArrowLeft, Gift } from 'lucide-react';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/components/Toast';
+import { sanitizeEmail, checkRateLimit, resetRateLimit } from '@/lib/security';
 
 export default function AdminLoginPage() {
   const { login } = useAdminAuth();
@@ -15,14 +16,24 @@ export default function AdminLoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password) {
+    const cleanEmail = sanitizeEmail(email);
+    if (!cleanEmail || !password) {
       push('Enter your email and password', 'error');
       return;
     }
+
+    // Rate-limiting: maximum 5 login attempts per minute
+    const rateCheck = checkRateLimit('admin:login', 5, 60);
+    if (!rateCheck.allowed) {
+      push(`Too many login attempts. Please wait ${rateCheck.retryAfterSeconds} seconds before trying again.`, 'error');
+      return;
+    }
+
     setLoading(true);
-    const res = await login(email, password);
+    const res = await login(cleanEmail, password);
     setLoading(false);
     if (res.ok) {
+      resetRateLimit('admin:login');
       push('Welcome back, admin', 'success');
       navigate('/admin/dashboard', { replace: true });
     } else {

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Gift, ShieldCheck, Zap, Building2 } from 'lucide-react';
+import { SEO } from '@/components/SEO';
 
 const highlights = [
   {
@@ -27,6 +28,11 @@ const highlights = [
 export default function AboutPage() {
   return (
     <div className="pt-16 bg-gradient-to-b from-brand-50/40 to-transparent">
+      <SEO
+        title="About Us | India's Modern E-Gift Card Platform | GyftKart"
+        description="Learn how GyftKart is transforming gifting in India with digital vouchers, instant UPI delivery, corporate gifting solutions, and 100+ partner brands."
+        canonical="https://gyftkart.in/about"
+      />
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10">
         {/* breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-slate-500">

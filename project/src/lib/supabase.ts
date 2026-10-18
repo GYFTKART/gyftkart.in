@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+// Ensure all live production API calls use strict HTTPS
+const supabaseUrl = rawSupabaseUrl.startsWith('http://localhost') || rawSupabaseUrl.startsWith('http://127.0.0.1')
+  ? rawSupabaseUrl
+  : rawSupabaseUrl.replace(/^http:\/\//i, 'https://');
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // persistSession/autoRefreshToken explicitly OFF: this app manages its

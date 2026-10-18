@@ -52,6 +52,12 @@ export function AdminTopBar() {
       isActive: pathname.startsWith('/admin/corporate-inquiries'),
     },
     {
+      to: '/admin/b2b-customers',
+      label: 'B2B Customers',
+      icon: Users,
+      isActive: pathname.startsWith('/admin/b2b-customers'),
+    },
+    {
       to: '/admin/customer-ledger',
       label: 'Customer Ledger',
       icon: Banknote,
@@ -73,30 +79,32 @@ export function AdminTopBar() {
 
   return (
     <header className="sticky top-0 z-40 glass border-b border-slate-200/70">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+      <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2.5 sm:gap-4">
         {/* Logo / Brand */}
         <Link to="/admin/dashboard" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity shrink-0">
-          <span className="grid place-items-center h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glow-sm">
+          <span className="grid place-items-center h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glow-sm shrink-0">
             <LayoutDashboard className="h-5 w-5" />
           </span>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-gray-900 tracking-tight">GyftKart Admin</span>
-            <span className="text-[11px] text-gray-400 font-normal">Signed in as {admin.email || 'gyftkart@gmail.com'}</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-bold text-gray-900 tracking-tight leading-tight">GyftKart Admin</span>
+            <span className="text-[11px] text-gray-400 font-normal truncate max-w-[130px] sm:max-w-none mt-0.5">
+              Signed in as {admin.email || 'gyftkart@gmail.com'}
+            </span>
           </div>
         </Link>
 
         {/* Top Navbar Links */}
-        <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0">
+        <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 min-w-0">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
               <Link
                 key={item.to}
                 to={item.to}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 sm:px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
                   item.isActive
                     ? 'bg-brand-600 text-white shadow-sm hover:bg-brand-700'
-                    : 'border border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700'
+                    : 'border border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700 hover:bg-slate-50'
                 }`}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -110,9 +118,9 @@ export function AdminTopBar() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleLogout}
-            className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 transition-colors"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3 sm:px-3.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 transition-colors"
           >
-            <LogOut className="h-3.5 w-3.5" /> <span className="hidden md:inline">Sign out</span>
+            <LogOut className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Sign out</span>
           </button>
         </div>
       </div>

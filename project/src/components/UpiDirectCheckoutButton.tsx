@@ -6,6 +6,7 @@ import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/CustomerAuthContext';
 import type { OrderRow } from '@/components/RazorpayCheckoutButton';
+import { sanitizeUtr, checkRateLimit } from '@/lib/security';
 
 interface UpiDirectProps {
   /** Total amount in rupees (e.g. 499 for ₹499). */
@@ -40,7 +41,6 @@ interface CreateUpiResponse {
 
 const POLL_INTERVAL_MS = 15_000;
 const STALL_AFTER_ATTEMPTS = 3;
-const UTR_RX = /^\d{12}$/;
 const PROOF_MAX_BYTES = 3 * 1024 * 1024;
 const PROOF_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
@@ -276,10 +276,20 @@ export default function UpiDirectCheckoutButton({
 
   const submitProof = async () => {
     if (!authSession || !session) return;
-    if (!UTR_RX.test(utr)) {
-      setProofError('UTR must be exactly 12 digits.');
+
+    // Rate-limiting: max 5 UTR submission attempts per minute per customer
+    const rateCheck = checkRateLimit(`upi:proof:${authSession.id}`, 5, 60);
+    if (!rateCheck.allowed) {
+      setProofError(`Too many submission attempts. Please wait ${rateCheck.retryAfterSeconds} seconds before trying again.`);
       return;
     }
+
+    const { isValid, cleanUtr, error: utrErr } = sanitizeUtr(utr);
+    if (!isValid) {
+      setProofError(utrErr || 'UTR must be exactly 12 digits.');
+      return;
+    }
+
     setSubmittingProof(true);
     setProofError(null);
     setProofOk(false);
@@ -298,7 +308,7 @@ export default function UpiDirectCheckoutButton({
         proofPath = path;
       }
       const { error } = await supabase.functions.invoke('upi-report-payment', {
-        body: { payment_id: session.paymentId, utr, proof_path: proofPath },
+        body: { payment_id: session.paymentId, utr: cleanUtr, proof_path: proofPath },
         headers: authSession.token ? { Authorization: `Bearer ${authSession.token}` } : undefined,
       });
       if (error) {

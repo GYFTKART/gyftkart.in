@@ -17,6 +17,8 @@ import {
   ShoppingCart,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { SEO } from '@/components/SEO';
+import { buildBrandProductSchema } from '@/lib/seo';
 import type { Brand } from '@/lib/types';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/CustomerAuthContext';
@@ -432,6 +434,7 @@ export default function BrandProductPage() {
   if (notFound || !brand) {
     return (
       <div className="pt-16 min-h-screen flex items-center justify-center px-4">
+        <SEO title="Brand Not Found | GyftKart" noindex />
         <div className="text-center max-w-md">
           <span className="grid place-items-center h-20 w-20 rounded-3xl bg-brand-100 text-brand-600 mx-auto">
             <Gift className="h-10 w-10" />
@@ -451,8 +454,21 @@ export default function BrandProductPage() {
     );
   }
 
+  const brandSchema = buildBrandProductSchema(brand);
+  const minAmt = brand.min_amount || (brand.denominations && brand.denominations.length > 0 ? Math.min(...brand.denominations) : 100);
+  const maxAmt = brand.max_amount || (brand.denominations && brand.denominations.length > 0 ? Math.max(...brand.denominations) : 10000);
+
   return (
     <div className="pt-16 bg-gradient-to-b from-brand-50/40 to-transparent">
+      <SEO
+        title={`${brand.name} Gift Card | Buy Online with Instant UPI Delivery | GyftKart`}
+        description={`Buy official ${brand.name} e-gift cards online with instant UPI Direct on GyftKart. Flexible denominations from ₹${minAmt} to ₹${maxAmt}. Fast, 100% verified digital vouchers.`}
+        canonical={`https://gyftkart.in/brand/${brand.slug}`}
+        ogImage={(brand.banner_url || brand.logo_url || brand.image_url)?.startsWith('http') ? (brand.banner_url || brand.logo_url || brand.image_url) : undefined}
+        ogType="product"
+        keywords={`${brand.name} gift card, buy ${brand.name} voucher, ${brand.name} e-gift voucher online, instant ${brand.name} coupon, GyftKart`}
+        schema={brandSchema}
+      />
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         {/* breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6">

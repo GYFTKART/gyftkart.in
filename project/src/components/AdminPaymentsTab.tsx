@@ -43,15 +43,15 @@ type UpSession = {
 };
 
 const statusStyle: Record<string, string> = {
-  SUCCESS: 'bg-emerald-100 text-emerald-800',
-  CONFIRMED: 'bg-emerald-100 text-emerald-800',
-  ACTIVE: 'bg-amber-100 text-amber-800',
-  INITIATED: 'bg-slate-100 text-slate-700',
-  EXPIRED: 'bg-slate-100 text-slate-500',
-  FAILED: 'bg-rose-100 text-rose-700',
-  CANCELLED: 'bg-rose-100 text-rose-700',
-  REJECTED: 'bg-rose-100 text-rose-700',
-  REVERTED: 'bg-slate-100 text-slate-700 border border-slate-200',
+  SUCCESS: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  CONFIRMED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  ACTIVE: 'bg-amber-50 text-amber-800 border border-amber-200',
+  INITIATED: 'bg-slate-100 text-slate-700 border border-slate-200',
+  EXPIRED: 'bg-slate-100 text-slate-500 border border-slate-200',
+  FAILED: 'bg-rose-50 text-rose-700 border border-rose-200',
+  CANCELLED: 'bg-rose-50 text-rose-700 border border-rose-200',
+  REJECTED: 'bg-rose-50 text-rose-700 border border-rose-200',
+  REVERTED: 'bg-amber-50 text-amber-800 border border-amber-200',
 };
 
 const REJECT_REASONS = ['Invalid UTR', 'Amount mismatch', 'Screenshot unreadable'];
@@ -307,7 +307,9 @@ export default function AdminPaymentsTab() {
       return { ok: false, json: { error: 'Admin session expired — please sign in again and retry.' }, status: 0 };
     }
     adminFnDebug(fn, bearer);
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`, {
+    const baseUrl = (import.meta.env.VITE_SUPABASE_URL || '')
+      .replace(/^http:\/\/(?!localhost|127\.0\.0\.1)/i, 'https://');
+    const res = await fetch(`${baseUrl}/functions/v1/${fn}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1489,14 +1491,14 @@ export default function AdminPaymentsTab() {
                             <button
                               onClick={() => handleOpenReopenModal(s)}
                               disabled={reopeningId === s.id}
-                              className="px-2.5 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-md transition disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-md transition disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                              Revert
+                              Reopen
                             </button>
                           </div>
                         ) : s.status === 'REVERTED' ? (
                           <div className="flex items-center justify-end md:justify-center pr-2">
-                            <span className="inline-block rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                            <span className="inline-block rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">
                               Reverted
                             </span>
                           </div>

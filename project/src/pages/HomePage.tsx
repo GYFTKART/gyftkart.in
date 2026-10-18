@@ -23,6 +23,7 @@ import Reveal from '@/components/Reveal';
 import CategorySlider from '@/components/CategorySlider';
 import BrandCard from '@/components/BrandCard';
 import HeroBanner from '@/components/HeroBanner';
+import { SEO } from '@/components/SEO';
 import { useBrands } from '@/lib/useBrands';
 import { getCategoryIcon } from '@/lib/categoryIcons';
 
@@ -170,6 +171,11 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col justify-start pt-16 bg-[#F5F5E9]">
+      <SEO
+        title="GyftKart | India's Leading Digital E-Gift Cards & Instant UPI Vouchers"
+        description="Buy e-gift cards and vouchers instantly with UPI Direct on GyftKart. Top brand discounts, secure digital wallet, and fast delivery for corporate & personal gifting."
+        canonical="https://gyftkart.in/"
+      />
       {/* ===== HERO BANNER =====
           Fixed-dimension outer reservation: this space is claimed by CSS
           before HeroBanner's own JS state ever runs, so even if something

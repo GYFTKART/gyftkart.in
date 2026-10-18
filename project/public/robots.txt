@@ -1,0 +1,27 @@
+# robots.txt for GyftKart (https://gyftkart.in)
+User-agent: *
+Allow: /
+Allow: /brands
+Allow: /brand/
+Allow: /corporate
+Allow: /how-it-works
+Allow: /about
+Allow: /faq
+Allow: /contact
+Allow: /careers
+Allow: /terms
+Allow: /privacy
+Allow: /refund-policy
+Allow: /offer-terms
+
+# Strictly disallow all admin dashboards, backoffice tools, and private customer portals
+Disallow: /admin
+Disallow: /admin/
+Disallow: /admin/*
+Disallow: /checkout
+Disallow: /cart
+Disallow: /api/
+
+# Host and Sitemap
+Host: https://gyftkart.in
+Sitemap: https://gyftkart.in/sitemap.xml

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Search, X, TrendingUp, ShoppingBag } from 'lucide-react';
 import BrandCard from '@/components/BrandCard';
 import Reveal from '@/components/Reveal';
+import { SEO } from '@/components/SEO';
 import { useBrands } from '@/lib/useBrands';
 import { getCategoryIcon } from '@/lib/categoryIcons';
 
@@ -44,6 +45,12 @@ export default function BrandsPage() {
 
   return (
     <div className="pt-16 bg-gradient-to-b from-brand-50/40 to-transparent">
+      <SEO
+        title="Explore 100+ E-Gift Cards & Digital Brand Vouchers | GyftKart"
+        description="Browse premium digital gift cards from top brands in shopping, dining, entertainment, travel & wellness. Instant UPI delivery and exclusive discounts on GyftKart."
+        canonical="https://gyftkart.in/brands"
+        keywords="gift cards catalogue, buy vouchers online, Amazon gift cards, Flipkart vouchers, Swiggy food vouchers, Zomato gift cards, GyftKart brands"
+      />
       {/* breadcrumb */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6">
         <nav className="flex items-center gap-2 text-sm text-slate-500">

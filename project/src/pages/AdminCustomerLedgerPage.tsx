@@ -1483,9 +1483,11 @@ export default function AdminCustomerLedgerPage() {
                                 <span
                                   className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold ${
                                     tx.voucherType.includes('Receipt') || tx.voucherType.includes('Top-up')
-                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : tx.voucherType.includes('Reversal') || tx.voucherType.includes('Refund') || tx.voucherType.includes('Adjustment') || tx.voucherType.includes('Rollback') || tx.voucherType.includes('Revert')
+                                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
                                       : tx.voucherType.includes('Payment')
-                                      ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
                                       : 'bg-slate-100 text-slate-700 border border-slate-200'
                                   }`}
                                 >

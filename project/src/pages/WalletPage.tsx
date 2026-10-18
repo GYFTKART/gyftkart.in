@@ -1,9 +1,16 @@
 import { Link } from 'react-router-dom';
 import WalletLedgerPanel from '@/components/WalletLedgerPanel';
+import { SEO } from '@/components/SEO';
 
 export default function WalletPage() {
   return (
     <div className="pt-16 min-h-screen bg-gradient-to-b from-brand-50/40 to-white">
+      <SEO
+        title="My Wallet & Ledger Balance | GyftKart"
+        description="Manage your GyftKart digital wallet, check your balance, view UPI top-up history, and request refunds securely."
+        canonical="https://gyftkart.in/wallet"
+        noindex={true}
+      />
       {/* Breadcrumb */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6">
         <nav className="flex items-center gap-2 text-sm">

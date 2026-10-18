@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, lazy, Suspense, type ReactNode } from 'react';
 import { useLocation, useNavigationType, Routes, Route, Navigate } from 'react-router-dom';
 import { CartProvider } from '@/context/CartContext';
 import { CustomerAuthProvider } from '@/context/CustomerAuthContext';
@@ -8,35 +8,41 @@ import { useAuth } from '@/context/CustomerAuthContext';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import BottomNavigation from '@/components/BottomNavigation';
+
+// Core marketplace pages loaded eagerly for immediate first paint
 import HomePage from '@/pages/HomePage';
 import BrandsPage from '@/pages/BrandsPage';
 import BrandProductPage from '@/pages/BrandProductPage';
-import CorporatePage from '@/pages/CorporatePage';
-import WalletPage from '@/pages/WalletPage';
-import CheckoutPage from '@/pages/CheckoutPage';
 import CartPage from '@/pages/CartPage';
-import NotFoundPage from '@/pages/NotFoundPage';
-import AdminLoginPage from '@/pages/AdminLoginPage';
-import AdminDashboardPage from '@/pages/AdminDashboardPage';
-import AdminUpiDirectPage from '@/pages/AdminUpiDirectPage';
-import AdminCustomerLedgerPage from '@/pages/AdminCustomerLedgerPage';
-import AdminB2bCustomersPage from '@/pages/AdminB2bCustomersPage';
-import AdminB2bLedgerPage from '@/pages/AdminB2bLedgerPage';
-import AdminCompanyLedgerPage from '@/pages/AdminCompanyLedgerPage';
-import AdminGiftCardSalesPage from '@/pages/AdminGiftCardSalesPage';
-import AdminCorporateInquiriesPage from '@/pages/AdminCorporateInquiriesPage';
-import AdminBrandsPage from '@/pages/AdminBrandsPage';
-import ProfilePage from './pages/ProfilePage';
-import OrdersPage from '@/pages/OrdersPage';
-import ContactUs from '@/pages/ContactUs';
-import TermsOfUse from '@/pages/TermsOfUse';
-import PrivacyPolicy from '@/pages/PrivacyPolicy';
-import FaqPage from '@/pages/FaqPage';
-import OfferTerms from '@/pages/OfferTerms';
-import RefundAndCancellation from '@/pages/RefundAndCancellation';
-import AboutPage from '@/pages/AboutPage';
-import HowItWorksPage from '@/pages/HowItWorksPage';
-import CareersPage from '@/pages/CareersPage';
+
+// Lazy-loaded customer & auxiliary pages
+const CheckoutPage = lazy(() => import('@/pages/CheckoutPage'));
+const WalletPage = lazy(() => import('@/pages/WalletPage'));
+const OrdersPage = lazy(() => import('@/pages/OrdersPage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+const CorporatePage = lazy(() => import('@/pages/CorporatePage'));
+const CareersPage = lazy(() => import('@/pages/CareersPage'));
+const ContactUs = lazy(() => import('@/pages/ContactUs'));
+const TermsOfUse = lazy(() => import('@/pages/TermsOfUse'));
+const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
+const FaqPage = lazy(() => import('@/pages/FaqPage'));
+const OfferTerms = lazy(() => import('@/pages/OfferTerms'));
+const RefundAndCancellation = lazy(() => import('@/pages/RefundAndCancellation'));
+const AboutPage = lazy(() => import('@/pages/AboutPage'));
+const HowItWorksPage = lazy(() => import('@/pages/HowItWorksPage'));
+const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+
+// Lazy-loaded Admin pages (heavy ledgers, dashboards, reconciliations)
+const AdminLoginPage = lazy(() => import('@/pages/AdminLoginPage'));
+const AdminDashboardPage = lazy(() => import('@/pages/AdminDashboardPage'));
+const AdminUpiDirectPage = lazy(() => import('@/pages/AdminUpiDirectPage'));
+const AdminCustomerLedgerPage = lazy(() => import('@/pages/AdminCustomerLedgerPage'));
+const AdminB2bCustomersPage = lazy(() => import('@/pages/AdminB2bCustomersPage'));
+const AdminB2bLedgerPage = lazy(() => import('@/pages/AdminB2bLedgerPage'));
+const AdminCompanyLedgerPage = lazy(() => import('@/pages/AdminCompanyLedgerPage'));
+const AdminGiftCardSalesPage = lazy(() => import('@/pages/AdminGiftCardSalesPage'));
+const AdminCorporateInquiriesPage = lazy(() => import('@/pages/AdminCorporateInquiriesPage'));
+const AdminBrandsPage = lazy(() => import('@/pages/AdminBrandsPage'));
 
 
 // We take over scroll restoration entirely ourselves (see ScrollManager
@@ -298,149 +304,158 @@ export default function App() {
               the regular header takes over navigation duties.
             */}
             <main className={`flex-1 ${!isAdmin ? 'pb-16 md:pb-0' : ''}`}>
-              <Routes>
-                {/* Public marketplace */}
-                <Route path="/" element={<HomePage />} />
-                <Route path="/brands" element={<BrandsPage />} />
-                <Route path="/brand/:slug" element={<BrandProductPage />} />
-                <Route path="/corporate" element={<CorporatePage />} />
-                <Route path="/dashboard" element={<Navigate to="/orders" replace />} />
-                <Route
-                  path="/wallet"
-                  element={
-                    <ProtectedCustomerRoute>
-                      <WalletPage />
-                    </ProtectedCustomerRoute>
-                  }
-                />
-                <Route path="/cart" element={<CartPage />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/orders" element={<OrdersPage />} />
-                <Route path="/contact" element={<ContactUs />} />
-                <Route path="/terms" element={<TermsOfUse />} />
-                <Route path="/privacy" element={<PrivacyPolicy />} />
-                <Route path="/faq" element={<FaqPage />} />
-                <Route path="/offer-terms" element={<OfferTerms />} />
-                <Route path="/refund-policy" element={<RefundAndCancellation />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/how-it-works" element={<HowItWorksPage />} />
-                <Route path="/careers" element={<CareersPage />} />
+              <Suspense
+                fallback={
+                  <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
+                    <span className="text-xs font-medium text-slate-400">Loading…</span>
+                  </div>
+                }
+              >
+                <Routes>
+                  {/* Public marketplace */}
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/brands" element={<BrandsPage />} />
+                  <Route path="/brand/:slug" element={<BrandProductPage />} />
+                  <Route path="/corporate" element={<CorporatePage />} />
+                  <Route path="/dashboard" element={<Navigate to="/orders" replace />} />
+                  <Route
+                    path="/wallet"
+                    element={
+                      <ProtectedCustomerRoute>
+                        <WalletPage />
+                      </ProtectedCustomerRoute>
+                    }
+                  />
+                  <Route path="/cart" element={<CartPage />} />
+                  <Route path="/checkout" element={<CheckoutPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/orders" element={<OrdersPage />} />
+                  <Route path="/contact" element={<ContactUs />} />
+                  <Route path="/terms" element={<TermsOfUse />} />
+                  <Route path="/privacy" element={<PrivacyPolicy />} />
+                  <Route path="/faq" element={<FaqPage />} />
+                  <Route path="/offer-terms" element={<OfferTerms />} />
+                  <Route path="/refund-policy" element={<RefundAndCancellation />} />
+                  <Route path="/about" element={<AboutPage />} />
+                  <Route path="/how-it-works" element={<HowItWorksPage />} />
+                  <Route path="/careers" element={<CareersPage />} />
 
 
-                {/* Admin */}
-                <Route
-                  path="/admin"
-                  element={
-                    <AdminAuthProvider>
-                      <AdminLoginPage />
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/dashboard"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminDashboardPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/gift-card-sales"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminGiftCardSalesPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/corporate-inquiries"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminCorporateInquiriesPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/brands"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminBrandsPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/customer-ledger"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminCustomerLedgerPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/customer-ledger/:customerId"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminCustomerLedgerPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/b2b-customers"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminB2bCustomersPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/b2b-ledger"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminB2bLedgerPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/company-ledger"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminCompanyLedgerPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route
-                  path="/admin/upi-direct"
-                  element={
-                    <AdminAuthProvider>
-                      <ProtectedAdminRoute>
-                        <AdminUpiDirectPage />
-                      </ProtectedAdminRoute>
-                    </AdminAuthProvider>
-                  }
-                />
-                <Route path="/admin/payments" element={<Navigate to="/admin/upi-direct" replace />} />
+                  {/* Admin */}
+                  <Route
+                    path="/admin"
+                    element={
+                      <AdminAuthProvider>
+                        <AdminLoginPage />
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/dashboard"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminDashboardPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/gift-card-sales"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminGiftCardSalesPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/corporate-inquiries"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminCorporateInquiriesPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/brands"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminBrandsPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/customer-ledger"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminCustomerLedgerPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/customer-ledger/:customerId"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminCustomerLedgerPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/b2b-customers"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminB2bCustomersPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/b2b-ledger"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminB2bLedgerPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/company-ledger"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminCompanyLedgerPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/upi-direct"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminUpiDirectPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route path="/admin/payments" element={<Navigate to="/admin/upi-direct" replace />} />
 
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Suspense>
             </main>
 
             {/*

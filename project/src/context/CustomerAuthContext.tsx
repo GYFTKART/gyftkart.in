@@ -7,6 +7,13 @@ import {
   type ReactNode,
 } from 'react';
 import { supabase } from '@/lib/supabase';
+import {
+  sanitizeEmail,
+  sanitizeInput,
+  sanitizePhone,
+  checkRateLimit,
+  resetRateLimit,
+} from '@/lib/security';
 
 export interface Session {
   id: string;
@@ -299,9 +306,18 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
 
   const signup = useCallback(
     async (name: string, email: string, phone: string, password: string): Promise<SignupResult> => {
-      const trimmedName = name.trim();
-      const trimmedEmail = email.trim().toLowerCase();
-      const trimmedPhone = phone.trim();
+      // Rate-limiting: maximum 5 registration attempts per minute
+      const rateCheck = checkRateLimit('customer:signup', 5, 60);
+      if (!rateCheck.allowed) {
+        return {
+          ok: false,
+          error: `Too many registration attempts. Please wait ${rateCheck.retryAfterSeconds} seconds before trying again.`,
+        };
+      }
+
+      const trimmedName = sanitizeInput(name, 100);
+      const trimmedEmail = sanitizeEmail(email);
+      const trimmedPhone = sanitizePhone(phone);
 
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
@@ -326,7 +342,16 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   );
 
   const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
-    const trimmedEmail = email.trim().toLowerCase();
+    // Rate-limiting: maximum 8 customer login attempts per minute
+    const rateCheck = checkRateLimit('customer:login', 8, 60);
+    if (!rateCheck.allowed) {
+      return {
+        ok: false,
+        error: `Too many login attempts. Please wait ${rateCheck.retryAfterSeconds} seconds before trying again.`,
+      };
+    }
+
+    const trimmedEmail = sanitizeEmail(email);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: trimmedEmail,
@@ -336,6 +361,9 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     if (error || !data.user) {
       return { ok: false, error: error?.message ?? 'Incorrect email or password.' };
     }
+
+    // Reset rate limiter on successful authentication
+    resetRateLimit('customer:login');
 
     const meta = data.user.user_metadata as {
       name?: string;

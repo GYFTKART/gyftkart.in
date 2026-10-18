@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
+import { SEO } from '@/components/SEO';
 
 const faqs = [
   {
@@ -60,8 +61,27 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 }
 
 export default function FaqPage() {
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((f) => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: f.a,
+      },
+    })),
+  };
+
   return (
     <div className="pt-16 bg-gradient-to-b from-brand-50/40 to-transparent">
+      <SEO
+        title="Frequently Asked Questions (FAQ) | GyftKart"
+        description="Find answers to common questions about purchasing, redeeming, and gifting digital e-gift cards and vouchers on GyftKart."
+        canonical="https://gyftkart.in/faq"
+        schema={faqSchema}
+      />
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10">
         {/* breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-slate-500">

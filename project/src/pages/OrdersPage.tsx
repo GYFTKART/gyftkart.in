@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Gift, CheckCircle2, Clock, Mail, Loader2, XCircle, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import {
+  Gift,
+  CheckCircle2,
+  Clock,
+  Mail,
+  Loader2,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  RotateCcw,
+  Ticket,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/CustomerAuthContext';
 import { inr, formatDateTime } from '@/lib/format';
 import { OrderInvoiceModal } from '@/components/OrderInvoiceModal';
 import { extractInvoiceItems, type InvoiceData } from '@/lib/invoice';
+import { GiftCardPassModal, type GiftCardPassData } from '@/components/GiftCardPassModal';
+import { QuickReorderModal } from '@/components/QuickReorderModal';
+import { SEO } from '@/components/SEO';
 
 // Real data shapes (server-verified): no order_number column on orders —
 // the GK- ref is derived display-side only; total_amount is ALREADY in
@@ -82,16 +97,24 @@ function StatusBadge({ status }: { status: string }) {
       </span>
     );
   }
-  if (s === 'rejected' || s === 'reverted') {
+  if (s === 'reverted') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-800">
+        <Clock className="h-3.5 w-3.5 text-amber-600" />
+        Reverted
+      </span>
+    );
+  }
+  if (s === 'rejected' || s === 'failed') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700">
         <XCircle className="h-3.5 w-3.5" />
         Rejected
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700">
       <Clock className="h-3.5 w-3.5" />
       Processing
     </span>
@@ -113,6 +136,38 @@ export default function OrdersPage() {
   // Invoice modal state
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceData | null>(null);
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+
+  // Quick Re-order modal state
+  const [reorderModalOpen, setReorderModalOpen] = useState(false);
+  const [reorderOrderRef, setReorderOrderRef] = useState('');
+  const [reorderItems, setReorderItems] = useState<unknown>(null);
+  const [reorderFallbackAmount, setReorderFallbackAmount] = useState(500);
+
+  // Gift Card Pass modal state
+  const [passModalOpen, setPassModalOpen] = useState(false);
+  const [selectedPass, setSelectedPass] = useState<GiftCardPassData | null>(null);
+
+  const handleOpenReorder = (orderRefCode: string, rawItems: unknown, fallbackAmount?: number) => {
+    setReorderOrderRef(orderRefCode);
+    setReorderItems(rawItems);
+    setReorderFallbackAmount(fallbackAmount || 500);
+    setReorderModalOpen(true);
+  };
+
+  const handleOpenPurchasePass = (p: PurchaseRow) => {
+    const passData: GiftCardPassData = {
+      id: p.id,
+      brandName: p.brand_name,
+      brandColor: p.brand_color || '#991b1b',
+      denomination: Number(p.amount),
+      code: p.gift_card_code || 'VOUCHER-PENDING-ACTIVATION',
+      recipientEmail: p.recipient_email || session?.email || undefined,
+      recipientName: session?.name || undefined,
+      createdAt: p.created_at,
+    };
+    setSelectedPass(passData);
+    setPassModalOpen(true);
+  };
 
   const handleOpenUpiInvoice = (s: PendingUpiRow) => {
     const amountRs = Number(s.amount_paise) / 100;
@@ -281,6 +336,12 @@ export default function OrdersPage() {
 
   return (
     <div className="bg-gradient-to-b from-brand-50/40 via-transparent to-transparent pt-28 pb-16 px-4 sm:px-6 lg:px-8">
+      <SEO
+        title="My Orders & Purchased Gift Cards | GyftKart"
+        description="View your order history, purchased digital gift card codes, tax invoices, and UPI transaction delivery status on GyftKart."
+        canonical="https://gyftkart.in/orders"
+        noindex={true}
+      />
       <div className="mx-auto max-w-6xl">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm mb-6">
@@ -397,18 +458,18 @@ export default function OrdersPage() {
                                     </td>
                                     <td className="px-3.5 py-3 text-xs">
                                       {isReverted ? (
-                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-bold text-slate-700">
-                                          <XCircle className="h-3 w-3" />
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] font-bold text-amber-800">
+                                          <XCircle className="h-3 w-3 text-amber-600" />
                                           Reverted
                                         </span>
                                       ) : isRejected ? (
-                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-2.5 py-0.5 text-[10px] font-bold text-rose-700">
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-[10px] font-bold text-rose-700">
                                           <XCircle className="h-3 w-3" />
                                           Rejected
                                         </span>
                                       ) : isSuccess ? (
                                         <div className="flex flex-wrap items-center gap-1.5">
-                                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
                                             <CheckCircle2 className="h-3 w-3" />
                                             Delivered
                                           </span>
@@ -420,9 +481,17 @@ export default function OrdersPage() {
                                             <FileText className="h-3 w-3 text-brand-600" />
                                             Invoice
                                           </button>
+                                          <button
+                                            onClick={() => handleOpenReorder(s.order_id, s.items, Number(s.amount_paise) / 100)}
+                                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition shadow-xs"
+                                            title="Quick Re-order same items"
+                                          >
+                                            <RotateCcw className="h-3 w-3 text-slate-500" />
+                                            Re-order
+                                          </button>
                                         </div>
                                       ) : (
-                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
                                           <Clock className="h-3 w-3" />
                                           Pending Verification
                                         </span>
@@ -433,7 +502,7 @@ export default function OrdersPage() {
                                         </p>
                                       )}
                                       {isReverted && cleanRemark && (
-                                        <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                                        <p className="mt-1 text-[11px] font-semibold text-amber-700">
                                           {cleanRemark}
                                         </p>
                                       )}
@@ -522,14 +591,24 @@ export default function OrdersPage() {
                       <div className="flex items-center gap-2">
                         <StatusBadge status={order.status} />
                         {order.status === 'successful' && (
-                          <button
-                            onClick={() => handleOpenOrderInvoice(order)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition shadow-xs"
-                            title="Download Invoice"
-                          >
-                            <FileText className="h-3.5 w-3.5 text-brand-600" />
-                            Invoice
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleOpenOrderInvoice(order)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition shadow-xs"
+                              title="Download Invoice"
+                            >
+                              <FileText className="h-3.5 w-3.5 text-brand-600" />
+                              Invoice
+                            </button>
+                            <button
+                              onClick={() => handleOpenReorder(orderRef(order), order.items, Number(order.total_amount))}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition shadow-xs"
+                              title="Quick Re-order same items"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5 text-slate-500" />
+                              Re-order
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -578,16 +657,26 @@ export default function OrdersPage() {
 
                       <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
                         <p className="text-base font-extrabold text-slate-900">{inr(Number(p.amount))}</p>
-                        {active ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 capitalize">
-                            {p.status}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {active ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 capitalize">
+                              {p.status}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleOpenPurchasePass(p)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition shadow-xs"
+                            title="View Voucher Pass & Print"
+                          >
+                            <Ticket className="h-3.5 w-3.5 text-brand-600" />
+                            Pass
+                          </button>
+                        </div>
                       </div>
                     </li>
                   );
@@ -602,6 +691,27 @@ export default function OrdersPage() {
           isOpen={isInvoiceOpen}
           onClose={() => setIsInvoiceOpen(false)}
           invoice={selectedInvoice}
+        />
+
+        {/* Digital Gift Card Pass Modal */}
+        {selectedPass && (
+          <GiftCardPassModal
+            isOpen={passModalOpen}
+            onClose={() => {
+              setPassModalOpen(false);
+              setSelectedPass(null);
+            }}
+            voucher={selectedPass}
+          />
+        )}
+
+        {/* Quick Re-order Modal */}
+        <QuickReorderModal
+          isOpen={reorderModalOpen}
+          onClose={() => setReorderModalOpen(false)}
+          orderRef={reorderOrderRef}
+          rawItems={reorderItems}
+          fallbackAmount={reorderFallbackAmount}
         />
       </div>
     </div>

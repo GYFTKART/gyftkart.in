@@ -22,6 +22,7 @@ export interface Brand {
   occasions: string[];
   logo_url: string;
   banner_url: string;
+  image_url?: string;
 }
 
 export interface CartItem {

@@ -177,7 +177,7 @@ export default function AdminB2bLedgerPage() {
     } finally {
       setEntitiesLoading(false);
     }
-  }, [activeCustomerId, searchParams, setSearchParams, selectedEntity]);
+  }, [activeCustomerId, setSearchParams, selectedEntity]);
 
   useEffect(() => {
     if (admin) {

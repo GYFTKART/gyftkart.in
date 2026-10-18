@@ -134,14 +134,30 @@ export default function ProfilePage() {
   return (
     <div className="pt-28 pb-16 px-4 bg-gradient-to-b from-brand-50/40 to-transparent">
       <div className="mx-auto max-w-2xl">
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-sm mb-6">
-          <Link to="/" className="text-gray-400 hover:text-brand-700 transition-colors">
-            Home
-          </Link>
-          <span className="text-gray-300">/</span>
-          <span className="text-gray-900 font-medium">Profile</span>
-        </nav>
+        {/* Breadcrumb & Navigation */}
+        <div className="flex items-center justify-between mb-6">
+          <nav className="flex items-center gap-2 text-sm">
+            <Link to="/" className="text-gray-400 hover:text-brand-700 transition-colors">
+              Home
+            </Link>
+            <span className="text-gray-300">/</span>
+            <span className="text-gray-900 font-medium">Profile</span>
+          </nav>
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                window.location.href = '/brands';
+              }
+            }}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-700 transition-colors rounded-lg px-2.5 py-1.5 bg-white border border-slate-200 hover:border-brand-300 shadow-xs"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+        </div>
 
         <div className="rounded-3xl bg-white shadow-card border border-slate-100 overflow-hidden">
           {/* Header */}

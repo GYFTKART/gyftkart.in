@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Phone, Mail, MapPin, Clock } from 'lucide-react';
+import { SEO } from '@/components/SEO';
 
 const supportBlocks = [
   {
@@ -81,6 +82,11 @@ function AddressBlock({ a }: { a: (typeof addressBlocks)[number] }) {
 export default function ContactUs() {
   return (
     <div className="pt-16 bg-gradient-to-b from-brand-50/40 to-transparent">
+      <SEO
+        title="Contact Us & Customer Support | GyftKart"
+        description="Get in touch with GyftKart support for assistance with digital gift cards, UPI payments, refunds, and corporate sales enquiries."
+        canonical="https://gyftkart.in/contact"
+      />
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10">
         {/* breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-slate-500">
