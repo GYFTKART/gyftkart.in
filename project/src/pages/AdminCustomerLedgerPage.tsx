@@ -131,7 +131,6 @@ export default function AdminCustomerLedgerPage() {
 
   // View 1 (Customer Directory) state
   const [directorySearch, setDirectorySearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'ALL' | 'B2C' | 'B2B'>('ALL');
   const [dirPageSize, setDirPageSize] = useState<number>(10);
   const [dirCurrentPage, setDirCurrentPage] = useState<number>(1);
 
@@ -211,6 +210,7 @@ export default function AdminCustomerLedgerPage() {
         supabase
           .from('profiles')
           .select('id, full_name, email, phone, created_at, customer_type, company_name, brand_trade_name, gstin, pan, billing_address, billing_state, billing_city, billing_pincode')
+          .or('customer_type.eq.B2C,customer_type.is.null')
           .order('created_at', { ascending: false }),
         supabase.from('wallets').select('id, user_id, balance'),
         supabase.from('orders').select('user_id, created_at'),
@@ -241,7 +241,12 @@ export default function AdminCustomerLedgerPage() {
       (walletTxRes.data ?? []).forEach((tx) => recordActivity(tx.user_id, tx.created_at));
       (upiSessionsRes.data ?? []).forEach((s) => recordActivity(s.user_id, s.created_at));
 
-      const list: CustomerProfile[] = (profilesRes.data ?? []).map((p) => {
+      const rawProfiles = profilesRes.data ?? [];
+      const b2cProfiles = rawProfiles.filter(
+        (p) => !p.customer_type || p.customer_type === 'B2C'
+      );
+
+      const list: CustomerProfile[] = b2cProfiles.map((p) => {
         const lastActive = lastActiveMap.get(p.id) || p.created_at || null;
         return {
           id: p.id,
@@ -250,7 +255,7 @@ export default function AdminCustomerLedgerPage() {
           phone: p.phone || '',
           created_at: p.created_at,
           wallet_balance: walletMap.get(p.id) ?? 0,
-          customer_type: (p.customer_type as 'B2C' | 'B2B') || 'B2C',
+          customer_type: 'B2C',
           company_name: p.company_name,
           brand_trade_name: p.brand_trade_name,
           gstin: p.gstin,
@@ -544,20 +549,16 @@ export default function AdminCustomerLedgerPage() {
   // View 1 (Directory) filter and pagination calculations
   const filteredDirectory = useMemo(() => {
     return customers.filter((c) => {
-      if (typeFilter !== 'ALL' && c.customer_type !== typeFilter) {
-        return false;
-      }
       if (!directorySearch.trim()) return true;
       const q = directorySearch.trim().toLowerCase();
       return (
         c.full_name.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
         c.phone.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q) ||
-        (c.company_name && c.company_name.toLowerCase().includes(q))
+        c.id.toLowerCase().includes(q)
       );
     });
-  }, [customers, directorySearch, typeFilter]);
+  }, [customers, directorySearch]);
 
   const dirTotalPages = Math.max(1, Math.ceil(filteredDirectory.length / dirPageSize));
   const paginatedDirectory = useMemo(() => {
@@ -568,10 +569,8 @@ export default function AdminCustomerLedgerPage() {
   // Directory statistics
   const directoryStats = useMemo(() => {
     const totalCount = customers.length;
-    const b2cCount = customers.filter((c) => c.customer_type === 'B2C' || !c.customer_type).length;
-    const b2bCount = customers.filter((c) => c.customer_type === 'B2B').length;
     const totalBalance = customers.reduce((sum, c) => sum + (c.wallet_balance || 0), 0);
-    return { totalCount, b2cCount, b2bCount, totalBalance };
+    return { totalCount, totalBalance };
   }, [customers]);
 
   // Export to CSV / Excel
@@ -710,47 +709,31 @@ export default function AdminCustomerLedgerPage() {
                 </button>
               </div>
 
-              {/* 4 Summary Counter Cards */}
-              <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Customers</p>
-                  <p className="mt-1 text-lg font-extrabold text-slate-900">
+              {/* Summary Counter Cards */}
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total B2C Clients</p>
+                  <p className="mt-1 text-xl font-extrabold text-slate-900">
                     {customersLoading ? '…' : directoryStats.totalCount}
                   </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Active directory records</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Active retail customer records</p>
                 </div>
 
-                <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-sky-600">B2C Retail</p>
-                  <p className="mt-1 text-lg font-extrabold text-sky-950">
-                    {customersLoading ? '…' : directoryStats.b2cCount}
-                  </p>
-                  <p className="text-[11px] text-sky-700/80 mt-0.5">Individual accounts</p>
-                </div>
-
-                <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-purple-600">B2B Corporate</p>
-                  <p className="mt-1 text-lg font-extrabold text-purple-950">
-                    {customersLoading ? '…' : directoryStats.b2bCount}
-                  </p>
-                  <p className="text-[11px] text-purple-700/80 mt-0.5">Business &amp; enterprise accounts</p>
-                </div>
-
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Outstanding Balance</p>
-                  <p className="mt-1 text-lg font-extrabold text-emerald-950">
+                  <p className="mt-1 text-xl font-extrabold text-emerald-950">
                     {customersLoading ? '…' : inrDecimal(directoryStats.totalBalance)}
                   </p>
-                  <p className="text-[11px] text-emerald-700/80 mt-0.5">Cumulative wallet liabilities (Cr)</p>
+                  <p className="text-[11px] text-emerald-700/80 mt-0.5">Net customer wallet liability (Cr)</p>
                 </div>
               </div>
             </div>
 
-            {/* Top Directory Controls: Search, Type Filter, Rows per page */}
+            {/* Top Directory Controls: Search & Rows per page */}
             <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 {/* Search Bar */}
-                <div className="relative flex-1">
+                <div className="relative flex-1 max-w-2xl">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                     Search Customer Directory
                   </label>
@@ -780,59 +763,8 @@ export default function AdminCustomerLedgerPage() {
                   </div>
                 </div>
 
-                {/* Filter Pills: All Customers, B2C, B2B */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                    Customer Type
-                  </label>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTypeFilter('ALL');
-                        setDirCurrentPage(1);
-                      }}
-                      className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                        typeFilter === 'ALL'
-                          ? 'bg-brand-600 text-white shadow-sm'
-                          : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      All ({directoryStats.totalCount})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTypeFilter('B2C');
-                        setDirCurrentPage(1);
-                      }}
-                      className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                        typeFilter === 'B2C'
-                          ? 'bg-brand-600 text-white shadow-sm'
-                          : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      B2C ({directoryStats.b2cCount})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTypeFilter('B2B');
-                        setDirCurrentPage(1);
-                      }}
-                      className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                        typeFilter === 'B2B'
-                          ? 'bg-brand-600 text-white shadow-sm'
-                          : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      B2B ({directoryStats.b2bCount})
-                    </button>
-                  </div>
-                </div>
-
                 {/* Rows per page selector */}
-                <div>
+                <div className="sm:self-end">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                     Rows Per Page
                   </label>
@@ -842,7 +774,7 @@ export default function AdminCustomerLedgerPage() {
                       setDirPageSize(Number(e.target.value));
                       setDirCurrentPage(1);
                     }}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
                   >
                     <option value={10}>10 per page</option>
                     <option value={25}>25 per page</option>
@@ -869,19 +801,18 @@ export default function AdminCustomerLedgerPage() {
                   <thead>
                     <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       <th className="px-4 py-3 w-[60px]">S. NO.</th>
-                      <th className="px-4 py-3 w-[26%]">CUSTOMER</th>
-                      <th className="px-4 py-3 w-[14%]">PHONE</th>
-                      <th className="px-4 py-3 w-[10%]">TYPE</th>
-                      <th className="px-4 py-3 w-[15%]">CURRENT BALANCE</th>
-                      <th className="px-4 py-3 w-[13%]">TOTAL ORDERS / TXNS</th>
-                      <th className="px-4 py-3 w-[14%]">LAST ACTIVE DATE</th>
-                      <th className="px-4 py-3 text-right pr-6 w-[10%] min-w-[130px]">ACTION</th>
+                      <th className="px-4 py-3 w-[28%]">CUSTOMER</th>
+                      <th className="px-4 py-3 w-[15%]">PHONE</th>
+                      <th className="px-4 py-3 w-[16%]">CURRENT BALANCE</th>
+                      <th className="px-4 py-3 w-[14%]">TOTAL ORDERS / TXNS</th>
+                      <th className="px-4 py-3 w-[15%]">LAST ACTIVE DATE</th>
+                      <th className="px-4 py-3 text-right pr-6 w-[12%] min-w-[130px]">ACTION</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {customersLoading ? (
                       <tr>
-                        <td colSpan={8} className="py-16 text-center text-slate-500">
+                        <td colSpan={7} className="py-16 text-center text-slate-500">
                           <div className="flex items-center justify-center gap-2">
                             <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
                             Loading customer directory and wallet balances…
@@ -890,7 +821,7 @@ export default function AdminCustomerLedgerPage() {
                       </tr>
                     ) : paginatedDirectory.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-16 text-center text-slate-500">
+                        <td colSpan={7} className="py-16 text-center text-slate-500">
                           <p className="font-semibold text-slate-700">No customers found</p>
                           <p className="text-xs text-slate-400 mt-1">
                             {directorySearch
@@ -902,7 +833,6 @@ export default function AdminCustomerLedgerPage() {
                     ) : (
                       paginatedDirectory.map((c, idx) => {
                         const rowNumber = (dirCurrentPage - 1) * dirPageSize + idx + 1;
-                        const isB2B = c.customer_type === 'B2B';
                         const balance = c.wallet_balance ?? 0;
 
                         return (
@@ -919,15 +849,7 @@ export default function AdminCustomerLedgerPage() {
                                   {c.full_name.charAt(0) || c.email.charAt(0) || '?'}
                                 </span>
                                 <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-bold text-slate-900 truncate">{c.full_name}</span>
-                                    {isB2B && c.company_name && (
-                                      <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-100">
-                                        <Building2 className="h-2.5 w-2.5" />
-                                        {c.company_name}
-                                      </span>
-                                    )}
-                                  </div>
+                                  <span className="font-bold text-slate-900 truncate block">{c.full_name}</span>
                                   <p className="text-[11px] text-slate-500 truncate">{c.email || '—'}</p>
                                 </div>
                               </div>
@@ -945,20 +867,7 @@ export default function AdminCustomerLedgerPage() {
                               )}
                             </td>
 
-                            {/* 4. TYPE */}
-                            <td className="px-4 py-3.5">
-                              {isB2B ? (
-                                <span className="inline-block rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-[10px] font-bold text-purple-700">
-                                  B2B Corporate
-                                </span>
-                              ) : (
-                                <span className="inline-block rounded-full bg-sky-50 border border-sky-100 px-2.5 py-0.5 text-[10px] font-bold text-sky-700">
-                                  B2C Retail
-                                </span>
-                              )}
-                            </td>
-
-                            {/* 5. CURRENT BALANCE */}
+                            {/* 4. CURRENT BALANCE */}
                             <td className="px-4 py-3.5 whitespace-nowrap">
                               <span className="inline-flex items-center gap-1">
                                 <Wallet className="h-3.5 w-3.5 text-slate-400" />
@@ -975,19 +884,19 @@ export default function AdminCustomerLedgerPage() {
                               </span>
                             </td>
 
-                            {/* 6. TOTAL ORDERS / TXNS */}
+                            {/* 5. TOTAL ORDERS / TXNS */}
                             <td className="px-4 py-3.5">
                               <span className="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                                 {c.total_orders_txns ?? 0} txns
                               </span>
                             </td>
 
-                            {/* 7. LAST ACTIVE DATE */}
+                            {/* 6. LAST ACTIVE DATE */}
                             <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap text-[11px] font-medium">
                               {c.last_active_date ? formatDateTime(c.last_active_date) : '—'}
                             </td>
 
-                            {/* 8. ACTION */}
+                            {/* 7. ACTION */}
                             <td className="px-4 py-3.5 text-right pr-6 whitespace-nowrap">
                               <Link
                                 to={`/admin/customer-ledger/${c.id}`}

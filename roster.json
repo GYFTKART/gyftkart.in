@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "savedAt": "2026-10-18T17:14:28.074Z",
+  "savedAt": "2026-10-18T20:21:52.071Z",
   "agents": [
     {
       "id": "god",
@@ -12,14 +12,14 @@
       "tmuxTarget": "",
       "cwd": "/Users/mohdsaad/Documents/Website/GyftKart/project-bolt-sb1-oqncpyjw",
       "status": "idle",
-      "action": "idle",
+      "action": "awaiting",
       "progress": 0,
       "currentStation": "desk",
       "ptyId": "pty-god",
       "command": "agy --dangerously-skip-permissions",
       "provider": "antigravity",
       "isGod": true,
-      "lastPrompt": "4/0AXlqoi65YFQIugH-BUF_9vxwlzrgey7vxzHBe5h-r6JL3WapWfhPht_Q2WU1ElGQoeMvkQ"
+      "lastPrompt": "continue"
     },
     {
       "id": "jim-mvchmt6q",
@@ -30,14 +30,14 @@
       "project": "project-bolt-sb1-oqncpyjw",
       "tmuxTarget": "",
       "cwd": "/Users/mohdsaad/Documents/Website/GyftKart/project-bolt-sb1-oqncpyjw",
-      "status": "working",
-      "action": "edited 2 files (project/SECURITY.md, project-bolt-sb1-oqncpyjw/SECURITY.md) (ctrl+o to expand)",
+      "status": "idle",
+      "action": "awaiting",
       "progress": 0,
       "currentStation": "desk",
       "ptyId": "pty-jim-mvchmt6q",
       "command": "agy --dangerously-skip-permissions",
       "provider": "antigravity",
-      "lastPrompt": "contnue",
+      "lastPrompt": "continue",
       "archived": false
     },
     {
@@ -49,14 +49,14 @@
       "project": "project-bolt-sb1-oqncpyjw",
       "tmuxTarget": "",
       "cwd": "/Users/mohdsaad/Documents/Website/GyftKart/project-bolt-sb1-oqncpyjw",
-      "status": "working",
-      "action": "ran ni",
+      "status": "idle",
+      "action": "idle",
       "progress": 0,
       "currentStation": "desk",
       "ptyId": "pty-pam-mvddoybt",
       "command": "agy --dangerously-skip-permissions",
       "provider": "antigravity",
-      "lastPrompt": "/model"
+      "lastPrompt": "continue"
     },
     {
       "id": "dwight-mve0igl2",
@@ -68,7 +68,7 @@
       "tmuxTarget": "",
       "cwd": "/Users/mohdsaad/Documents/Website/GyftKart/project-bolt-sb1-oqncpyjw",
       "status": "idle",
-      "action": "idle",
+      "action": "awaiting",
       "progress": 0,
       "currentStation": "desk",
       "ptyId": "pty-dwight-mve0igl2",
@@ -85,12 +85,14 @@
       "tmuxTarget": "",
       "cwd": "/Users/mohdsaad/Documents/Website/GyftKart/project-bolt-sb1-oqncpyjw",
       "status": "idle",
-      "action": "idle",
+      "action": "awaiting",
       "progress": 0,
       "currentStation": "desk",
       "ptyId": "pty-kevin-mve0l5g9",
-      "command": "agy --dangerously-skip-permissions",
-      "provider": "antigravity"
+      "command": "opencode --model local/llama3",
+      "provider": "opencode",
+      "model": "local/llama3",
+      "lastPrompt": "continue"
     }
   ],
   "archived": [
@@ -133,5 +135,5 @@
   ],
   "restorable": [],
   "queues": {},
-  "selectedId": "dwight-mve0igl2"
+  "selectedId": "pam-mvddoybt"
 }
