@@ -124,7 +124,7 @@ serve(async (req) => {
         user_id: user.id,
         order_id: orderId,
         amount_paise: Number(amountPaise),
-        items: category === 'TOPUP' ? null : body.items,
+        items: category === 'TOPUP' ? [] : body.items,
         buyer: body.buyer ?? null,
         status: 'ACTIVE',
         expires_at: expiresAt,
