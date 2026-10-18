@@ -45,6 +45,8 @@ const AdminCorporateInquiriesPage = lazy(() => import('@/pages/AdminCorporateInq
 const AdminBrandsPage = lazy(() => import('@/pages/AdminBrandsPage'));
 const AdminCustomersPage = lazy(() => import('@/pages/AdminCustomersPage'));
 const AdminSettingsPage = lazy(() => import('@/pages/AdminSettingsPage'));
+const AdminGeneralInquiriesPage = lazy(() => import('@/pages/AdminGeneralInquiriesPage'));
+const AdminWalletManagementPage = lazy(() => import('@/pages/AdminWalletManagementPage'));
 
 
 // We take over scroll restoration entirely ourselves (see ScrollManager
@@ -464,7 +466,37 @@ export default function App() {
                     }
                   />
                   <Route
+                    path="/admin/general-inquiries"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminGeneralInquiriesPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/wallet-management"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminWalletManagementPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
                     path="/admin/settings"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminSettingsPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/payment-settings"
                     element={
                       <AdminAuthProvider>
                         <ProtectedAdminRoute>

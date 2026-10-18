@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   IndianRupee,
   Gift,
@@ -13,6 +13,8 @@ import {
   ArrowRight,
   RefreshCw,
   LayoutDashboard,
+  HelpCircle,
+  CreditCard,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
@@ -122,78 +124,139 @@ export default function AdminDashboardPage() {
 
   if (!admin) return null;
 
-  const quickNavCards = [
+  // 6 Primary Module Hubs according to specification
+  const primaryModuleHubs = [
     {
-      title: 'B2C Customers',
-      desc: 'Oversee B2C user accounts, verification flags, security blocks/suspensions, and password resets.',
-      to: '/admin/customers',
+      id: 'customers',
+      title: 'Customers',
+      desc: 'Manage retail B2C users, corporate B2B clients, verification, and access controls.',
       icon: Users,
       accent: 'from-blue-600 to-indigo-700',
       badge: `${stats.customerCount} Accounts`,
+      subModules: [
+        {
+          name: 'B2C Customers',
+          desc: 'Retail accounts, block/unblock, password reset',
+          to: '/admin/customers',
+          icon: Users,
+        },
+        {
+          name: 'B2B Customers',
+          desc: 'Corporate accounts, manual onboarding, GSTIN/PAN records',
+          to: '/admin/b2b-customers',
+          icon: Building2,
+        },
+      ],
     },
     {
-      title: 'Gift Card Sales',
-      desc: 'Browse all issued gift cards, voucher codes, recipient details, and GST tax invoices.',
-      to: '/admin/gift-card-sales',
-      icon: ShoppingBag,
-      accent: 'from-fuchsia-600 to-purple-700',
-      badge: `${stats.orderCount} Orders`,
-    },
-    {
-      title: 'Manage Brands',
-      desc: 'Add, update, or reorganize brand catalogs, commission discounts, and denomination values.',
-      to: '/admin/brands',
+      id: 'brands',
+      title: 'Brands',
+      desc: 'Brand catalogue management, margins, denominations, and availability.',
       icon: Tag,
       accent: 'from-brand-600 to-brand-800',
       badge: 'Brand Catalog',
+      subModules: [
+        {
+          name: 'Manage Brands',
+          desc: 'Catalogue management, margin tiers, denominations & availability',
+          to: '/admin/brands',
+          icon: Tag,
+        },
+      ],
     },
     {
-      title: 'Corporate Inquiries',
-      desc: 'Track B2B corporate bulk gifting inquiries, company budgets, and lead follow-up status.',
-      to: '/admin/corporate-inquiries',
-      icon: Building2,
-      accent: 'from-amber-500 to-gold-600',
-      badge: `${stats.pendingInquiries} New Leads`,
-    },
-    {
-      title: 'Customer Ledger',
-      desc: 'Audit individual customer balances, double-entry ledgers, and statement accounting records.',
-      to: '/admin/customer-ledger',
-      icon: Banknote,
-      accent: 'from-emerald-600 to-teal-700',
-      badge: `${stats.customerCount} Customers`,
-    },
-    {
-      title: 'B2B Customers',
-      desc: 'Provision corporate accounts, maintain GSTIN/PAN records, and manage enterprise credit lines.',
-      to: '/admin/b2b-customers',
-      icon: Users,
-      accent: 'from-brand-600 to-indigo-700',
-      badge: 'B2B Accounts',
-    },
-    {
-      title: 'B2B Ledger',
-      desc: 'Corporate accounting, double-entry client ledger statements, and GSTR-1 compliant CSV returns.',
-      to: '/admin/b2b-ledger',
-      icon: Building2,
-      accent: 'from-amber-600 to-orange-700',
-      badge: 'GSTR-1 Ready',
-    },
-    {
-      title: 'Company Ledger',
-      desc: 'View double-entry company books, platform cash inflows, outflows, and accounting vouchers.',
-      to: '/admin/company-ledger',
+      id: 'accounting',
+      title: 'Accounting & Ledgers',
+      desc: 'Double-entry books, customer statement reconciliation, and financial audit logs.',
       icon: Scale,
-      accent: 'from-blue-600 to-indigo-700',
-      badge: 'Financial Audit',
+      accent: 'from-emerald-600 to-teal-700',
+      badge: 'Ledger Suites',
+      subModules: [
+        {
+          name: 'Customer Ledger',
+          desc: 'B2C user ledger statements & wallet audit',
+          to: '/admin/customer-ledger',
+          icon: Banknote,
+        },
+        {
+          name: 'B2B Ledger',
+          desc: 'Corporate client accounts & GST statements',
+          to: '/admin/b2b-ledger',
+          icon: Building2,
+        },
+        {
+          name: 'Company Ledger',
+          desc: 'Platform P&L, sales revenue, and payouts',
+          to: '/admin/company-ledger',
+          icon: Scale,
+        },
+      ],
     },
     {
-      title: 'UPI Direct',
-      desc: 'Review, approve, or reject manual UPI transactions, UTR submissions, and wallet top-ups.',
-      to: '/admin/upi-direct',
+      id: 'orders',
+      title: 'Orders',
+      desc: 'Gift card issuance records, delivery status, voucher codes, and invoices.',
+      icon: ShoppingBag,
+      accent: 'from-fuchsia-600 to-purple-700',
+      badge: `${stats.orderCount} Orders`,
+      subModules: [
+        {
+          name: 'Gift Card Sales',
+          desc: 'Gift card issuance records, delivery status, voucher codes, and invoices',
+          to: '/admin/gift-card-sales',
+          icon: ShoppingBag,
+        },
+      ],
+    },
+    {
+      id: 'inquiries',
+      title: 'Inquiries',
+      desc: 'Customer communications, corporate bulk quote requests, and support tickets.',
+      icon: HelpCircle,
+      accent: 'from-amber-500 to-amber-700',
+      badge: `${stats.pendingInquiries} New Leads`,
+      subModules: [
+        {
+          name: 'Corporate Inquiries',
+          desc: 'Corporate communications, corporate bulk quote requests',
+          to: '/admin/corporate-inquiries',
+          icon: Building2,
+        },
+        {
+          name: 'General Enquiries',
+          desc: 'Customer communications, support desk & ticket resolution',
+          to: '/admin/general-inquiries',
+          icon: HelpCircle,
+        },
+      ],
+    },
+    {
+      id: 'payments',
+      title: 'Payments & Gateways',
+      desc: 'Manage gateway integrations, direct UPI verification, and wallet balances.',
       icon: Wallet,
       accent: 'from-violet-600 to-purple-800',
-      badge: 'Payment Sessions',
+      badge: 'Gateways & Balances',
+      subModules: [
+        {
+          name: 'UPI Direct',
+          desc: 'Direct QR / UTR verification flow & payment approvals',
+          to: '/admin/upi-direct',
+          icon: Wallet,
+        },
+        {
+          name: 'GyftKart Wallet',
+          desc: 'Wallet management, aggregate liabilities & balance compliance',
+          to: '/admin/wallet-management',
+          icon: Banknote,
+        },
+        {
+          name: 'Razorpay',
+          desc: 'Card, Netbanking, webhook credentials & gateway status',
+          to: '/admin/payment-settings?gateway=razorpay',
+          icon: CreditCard,
+        },
+      ],
     },
   ];
 
@@ -201,7 +264,7 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-slate-50">
       <AdminTopBar />
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 py-8">
         {/* Header Title & Refresh */}
         <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -281,51 +344,83 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Dedicated Admin Modules Navigation Grid */}
+        {/* 6 Category Hubs (Admin Modules) */}
         <div>
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-5 flex items-center justify-between">
             <div>
               <h2 className="font-display text-lg font-bold text-slate-900">Admin Modules</h2>
               <p className="text-xs text-slate-500">
-                Direct access to standalone management portals and financial accounting suites.
+                Organized 2-level administration suites for customer management, accounting ledgers, and transactions.
               </p>
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {quickNavCards.map((card) => {
-              const Icon = card.icon;
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {primaryModuleHubs.map((hub) => {
+              const HubIcon = hub.icon;
               return (
-                <Link
-                  key={card.to}
-                  to={card.to}
-                  className="group relative rounded-3xl border border-slate-100 bg-white p-6 shadow-soft hover:shadow-card hover:border-brand-200 transition-all flex flex-col justify-between"
+                <div
+                  key={hub.id}
+                  className="flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-6 shadow-soft hover:shadow-card transition-all"
                 >
                   <div>
+                    {/* Hub Top Bar */}
                     <div className="flex items-center justify-between gap-3 mb-4">
-                      <span
-                        className={`grid place-items-center h-11 w-11 rounded-2xl bg-gradient-to-br ${card.accent} text-white shadow-sm`}
-                      >
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600 group-hover:bg-brand-50 group-hover:text-brand-700 transition-colors">
-                        {card.badge}
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`grid place-items-center h-11 w-11 rounded-2xl bg-gradient-to-br ${hub.accent} text-white shadow-sm shrink-0`}
+                        >
+                          <HubIcon className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <h3 className="font-display text-base font-bold text-slate-900 tracking-tight">
+                            {hub.title}
+                          </h3>
+                          <span className="text-[11px] font-semibold text-slate-400">
+                            {hub.subModules.length} {hub.subModules.length === 1 ? 'Sub-module' : 'Sub-modules'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
+                        {hub.badge}
                       </span>
                     </div>
 
-                    <h3 className="font-display text-base font-bold text-slate-900 group-hover:text-brand-700 transition-colors">
-                      {card.title}
-                    </h3>
-                    <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
-                      {card.desc}
+                    {/* Hub Description */}
+                    <p className="text-xs text-slate-500 leading-relaxed mb-5">
+                      {hub.desc}
                     </p>
-                  </div>
 
-                  <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between text-xs font-bold text-brand-600 group-hover:text-brand-700">
-                    <span>Open Module</span>
-                    <ArrowRight className="h-4 w-4 transform group-hover:translate-x-1 transition-transform" />
+                    {/* Sub-cards Container */}
+                    <div className="space-y-2.5">
+                      {hub.subModules.map((sub) => {
+                        const SubIcon = sub.icon;
+                        return (
+                          <Link
+                            key={sub.to}
+                            to={sub.to}
+                            className="group flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-white hover:border-brand-300 hover:shadow-sm px-3.5 py-3 transition-all"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="grid place-items-center h-8 w-8 rounded-xl bg-white border border-slate-200/60 text-slate-600 group-hover:text-brand-600 group-hover:border-brand-200 transition-colors shrink-0">
+                                <SubIcon className="h-4 w-4" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 group-hover:text-brand-700 transition-colors truncate">
+                                  {sub.name}
+                                </p>
+                                <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                                  {sub.desc}
+                                </p>
+                              </div>
+                            </div>
+                            <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-brand-600 group-hover:translate-x-1 transition-all shrink-0" />
+                          </Link>
+                        );
+                      })}
+                    </div>
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>

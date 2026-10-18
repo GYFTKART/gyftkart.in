@@ -503,6 +503,25 @@ export default function AdminB2bLedgerPage() {
       <AdminTopBar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Breadcrumb Navigation */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-slate-500 font-medium">
+            <Link to="/admin/dashboard" className="hover:text-brand-700 transition-colors">
+              Admin
+            </Link>
+            <ChevronRight className="h-4 w-4 text-slate-400" />
+            <span className="text-slate-900 font-semibold">B2B Ledger</span>
+          </nav>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/admin/dashboard"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Admin Dashboard
+            </Link>
+          </div>
+        </div>
+
         {/* Navigation & Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>

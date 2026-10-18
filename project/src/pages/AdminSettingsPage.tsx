@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Settings,
   CreditCard,
@@ -31,12 +31,20 @@ import {
 export default function AdminSettingsPage() {
   const { admin } = useAdminAuth();
   const { push } = useToast();
+  const [searchParams] = useSearchParams();
+  const razorpayRef = useRef<HTMLFormElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
 
   const [settings, setSettings] = useState<PaymentGatewaySettings>(DEFAULT_PAYMENT_SETTINGS);
+
+  useEffect(() => {
+    if (searchParams.get('gateway') === 'razorpay' && razorpayRef.current) {
+      razorpayRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [searchParams, loading]);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -94,7 +102,7 @@ export default function AdminSettingsPage() {
               to="/admin/dashboard"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"
             >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Admin Dashboard
             </Link>
           </div>
         </div>
@@ -198,7 +206,12 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* Configuration Form Card */}
-        <form onSubmit={handleSave} className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card mb-8">
+        <form
+          ref={razorpayRef}
+          id="razorpay"
+          onSubmit={handleSave}
+          className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card mb-8"
+        >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
             <div>
               <div className="flex items-center gap-2">

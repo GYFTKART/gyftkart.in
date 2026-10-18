@@ -246,7 +246,7 @@ export default function AdminCorporateInquiriesPage() {
               to="/admin/dashboard"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"
             >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Admin Dashboard
             </Link>
           </div>
         </div>
