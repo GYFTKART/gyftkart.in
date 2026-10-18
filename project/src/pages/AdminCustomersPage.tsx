@@ -18,11 +18,13 @@ import {
   X,
   Lock,
   Unlock,
+  Trash2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { AdminTopBar } from '@/components/AdminHeader';
 import { useToast } from '@/components/Toast';
+import ConfirmActionModal from '@/components/ConfirmActionModal';
 
 export interface AdminCustomerRecord {
   id: string;
@@ -68,6 +70,9 @@ export default function AdminCustomersPage() {
 
   const [resetModalCustomer, setResetModalCustomer] = useState<AdminCustomerRecord | null>(null);
   const [isSendingReset, setIsSendingReset] = useState(false);
+
+  const [deleteModalCustomer, setDeleteModalCustomer] = useState<AdminCustomerRecord | null>(null);
+  const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
 
   const fetchCustomers = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -161,11 +166,7 @@ export default function AdminCustomersPage() {
         prev.map((c) => (c.id === targetId ? { ...c, is_blocked: newBlockedState } : c))
       );
 
-      const actionText = newBlockedState ? 'blocked & suspended' : 'unblocked & reactivated';
-      push(
-        `Customer ${blockModalCustomer.full_name || blockModalCustomer.email} is now ${actionText}.`,
-        'success'
-      );
+      push(newBlockedState ? 'Customer blocked' : 'Customer unblocked', 'success');
       setBlockModalCustomer(null);
       setBlockReason('');
     } catch (err: unknown) {
@@ -174,6 +175,49 @@ export default function AdminCustomersPage() {
       push(`Block status update failed: ${msg}`, 'error');
     } finally {
       setIsUpdatingBlock(false);
+    }
+  };
+
+  // Single Delete action handler
+  const handleDeleteCustomer = async () => {
+    if (!deleteModalCustomer) return;
+    setIsDeletingCustomer(true);
+
+    const targetId = deleteModalCustomer.id;
+
+    try {
+      // 1. Try atomic admin_delete_customer RPC
+      const { error: rpcError } = await supabase.rpc('admin_delete_customer', {
+        target_user_id: targetId,
+      });
+
+      // 2. If RPC error, fallback to direct profiles deletion
+      if (rpcError) {
+        console.warn('RPC admin_delete_customer error, falling back to profiles deletion:', rpcError.message);
+        const { error: deleteError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', targetId);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // 3. Update local state immediately
+      setCustomers((prev) => prev.filter((c) => c.id !== targetId));
+      setSelectedCustomerIds((prev) => {
+        const next = new Set(prev);
+        next.delete(targetId);
+        return next;
+      });
+
+      push('Customer deleted successfully', 'success');
+      setDeleteModalCustomer(null);
+    } catch (err: unknown) {
+      console.error('Failed to delete customer:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to delete customer';
+      push(`Delete failed: ${msg}`, 'error');
+    } finally {
+      setIsDeletingCustomer(false);
     }
   };
 
@@ -229,10 +273,7 @@ export default function AdminCustomersPage() {
 
       if (error) throw error;
 
-      push(
-        `Password reset link successfully sent to ${resetModalCustomer.email}`,
-        'success'
-      );
+      push('Password reset email sent', 'success');
       setResetModalCustomer(null);
     } catch (err: unknown) {
       console.error('Failed to send password reset:', err);
@@ -754,6 +795,16 @@ export default function AdminCustomersPage() {
                               <KeyRound className="h-3 w-3 text-slate-500" />
                               Reset Pass
                             </button>
+
+                            {/* Delete Button */}
+                            <button
+                              onClick={() => setDeleteModalCustomer(customer)}
+                              className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 text-xs px-2.5 py-1 rounded-md font-medium transition shadow-xs"
+                              title="Delete Customer Account"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              Delete
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -827,137 +878,30 @@ export default function AdminCustomersPage() {
       </main>
 
       {/* ───── Modal 1: Single Block / Unblock Confirmation Modal ───── */}
-      {blockModalCustomer && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
-          <div
-            className="fixed inset-0 -z-10"
-            onClick={() => !isUpdatingBlock && setBlockModalCustomer(null)}
-          />
-
-          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 p-6 space-y-5 animate-slide-up">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <span
-                  className={`grid place-items-center h-9 w-9 rounded-xl ${
-                    blockModalCustomer.is_blocked
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-rose-100 text-rose-700'
-                  }`}
-                >
-                  {blockModalCustomer.is_blocked ? (
-                    <Unlock className="h-5 w-5" />
-                  ) : (
-                    <Lock className="h-5 w-5" />
-                  )}
-                </span>
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900">
-                    {blockModalCustomer.is_blocked
-                      ? 'Reactivate Customer Account'
-                      : 'Suspend & Block Customer'}
-                  </h2>
-                  <p className="text-[11px] text-slate-500">
-                    ID: {blockModalCustomer.id.slice(0, 8)}…
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setBlockModalCustomer(null)}
-                disabled={isUpdatingBlock}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/70 space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Customer:</span>
-                <span className="font-bold text-slate-900">
-                  {blockModalCustomer.full_name}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Email:</span>
-                <span className="font-mono text-slate-700">
-                  {blockModalCustomer.email}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Current Status:</span>
-                <span
-                  className={`font-bold ${
-                    blockModalCustomer.is_blocked ? 'text-rose-600' : 'text-emerald-600'
-                  }`}
-                >
-                  {blockModalCustomer.is_blocked ? 'BLOCKED' : 'ACTIVE'}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700">
-                Administrative Reason / Audit Note (Optional)
-              </label>
-              <textarea
-                value={blockReason}
-                onChange={(e) => setBlockReason(e.target.value)}
-                placeholder={
-                  blockModalCustomer.is_blocked
-                    ? 'Reason for lifting suspension...'
-                    : 'Reason for blocking (e.g. Chargeback investigation, suspicious activity, policy violation)...'
-                }
-                rows={2}
-                className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
-            </div>
-
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              {blockModalCustomer.is_blocked
-                ? 'Unblocking will immediately restore the customer’s ability to sign in and purchase gift vouchers.'
-                : 'Blocking will immediately terminate active sessions and prevent this customer from logging in or placing new orders.'}
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setBlockModalCustomer(null)}
-                disabled={isUpdatingBlock}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleToggleBlock}
-                disabled={isUpdatingBlock}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white rounded-xl shadow-sm transition ${
-                  blockModalCustomer.is_blocked
-                    ? 'bg-emerald-600 hover:bg-emerald-700'
-                    : 'bg-rose-600 hover:bg-rose-700'
-                }`}
-              >
-                {isUpdatingBlock ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Updating…
-                  </>
-                ) : blockModalCustomer.is_blocked ? (
-                  <>
-                    <Unlock className="h-3.5 w-3.5" />
-                    Confirm Unblock
-                  </>
-                ) : (
-                  <>
-                    <Lock className="h-3.5 w-3.5" />
-                    Confirm Block
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmActionModal
+        isOpen={Boolean(blockModalCustomer)}
+        actionType={blockModalCustomer?.is_blocked ? 'UNBLOCK' : 'BLOCK'}
+        title={blockModalCustomer?.is_blocked ? 'Unblock Customer?' : 'Block Customer?'}
+        description={
+          blockModalCustomer?.is_blocked
+            ? 'Are you sure you want to unblock this customer? Their access to log in and make purchases will be restored.'
+            : 'Are you sure you want to block this customer? They will immediately lose access to log in and make purchases.'
+        }
+        confirmLabel={blockModalCustomer?.is_blocked ? 'Yes, Unblock' : 'Yes, Block'}
+        customerName={blockModalCustomer?.full_name}
+        customerEmail={blockModalCustomer?.email}
+        isProcessing={isUpdatingBlock}
+        reason={blockReason}
+        onReasonChange={setBlockReason}
+        showReasonInput={true}
+        onConfirm={handleToggleBlock}
+        onClose={() => {
+          if (!isUpdatingBlock) {
+            setBlockModalCustomer(null);
+            setBlockReason('');
+          }
+        }}
+      />
 
       {/* ───── Modal 2: Bulk Block / Unblock Confirmation Modal ───── */}
       {bulkModalAction && (
@@ -1068,85 +1012,32 @@ export default function AdminCustomersPage() {
       )}
 
       {/* ───── Modal 3: Password Reset Confirmation Modal ───── */}
-      {resetModalCustomer && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
-          <div
-            className="fixed inset-0 -z-10"
-            onClick={() => !isSendingReset && setResetModalCustomer(null)}
-          />
+      <ConfirmActionModal
+        isOpen={Boolean(resetModalCustomer)}
+        actionType="RESET_PASSWORD"
+        title="Send Password Reset Link?"
+        description={`Are you sure you want to send a password reset link to ${resetModalCustomer?.email || 'this customer'}?`}
+        confirmLabel="Yes, Send Link"
+        customerName={resetModalCustomer?.full_name}
+        customerEmail={resetModalCustomer?.email}
+        isProcessing={isSendingReset}
+        onConfirm={handleSendPasswordReset}
+        onClose={() => !isSendingReset && setResetModalCustomer(null)}
+      />
 
-          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 p-6 space-y-5 animate-slide-up">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <span className="grid place-items-center h-9 w-9 rounded-xl bg-amber-100 text-amber-700">
-                  <KeyRound className="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900">Send Password Reset</h2>
-                  <p className="text-[11px] text-slate-500">Security Credentials Action</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setResetModalCustomer(null)}
-                disabled={isSendingReset}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/70 space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Customer:</span>
-                <span className="font-bold text-slate-900">
-                  {resetModalCustomer.full_name}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Recipient Email:</span>
-                <span className="font-mono font-bold text-brand-700">
-                  {resetModalCustomer.email}
-                </span>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              This action triggers an official secure Supabase password recovery email to{' '}
-              <span className="font-bold text-slate-900">{resetModalCustomer.email}</span>.
-              The customer can click the link to securely update their account credentials.
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setResetModalCustomer(null)}
-                disabled={isSendingReset}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSendPasswordReset}
-                disabled={isSendingReset}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-sm transition"
-              >
-                {isSendingReset ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Sending Link…
-                  </>
-                ) : (
-                  <>
-                    <Mail className="h-3.5 w-3.5" />
-                    Send Reset Link
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ───── Modal 4: Delete Customer Confirmation Modal ───── */}
+      <ConfirmActionModal
+        isOpen={Boolean(deleteModalCustomer)}
+        actionType="DELETE"
+        title="Delete Customer Account?"
+        description="Are you sure you want to delete this customer? This action cannot be undone and will permanently remove their access."
+        confirmLabel="Yes, Delete"
+        customerName={deleteModalCustomer?.full_name}
+        customerEmail={deleteModalCustomer?.email}
+        isProcessing={isDeletingCustomer}
+        onConfirm={handleDeleteCustomer}
+        onClose={() => !isDeletingCustomer && setDeleteModalCustomer(null)}
+      />
     </div>
   );
 }
