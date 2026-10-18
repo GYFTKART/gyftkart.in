@@ -12,6 +12,7 @@ type UpSession = {
   bank_ref: string | null;
   verification_level: string | null;
   buyer: { name?: string; email?: string } | null;
+  items: unknown[] | null;
   customer_utr: string | null;
   proof_path: string | null;
   admin_remark: string | null;
@@ -58,6 +59,29 @@ function buyerOf(b: UpSession['buyer']) {
   return { name: b?.name ?? '', email: b?.email ?? '' };
 }
 
+type ItemView = { label: string; size: string };
+
+// Session items are stored as cart-item snapshots
+// (brand_name/brand/gift-card name + denomination/amount + quantity);
+// parse defensively so odd rows never crash the table.
+function itemsOf(s: UpSession): ItemView[] {
+  if (!Array.isArray(s.items)) return [];
+  return s.items
+    .map((raw) => {
+      const it = raw as Record<string, unknown> | null;
+      if (!it || typeof it !== 'object') return null;
+      const brand = String(it.brand ?? it.brand_name ?? '').trim();
+      const name = String(it.name ?? it.gift_card_name ?? it.brand_name ?? '').trim();
+      const denom = Number(it.amount ?? it.denomination ?? 0) || 0;
+      const qty = Math.max(1, Number(it.quantity ?? it.qty ?? 1) || 1);
+      const label = [brand, name].filter(Boolean).join(' ') || 'Gift card';
+      return { label, size: `${inr(denom)} × ${qty}` };
+    })
+    .filter((v): v is ItemView => v !== null);
+}
+
+const shortOrderId = (id: string) => (id.length > 13 ? `${id.slice(0, 13)}…` : id);
+
 type DateMode = 'all' | 'today' | 'yesterday' | 'week' | 'custom';
 
 export default function AdminPaymentsTab() {
@@ -83,7 +107,7 @@ export default function AdminPaymentsTab() {
     setLoading(true);
     const { data, error } = await supabase
       .from('upi_payment_sessions')
-      .select('*')
+      .select('*, items')
       .or('customer_utr.not.is.null,proof_path.not.is.null')
       .order('created_at', { ascending: false })
       .limit(FETCH_CAP);
@@ -430,11 +454,12 @@ export default function AdminPaymentsTab() {
       ) : (
         <>
           <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[1020px] text-left text-xs">
+            <table className="w-full min-w-[1120px] text-left text-xs">
               <thead>
                 <tr className="bg-slate-50">
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">User / Customer</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Order / Item</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">UTR &amp; Proof</th>
@@ -444,14 +469,12 @@ export default function AdminPaymentsTab() {
               <tbody>
                 {visible.map((s) => {
                   const buyer = buyerOf(s.buyer);
+                  const items = itemsOf(s);
                   return (
                     <tr key={s.id} className="border-t border-slate-100 align-top">
-                      <td className="px-3 py-3">
-                        <p className="font-semibold text-slate-600">{buyer.name || buyer.email || 'Customer'}</p>
+                      <td className="px-3 py-3 min-w-[10rem]">
+                        <p className="truncate font-semibold text-slate-600">{buyer.name || buyer.email || 'Customer'}</p>
                         <p className="break-all text-[11px] text-slate-500">{buyer.email}</p>
-                        <p className="mt-0.5 text-[11px] text-slate-400 break-all">
-                          user <span className="font-mono">{s.user_id}</span>
-                        </p>
                       </td>
                       <td className="px-3 py-3">
                         <p className="whitespace-nowrap font-bold text-slate-900">{s.order_id}</p>
@@ -466,6 +489,22 @@ export default function AdminPaymentsTab() {
                             {s.status === 'INITIATED' || s.status === 'ACTIVE' ? 'PENDING VERIFICATION' : s.status}
                             {s.verification_level === 'MANUAL' ? ' · manual' : s.verification_level === 'GMAIL' ? ' · observer' : ''}
                           </span>
+                        </p>
+                      </td>
+                      <td className="px-3 py-3 min-w-[12rem]">
+                        {items.length === 0 ? (
+                          <p className="text-[11px] text-slate-400">—</p>
+                        ) : (
+                          <p className="truncate text-[11px] text-slate-600" title={items.map((it) => `${it.label} (${it.size})`).join(' · ')}>
+                            {items.slice(0, 2).map((it) => `${it.label} · ${it.size}`).join('  ·  ')}
+                            {items.length > 2 ? ` · +${items.length - 2} more` : ''}
+                          </p>
+                        )}
+                        <p
+                          className="mt-0.5 whitespace-nowrap font-mono text-[11px] font-semibold text-slate-900"
+                          title={s.order_id}
+                        >
+                          {shortOrderId(s.order_id)}
                         </p>
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">
