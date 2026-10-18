@@ -96,7 +96,7 @@ serve(async (req) => {
     // session.status === 'SUCCESS'
 
     // Idempotency: first orders row wins.
-    const lookupIds = ['upi_payment_id', 'razorpay_payment_id'];
+    const lookupIds = ['youpi_payment_id', 'razorpay_payment_id'];
     for (const col of lookupIds) {
       const { data: existing, error } = await admin
         .from('orders')
@@ -113,9 +113,9 @@ serve(async (req) => {
         user_id: session!.user_id,
         total_amount: Number(expectedPaise) / 100,
         status: 'successful',
-        upi_order_id: session!.order_id,
-        upi_payment_id: payment_id,
-        upi_utr: session!.bank_ref ?? null,
+        youpi_order_id: session!.order_id,
+        youpi_payment_id: payment_id,
+        youpi_utr: session!.bank_ref ?? session!.customer_utr ?? null,
         items: session!.items,
       },
       {

@@ -191,7 +191,7 @@ serve(async (req) => {
       const { data: existingOrder } = await admin
         .from('orders')
         .select('id')
-        .or(`upi_payment_id.eq.${session.id},razorpay_payment_id.eq.${session.id},upi_order_id.eq.${session.order_id}`)
+        .or(`youpi_payment_id.eq.${session.id},razorpay_payment_id.eq.${session.id},youpi_order_id.eq.${session.order_id}`)
         .maybeSingle();
 
       if (!existingOrder) {
@@ -199,9 +199,9 @@ serve(async (req) => {
           user_id: session.user_id,
           total_amount: Number(session.amount_paise) / 100,
           status: 'successful',
-          upi_order_id: session.order_id,
-          upi_payment_id: session.id,
-          upi_utr: session.bank_ref || session.customer_utr || null,
+          youpi_order_id: session.order_id,
+          youpi_payment_id: session.id,
+          youpi_utr: session.bank_ref || session.customer_utr || null,
           items: session.items,
         });
       }

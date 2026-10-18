@@ -89,7 +89,7 @@ serve(async (req) => {
     await admin
       .from('orders')
       .update({ status: 'rejected' })
-      .eq('upi_payment_id', body.payment_id);
+      .eq('youpi_payment_id', body.payment_id);
 
     return jsonResponse({ ok: true }, 200);
   } catch (err) {

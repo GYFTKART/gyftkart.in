@@ -317,14 +317,11 @@ export default function UpiDirectCheckoutButton({
 
       // 2. ONLY NOW insert the order into public.orders (for voucher orders)
       if (!topUp) {
-        const firstItem = Array.isArray(items) && items.length > 0 ? (items[0] as Record<string, unknown>) : null;
-        const brandName = (firstItem?.brand_name as string) || (firstItem?.name as string) || 'Gift Card';
-
         // Check if order already exists for this payment session to maintain idempotency
         const { data: existingOrder } = await supabase
           .from('orders')
           .select('id')
-          .or(`upi_payment_id.eq.${session.paymentId},session_id.eq.${session.paymentId}`)
+          .or(`youpi_payment_id.eq.${session.paymentId},youpi_order_id.eq.${session.orderId}`)
           .maybeSingle();
 
         if (existingOrder) {
@@ -332,10 +329,8 @@ export default function UpiDirectCheckoutButton({
             .from('orders')
             .update({
               status: 'PENDING_VERIFICATION',
-              amount,
               total_amount: amount,
-              utr: cleanUtr,
-              upi_utr: cleanUtr,
+              youpi_utr: cleanUtr,
             })
             .eq('id', existingOrder.id);
         } else {
@@ -343,20 +338,13 @@ export default function UpiDirectCheckoutButton({
             .from('orders')
             .insert({
               user_id: authSession.id,
-              amount,
               total_amount: amount,
               status: 'PENDING_VERIFICATION',
-              utr: cleanUtr,
-              upi_utr: cleanUtr,
-              session_id: session.paymentId,
-              upi_payment_id: session.paymentId,
-              upi_order_id: session.orderId,
-              brand_name: brandName,
+              youpi_utr: cleanUtr,
+              youpi_order_id: session.orderId || null,
+              youpi_payment_id: session.paymentId || null,
               items: items ?? [],
-              created_at: new Date().toISOString(),
-            })
-            .select()
-            .single();
+            });
 
           if (orderError) {
             console.warn('Orders direct insert notice:', orderError.message);
@@ -368,10 +356,8 @@ export default function UpiDirectCheckoutButton({
       await supabase
         .from('upi_payment_sessions')
         .update({
-          utr: cleanUtr,
           customer_utr: cleanUtr,
           status: 'PENDING_VERIFICATION',
-          submitted_at: new Date().toISOString(),
           proof_path: proofPath ?? null,
         })
         .eq('id', session.paymentId);

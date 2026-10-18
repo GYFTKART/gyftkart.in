@@ -167,7 +167,7 @@ export default function CheckoutPage() {
   const issueGiftCards = async (verifiedOrder?: OrderRow) => {
     try {
       const issuedUnderPaymentId =
-        verifiedOrder?.upi_payment_id ?? verifiedOrder?.razorpay_payment_id ?? null;
+        verifiedOrder?.youpi_payment_id ?? verifiedOrder?.upi_payment_id ?? verifiedOrder?.razorpay_payment_id ?? null;
       const data = await insertPurchaseRows(issuedUnderPaymentId);
       setPurchases(data);
       if (!isBuyNow) clear();

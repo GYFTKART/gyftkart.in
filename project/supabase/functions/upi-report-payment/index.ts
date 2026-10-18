@@ -108,21 +108,17 @@ serve(async (req) => {
       const { data: existingOrder } = await admin
         .from('orders')
         .select('id')
-        .or(`upi_payment_id.eq.${payment_id},session_id.eq.${payment_id}`)
+        .or(`youpi_payment_id.eq.${payment_id},youpi_order_id.eq.${session.order_id}`)
         .maybeSingle();
 
       const orderAmount = Number(session.amount_paise) / 100;
-      const firstItem = Array.isArray(session.items) && session.items.length > 0 ? (session.items[0] as Record<string, unknown>) : null;
-      const brandName = (firstItem?.brand_name as string) || (firstItem?.name as string) || 'Gift Card';
 
       if (existingOrder) {
         await admin
           .from('orders')
           .update({
             status: 'PENDING_VERIFICATION',
-            upi_utr: utr.trim(),
-            utr: utr.trim(),
-            amount: orderAmount,
+            youpi_utr: utr.trim(),
             total_amount: orderAmount,
           })
           .eq('id', existingOrder.id);
@@ -132,16 +128,11 @@ serve(async (req) => {
           .insert({
             user_id: session.user_id,
             total_amount: orderAmount,
-            amount: orderAmount,
             status: 'PENDING_VERIFICATION',
-            upi_order_id: session.order_id,
-            upi_payment_id: payment_id,
-            session_id: payment_id,
-            upi_utr: utr.trim(),
-            utr: utr.trim(),
-            brand_name: brandName,
+            youpi_order_id: session.order_id,
+            youpi_payment_id: payment_id,
+            youpi_utr: utr.trim(),
             items: session.items,
-            created_at: new Date().toISOString(),
           });
       }
     }

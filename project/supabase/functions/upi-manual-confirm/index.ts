@@ -33,7 +33,7 @@ function jsonResponse(body: unknown, status: number) {
 }
 
 async function reconcileOrder(admin: SupabaseClient, session: Record<string, unknown>, paymentId: string) {
-  const lookupIds = ['upi_payment_id', 'razorpay_payment_id'];
+  const lookupIds = ['youpi_payment_id', 'razorpay_payment_id'];
   for (const col of lookupIds) {
     const { data: existing } = await admin
       .from('orders')
@@ -46,7 +46,7 @@ async function reconcileOrder(admin: SupabaseClient, session: Record<string, unk
           .from('orders')
           .update({
             status: 'successful',
-            upi_utr: session.bank_ref ?? existing.upi_utr,
+            youpi_utr: session.bank_ref ?? session.customer_utr ?? existing.youpi_utr,
           })
           .eq('id', existing.id)
           .select('*')
@@ -62,14 +62,14 @@ async function reconcileOrder(admin: SupabaseClient, session: Record<string, unk
       user_id: session.user_id,
       total_amount: (session.amount_paise as number) / 100,
       status: 'successful',
-      upi_order_id: session.order_id,
-      upi_payment_id: paymentId,
-      upi_utr: session.bank_ref ?? null,
+      youpi_order_id: session.order_id,
+      youpi_payment_id: paymentId,
+      youpi_utr: session.bank_ref ?? session.customer_utr ?? null,
       items: session.items,
     },
     {
       user_id: session.user_id,
-      total_amount: session.amount_paise / 100,
+      total_amount: (session.amount_paise as number) / 100,
       status: 'successful',
       razorpay_order_id: session.order_id,
       razorpay_payment_id: paymentId,
@@ -237,7 +237,7 @@ serve(async (req) => {
       const { data: existingOrder } = await admin
         .from('orders')
         .select('*')
-        .eq('upi_payment_id', session.id)
+        .eq('youpi_payment_id', session.id)
         .maybeSingle();
       if (existingOrder) {
         return jsonResponse({ order: existingOrder, note: 'already confirmed' }, 200);

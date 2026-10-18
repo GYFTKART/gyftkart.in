@@ -728,6 +728,9 @@ export default function AdminPaymentsTab() {
         user_id: s.user_id,
         total_amount: totalRupees,
         status: 'successful',
+        youpi_order_id: s.order_id,
+        youpi_payment_id: s.id,
+        youpi_utr: s.customer_utr || s.bank_ref || null,
         items: s.items,
       });
 

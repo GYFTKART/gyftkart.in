@@ -336,6 +336,7 @@ export default function AdminCustomerLedgerPage() {
       ordersList.forEach((o) => {
         orderByRef.set(o.id, o);
         if (o.razorpay_order_id) orderByRef.set(o.razorpay_order_id, o);
+        if (o.youpi_order_id) orderByRef.set(o.youpi_order_id, o);
         if (o.upi_order_id) orderByRef.set(o.upi_order_id, o);
       });
 
@@ -401,10 +402,10 @@ export default function AdminCustomerLedgerPage() {
           const amountRs = Number(order.total_amount || 0);
           const paymentMethod = order.razorpay_payment_id
             ? 'Razorpay'
-            : order.upi_payment_id
+            : (order.youpi_payment_id || order.upi_payment_id)
             ? 'UPI Direct'
             : 'Online Payment';
-          const refNo = order.razorpay_order_id || order.upi_order_id || `GK-${order.id.slice(0, 8).toUpperCase()}`;
+          const refNo = order.razorpay_order_id || order.youpi_order_id || order.upi_order_id || `GK-${order.id.slice(0, 8).toUpperCase()}`;
 
           // Direct sales voucher record
           transactions.push({
@@ -419,7 +420,7 @@ export default function AdminCustomerLedgerPage() {
             balanceType: 'Cr',
             source: 'orders',
             status: order.status,
-            rawRef: order.razorpay_payment_id || order.upi_payment_id,
+            rawRef: order.razorpay_payment_id || order.youpi_payment_id || order.upi_payment_id,
             rawItems: order.items,
             orderId: refNo,
             paymentMethod,
