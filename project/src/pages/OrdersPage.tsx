@@ -191,7 +191,7 @@ export default function OrdersPage() {
 
   return (
     <div className="bg-gradient-to-b from-brand-50/40 via-transparent to-transparent pt-28 pb-16 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-6xl">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm mb-6">
           <Link to="/" className="text-gray-400 hover:text-brand-700 transition-colors">
@@ -226,7 +226,7 @@ export default function OrdersPage() {
               {/* ───────── UPI Direct voucher orders ───────── */}
               {(pendingUpi ?? []).length > 0 && (
                 <div>
-                  <div className="flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6 pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6 pb-4">
                     <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">Recent Orders</h2>
                     <select
                       value={statusFilter}
@@ -237,9 +237,9 @@ export default function OrdersPage() {
                       className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                     >
                       <option value="all">All Orders</option>
-                      <option value="success">Success / Delivered</option>
+                      <option value="success">Success</option>
                       <option value="pending">Pending Verification</option>
-                      <option value="rejected">Rejected / Failed</option>
+                      <option value="rejected">Rejected</option>
                     </select>
                   </div>
 
@@ -249,83 +249,104 @@ export default function OrdersPage() {
                     </div>
                   ) : (
                     <>
-                      <ul className="divide-y divide-slate-100">
-                        {paginatedUpi.map((s) => {
-                          const isReverted = s.status === 'REVERTED';
-                          const isRejected = s.status === 'REJECTED' || isReverted;
-                          const isSuccess = s.status === 'SUCCESS' || s.status === 'CONFIRMED' || s.status === 'DELIVERED';
-                          return (
-                            <li
-                              key={s.id}
-                              className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 sm:p-6 hover:bg-slate-50/60 transition-colors"
-                            >
-                              <span
-                                className={`grid place-items-center h-12 w-12 shrink-0 rounded-2xl text-white shadow-glow-sm ${
-                                  isReverted
-                                    ? 'bg-gradient-to-br from-slate-500 to-slate-700'
-                                    : isRejected
-                                    ? 'bg-gradient-to-br from-rose-500 to-rose-700'
-                                    : isSuccess
-                                    ? 'bg-gradient-to-br from-emerald-500 to-teal-700'
-                                    : 'bg-gradient-to-br from-amber-400 to-amber-600'
-                                }`}
-                              >
-                                {isRejected ? <XCircle className="h-5 w-5" /> : <Gift className="h-5 w-5" />}
-                              </span>
-
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-slate-900">{itemsSummary(s.items)}</p>
-                                <p className="mt-1.5 text-xs font-medium text-slate-500 font-mono">Order #{s.order_id}</p>
-                                {isRejected && s.admin_remark && (
-                                  <p className="mt-1 text-xs font-semibold text-rose-600">{s.admin_remark.replace(/^Rejection Reason:\s*/i, '')}</p>
-                                )}
-                                <div className="mt-2 space-y-0.5 text-xs text-slate-500">
-                                  <p>
-                                    <span className="font-semibold text-slate-600">Created:</span>{' '}
-                                    <span className="text-slate-900">{formatDateTime(s.created_at)}</span>
-                                  </p>
-                                  <p>
-                                    <span className="font-semibold text-slate-600">Completed:</span>{' '}
-                                    {s.completed_at ? (
-                                      <span className="text-slate-900">{formatDateTime(s.completed_at)}</span>
-                                    ) : (
-                                      <span className="text-slate-400">-</span>
-                                    )}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
-                                <p className="text-base font-extrabold text-slate-900">{inr(Number(s.amount_paise) / 100)}</p>
-                                {isReverted ? (
-                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
-                                    <XCircle className="h-3.5 w-3.5" />
-                                    Reverted
-                                  </span>
-                                ) : isRejected ? (
-                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
-                                    <XCircle className="h-3.5 w-3.5" />
-                                    Rejected
-                                  </span>
-                                ) : isSuccess ? (
-                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                    Delivered
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                                    <Clock className="h-3.5 w-3.5" />
-                                    Pending Verification
-                                  </span>
-                                )}
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                      <div className="p-5 sm:p-6 pt-0">
+                        <div className="overflow-x-auto rounded-xl border border-gray-100">
+                          <table className="w-full min-w-[700px] text-left text-xs">
+                            <thead>
+                              <tr className="bg-gray-50/70">
+                                <th className="px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 w-[70px]">
+                                  S. NO.
+                                </th>
+                                <th className="px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                  ORDER / ITEM
+                                </th>
+                                <th className="px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 w-[110px]">
+                                  AMOUNT
+                                </th>
+                                <th className="px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 w-[200px]">
+                                  DATE &amp; TIME
+                                </th>
+                                <th className="px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 w-[180px]">
+                                  STATUS &amp; REMARK
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {paginatedUpi.map((s, index) => {
+                                const isReverted = s.status === 'REVERTED';
+                                const isRejected = s.status === 'REJECTED' || isReverted;
+                                const isSuccess = s.status === 'SUCCESS' || s.status === 'CONFIRMED' || s.status === 'DELIVERED';
+                                const cleanRemark = (s.admin_remark ?? '').replace(/^(Rejection Reason|Reason|Remark):\s*/i, '');
+                                const sNo = (currentPage - 1) * itemsPerPage + index + 1;
+                                return (
+                                  <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="whitespace-nowrap px-3.5 py-3 text-xs font-mono text-slate-500">
+                                      {sNo}
+                                    </td>
+                                    <td className="px-3.5 py-3 text-xs">
+                                      <p className="font-bold text-slate-900">{itemsSummary(s.items)}</p>
+                                      <p className="mt-0.5 font-mono text-[11px] text-slate-500">Order #{s.order_id}</p>
+                                    </td>
+                                    <td className="whitespace-nowrap px-3.5 py-3 font-semibold text-slate-900 text-xs">
+                                      {inr(Number(s.amount_paise) / 100)}
+                                    </td>
+                                    <td className="whitespace-nowrap px-3.5 py-3 text-xs text-slate-600">
+                                      <p className="text-[11px] text-slate-500">
+                                        <span className="font-semibold text-slate-600">Created:</span>{' '}
+                                        <span className="text-slate-900">{formatDateTime(s.created_at)}</span>
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] text-slate-500">
+                                        <span className="font-semibold text-slate-600">Completed:</span>{' '}
+                                        {s.completed_at ? (
+                                          <span className="text-slate-900">{formatDateTime(s.completed_at)}</span>
+                                        ) : (
+                                          <span className="text-slate-400">-</span>
+                                        )}
+                                      </p>
+                                    </td>
+                                    <td className="px-3.5 py-3 text-xs">
+                                      {isReverted ? (
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-bold text-slate-700">
+                                          <XCircle className="h-3 w-3" />
+                                          Reverted
+                                        </span>
+                                      ) : isRejected ? (
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-2.5 py-0.5 text-[10px] font-bold text-rose-700">
+                                          <XCircle className="h-3 w-3" />
+                                          Rejected
+                                        </span>
+                                      ) : isSuccess ? (
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                                          <CheckCircle2 className="h-3 w-3" />
+                                          Delivered
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
+                                          <Clock className="h-3 w-3" />
+                                          Pending Verification
+                                        </span>
+                                      )}
+                                      {isRejected && cleanRemark && (
+                                        <p className="mt-1 text-[11px] font-semibold text-rose-600">
+                                          {cleanRemark}
+                                        </p>
+                                      )}
+                                      {isReverted && cleanRemark && (
+                                        <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                                          {cleanRemark}
+                                        </p>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
 
                       {/* Pagination footer */}
-                      <div className="border-t border-slate-100 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <div className="border-t border-slate-100 p-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <p className="text-xs text-slate-500">
                           Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredUpi.length)} of {filteredUpi.length} orders
                         </p>
