@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Gift, CheckCircle2, Clock, Mail, Loader2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Gift, CheckCircle2, Clock, Mail, Loader2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/CustomerAuthContext';
 import { inr, formatDateTime } from '@/lib/format';
@@ -191,22 +191,22 @@ export default function OrdersPage() {
   return (
     <div className="bg-gradient-to-b from-brand-50/40 via-transparent to-transparent pt-28 pb-16 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900">
-              My Orders
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Track and review your recent gift card purchases.
-            </p>
-          </div>
-          <Link
-            to="/"
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Home
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-2 text-sm mb-6">
+          <Link to="/" className="text-gray-400 hover:text-brand-700 transition-colors">
+            Home
           </Link>
+          <span className="text-gray-300">/</span>
+          <span className="text-gray-900 font-medium">Orders</span>
+        </nav>
+
+        <div className="mb-8">
+          <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900">
+            My Orders
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Track and review your recent gift card purchases.
+          </p>
         </div>
 
         {error && (
@@ -450,15 +450,6 @@ export default function OrdersPage() {
           )}
         </div>
 
-        <div className="mt-8 flex justify-center sm:hidden">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Home
-          </Link>
-        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   User,
   Mail,
@@ -17,7 +17,6 @@ import {
 import { useAuth } from '@/context/CustomerAuthContext';
 
 export default function ProfilePage() {
-  const navigate = useNavigate();
   const { session, updateProfile } = useAuth();
 
   const [name, setName] = useState('');
@@ -133,13 +132,14 @@ export default function ProfilePage() {
   return (
     <div className="pt-28 pb-16 px-4 bg-gradient-to-b from-brand-50/40 to-transparent">
       <div className="mx-auto max-w-2xl">
-        <button
-          onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-700 mb-6 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </button>
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-2 text-sm mb-6">
+          <Link to="/" className="text-gray-400 hover:text-brand-700 transition-colors">
+            Home
+          </Link>
+          <span className="text-gray-300">/</span>
+          <span className="text-gray-900 font-medium">Profile</span>
+        </nav>
 
         <div className="rounded-3xl bg-white shadow-card border border-slate-100 overflow-hidden">
           {/* Header */}
