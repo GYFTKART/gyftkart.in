@@ -75,7 +75,7 @@ serve(async (req) => {
         admin_remark: remark,
       })
       .eq('id', body.payment_id)
-      .in('status', ['INITIATED', 'ACTIVE'])
+      .in('status', ['INITIATED', 'ACTIVE', 'AWAITING_PAYMENT', 'QR_GENERATED', 'PENDING_VERIFICATION'])
       .select('id')
       .single();
     if (upd.error || !upd.data) {
@@ -84,6 +84,12 @@ serve(async (req) => {
         400
       );
     }
+
+    // Also update any pending order status to rejected
+    await admin
+      .from('orders')
+      .update({ status: 'rejected' })
+      .eq('upi_payment_id', body.payment_id);
 
     return jsonResponse({ ok: true }, 200);
   } catch (err) {

@@ -138,7 +138,7 @@ serve(async (req) => {
           body.buyer && typeof body.buyer === 'object'
             ? body.buyer
             : derivedBuyer,
-        status: 'ACTIVE',
+        status: 'AWAITING_PAYMENT',
         expires_at: expiresAt,
         category,
       })

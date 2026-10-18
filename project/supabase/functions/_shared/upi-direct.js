@@ -12,8 +12,8 @@
 //   * bank_ref (UTR) is the replay guard: exactly one session per UTR;
 //   * every check is exact paise; no rounding drift ever.
 
-export const OPEN_STATUSES = ['INITIATED', 'ACTIVE'];
-export const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED'];
+export const OPEN_STATUSES = ['INITIATED', 'ACTIVE', 'AWAITING_PAYMENT', 'QR_GENERATED', 'PENDING_VERIFICATION'];
+export const TERMINAL_STATUSES = ['SUCCESS', 'CONFIRMED', 'FAILED', 'EXPIRED', 'CANCELLED', 'REJECTED', 'REVERTED'];
 
 const CREDIT_RX =
   /\b(?:credited|received|money received|received in|deposited in|added to)\b/i;

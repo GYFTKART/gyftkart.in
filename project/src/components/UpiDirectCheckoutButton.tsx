@@ -326,7 +326,26 @@ export default function UpiDirectCheckoutButton({
             nonJson = true;
           }
           if (nonJson || (bodyError && bodyError.toLowerCase().includes('function not found'))) {
-            // Edge Function not deployed yet: upload still succeeded, report to god.
+            // Edge Function not deployed: fallback to atomic database RPC
+            const { data: rpcData, error: rpcError } = await supabase.rpc('submit_upi_payment_proof', {
+              p_payment_id: session.paymentId,
+              p_utr: cleanUtr,
+              p_proof_path: proofPath ?? null,
+            });
+            if (!rpcError && (rpcData as { ok?: boolean })?.ok) {
+              setProofOk(true);
+              setProofFile(null);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+              return;
+            }
+            if (rpcError) {
+              setProofError(rpcError.message || 'Payment proof could not be recorded.');
+              return;
+            }
+            if ((rpcData as { error?: string })?.error) {
+              setProofError((rpcData as { error: string }).error);
+              return;
+            }
             setBackendMissing(true);
             setProofError(
               proofPath
@@ -342,6 +361,18 @@ export default function UpiDirectCheckoutButton({
               ? 'This UTR is already reported on another payment.'
               : (bodyError ?? error.message ?? 'Payment proof could not be recorded.')
           );
+          return;
+        }
+        // Transport/network error: try RPC fallback before giving up
+        const { data: rpcData, error: rpcError } = await supabase.rpc('submit_upi_payment_proof', {
+          p_payment_id: session.paymentId,
+          p_utr: cleanUtr,
+          p_proof_path: proofPath ?? null,
+        });
+        if (!rpcError && (rpcData as { ok?: boolean })?.ok) {
+          setProofOk(true);
+          setProofFile(null);
+          if (fileInputRef.current) fileInputRef.current.value = '';
           return;
         }
         setProofError(error.message || 'Payment proof could not be recorded.');
@@ -589,7 +620,7 @@ export default function UpiDirectCheckoutButton({
                         </>
                       ) : (
                         <>
-                          <FileImage className="h-3.5 w-3.5" /> Submit Payment Proof
+                          <FileImage className="h-3.5 w-3.5" /> Submit / Verify Payment
                         </>
                       )}
                     </button>

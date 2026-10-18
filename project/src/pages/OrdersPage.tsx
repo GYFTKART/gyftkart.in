@@ -113,6 +113,14 @@ function StatusBadge({ status }: { status: string }) {
       </span>
     );
   }
+  if (s === 'pending_verification' || s === 'pending') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700">
+        <Clock className="h-3.5 w-3.5" />
+        Pending Verification
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-700">
       <Clock className="h-3.5 w-3.5" />
@@ -292,9 +300,22 @@ export default function OrdersPage() {
       setLoading(false);
       return;
     }
+    const rawUpi = (upiRes.data ?? []) as PendingUpiRow[];
+    // Filter out abandoned / unsubmitted QR sessions (no UTR, or AWAITING_PAYMENT / QR_GENERATED)
+    const validUpiSessions = rawUpi.filter((s) => {
+      const st = (s.status || '').toUpperCase();
+      if (st === 'AWAITING_PAYMENT' || st === 'QR_GENERATED') {
+        return false;
+      }
+      const hasUtr = Boolean((s.customer_utr || s.bank_ref || '').trim());
+      if ((st === 'PENDING_VERIFICATION' || st === 'INITIATED' || st === 'ACTIVE') && !hasUtr) {
+        return false;
+      }
+      return true;
+    });
     setOrders((ordersRes.data ?? []) as OrderRow[]);
     setPurchases((purchasesRes.data ?? []) as PurchaseRow[]);
-    setPendingUpi((upiRes.data ?? []) as PendingUpiRow[]);
+    setPendingUpi(validUpiSessions);
     setLoading(false);
   }, [authReady, session?.id]);
 

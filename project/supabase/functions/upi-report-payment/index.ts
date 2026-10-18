@@ -63,12 +63,12 @@ serve(async (req) => {
     // Ownership: only the session owner can attach a report.
     const { data: session } = await admin
       .from('upi_payment_sessions')
-      .select('id, user_id, status, customer_utr')
+      .select('id, user_id, order_id, amount_paise, items, category, status, customer_utr')
       .eq('id', payment_id)
       .maybeSingle();
     if (!session) return jsonResponse({ error: 'SESSION_NOT_FOUND' }, 404);
     if (session.user_id !== user.id) return jsonResponse({ error: 'OWNERSHIP_MISMATCH' }, 403);
-    if (!['INITIATED', 'ACTIVE'].includes(session.status)) {
+    if (!['INITIATED', 'ACTIVE', 'AWAITING_PAYMENT', 'QR_GENERATED', 'PENDING_VERIFICATION'].includes(session.status)) {
       return jsonResponse({ error: `SESSION_${session.status}` }, 400);
     }
 
@@ -88,13 +88,48 @@ serve(async (req) => {
 
     const upd = await admin
       .from('upi_payment_sessions')
-      .update({ customer_utr: utr.trim(), proof_path: proof_path ?? null })
+      .update({
+        customer_utr: utr.trim(),
+        proof_path: proof_path ?? null,
+        status: 'PENDING_VERIFICATION',
+      })
       .eq('id', payment_id)
       .select('id')
       .single();
     if (upd.error || !upd.data) {
       console.error('upi-report-payment update failed:', upd.error);
       return jsonResponse({ error: 'Could not record submission' }, 500);
+    }
+
+    // Insert or update pending order row in public.orders for non-TOPUP (voucher) checkouts
+    if (session.category !== 'TOPUP') {
+      const { data: existingOrder } = await admin
+        .from('orders')
+        .select('id')
+        .eq('upi_payment_id', payment_id)
+        .maybeSingle();
+
+      if (existingOrder) {
+        await admin
+          .from('orders')
+          .update({
+            status: 'PENDING_VERIFICATION',
+            upi_utr: utr.trim(),
+          })
+          .eq('id', existingOrder.id);
+      } else {
+        await admin
+          .from('orders')
+          .insert({
+            user_id: session.user_id,
+            total_amount: Number(session.amount_paise) / 100,
+            status: 'PENDING_VERIFICATION',
+            upi_order_id: session.order_id,
+            upi_payment_id: payment_id,
+            upi_utr: utr.trim(),
+            items: session.items,
+          });
+      }
     }
 
     return jsonResponse({ ok: true }, 200);

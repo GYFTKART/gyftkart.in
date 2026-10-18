@@ -45,6 +45,7 @@ type UpSession = {
 const statusStyle: Record<string, string> = {
   SUCCESS: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   CONFIRMED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  PENDING_VERIFICATION: 'bg-amber-50 text-amber-800 border border-amber-200',
   ACTIVE: 'bg-amber-50 text-amber-800 border border-amber-200',
   INITIATED: 'bg-slate-100 text-slate-700 border border-slate-200',
   EXPIRED: 'bg-slate-100 text-slate-500 border border-slate-200',
@@ -209,7 +210,21 @@ export default function AdminPaymentsTab() {
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data) {
-        setSessions(data as UpSession[]);
+        // Exclude any stale or abandoned sessions where the user just viewed the QR code and never submitted their UTR
+        const validSessions = (data as UpSession[]).filter((s) => {
+          const hasUtr = Boolean((s.customer_utr ?? '').trim());
+          const isPending =
+            s.status === 'AWAITING_PAYMENT' ||
+            s.status === 'QR_GENERATED' ||
+            s.status === 'ACTIVE' ||
+            s.status === 'INITIATED' ||
+            s.status === 'PENDING_VERIFICATION';
+          if (isPending && !hasUtr) {
+            return false;
+          }
+          return true;
+        });
+        setSessions(validSessions);
         setMessage(null);
       } else if (error) {
         setMessage({ kind: 'err', text: `Load failed: ${error.message}` });
@@ -807,10 +822,20 @@ export default function AdminPaymentsTab() {
   );
 
   const inStatusMatch = useCallback(
-    (status: string) => {
-      if (statusFilter === 'all') return true;
-      if (statusFilter === 'pending') return status === 'INITIATED' || status === 'ACTIVE';
-      if (statusFilter === 'success') return status === 'SUCCESS' || status === 'CONFIRMED';
+    (s: UpSession) => {
+      const status = s.status;
+      const hasUtr = Boolean((s.customer_utr ?? '').trim());
+
+      if (statusFilter === 'all') {
+        if (!hasUtr && (status === 'AWAITING_PAYMENT' || status === 'QR_GENERATED' || status === 'ACTIVE' || status === 'INITIATED' || status === 'PENDING_VERIFICATION')) {
+          return false;
+        }
+        return true;
+      }
+      if (statusFilter === 'pending') {
+        return (status === 'PENDING_VERIFICATION' || status === 'INITIATED' || status === 'ACTIVE') && hasUtr;
+      }
+      if (statusFilter === 'success') return status === 'SUCCESS' || status === 'CONFIRMED' || status === 'DELIVERED';
       if (statusFilter === 'rejected') return status === 'REJECTED';
       if (statusFilter === 'reverted') return status === 'REVERTED';
       return true;
@@ -821,7 +846,11 @@ export default function AdminPaymentsTab() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return sessions.filter((s) => {
-      if (!inStatusMatch(s.status)) return false;
+      const hasUtr = Boolean((s.customer_utr ?? '').trim());
+      if (!hasUtr && (s.status === 'AWAITING_PAYMENT' || s.status === 'QR_GENERATED' || s.status === 'ACTIVE' || s.status === 'INITIATED' || s.status === 'PENDING_VERIFICATION')) {
+        return false;
+      }
+      if (!inStatusMatch(s)) return false;
       if (!inDateRange(s.created_at)) return false;
       if (!q) return true;
       const buyer = buyerOf(s.buyer);
@@ -845,16 +874,22 @@ export default function AdminPaymentsTab() {
     let topups = 0;
     let topupsConfirmedPaise = 0;
     for (const s of sessions) {
+      const hasUtr = Boolean((s.customer_utr ?? '').trim());
+      if (!hasUtr && (s.status === 'AWAITING_PAYMENT' || s.status === 'QR_GENERATED' || s.status === 'ACTIVE' || s.status === 'INITIATED' || s.status === 'PENDING_VERIFICATION')) {
+        continue;
+      }
       if (isLocalToday(s.created_at)) created += 1;
-      if ((s.status === 'SUCCESS' || s.status === 'CONFIRMED') && isLocalToday(s.completed_at)) {
+      if ((s.status === 'SUCCESS' || s.status === 'CONFIRMED' || s.status === 'DELIVERED') && isLocalToday(s.completed_at)) {
         confirmedPaise += Number(s.amount_paise);
       }
-      if ((s.status === 'INITIATED' || s.status === 'ACTIVE') && isLocalToday(s.created_at)) pending += 1;
+      if ((s.status === 'PENDING_VERIFICATION' || s.status === 'INITIATED' || s.status === 'ACTIVE') && hasUtr && isLocalToday(s.created_at)) {
+        pending += 1;
+      }
       if (s.status === 'REJECTED' && isLocalToday(s.completed_at)) rejected += 1;
       if (s.status === 'REVERTED' && isLocalToday(s.completed_at)) reverted += 1;
       if (s.category === 'TOPUP') {
         if (isLocalToday(s.created_at)) topups += 1;
-        if ((s.status === 'SUCCESS' || s.status === 'CONFIRMED') && isLocalToday(s.completed_at)) {
+        if ((s.status === 'SUCCESS' || s.status === 'CONFIRMED' || s.status === 'DELIVERED') && isLocalToday(s.completed_at)) {
           topupsConfirmedPaise += Number(s.amount_paise);
         }
       }
@@ -871,7 +906,10 @@ export default function AdminPaymentsTab() {
 
   const selectedPendingCount = useMemo(() => {
     return sessions.filter(
-      (s) => selectedIds.has(s.id) && (s.status === 'INITIATED' || s.status === 'ACTIVE')
+      (s) =>
+        selectedIds.has(s.id) &&
+        (s.status === 'INITIATED' || s.status === 'ACTIVE' || s.status === 'PENDING_VERIFICATION') &&
+        Boolean((s.customer_utr ?? '').trim())
     ).length;
   }, [sessions, selectedIds]);
 
@@ -981,7 +1019,9 @@ export default function AdminPaymentsTab() {
       return;
     }
     const targets = sessions.filter(
-      (s) => selectedIds.has(s.id) && (s.status === 'INITIATED' || s.status === 'ACTIVE')
+      (s) =>
+        selectedIds.has(s.id) &&
+        (s.status === 'INITIATED' || s.status === 'ACTIVE' || s.status === 'PENDING_VERIFICATION')
     );
     if (targets.length === 0) {
       setBatchRejectError('No pending sessions selected to reject.');
@@ -1356,12 +1396,12 @@ export default function AdminPaymentsTab() {
                         <p className="mt-0.5 flex flex-wrap items-center gap-1">
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                              s.status === 'INITIATED' || s.status === 'ACTIVE'
+                              s.status === 'INITIATED' || s.status === 'ACTIVE' || s.status === 'PENDING_VERIFICATION'
                                 ? 'bg-amber-100 text-amber-800'
                                 : (statusStyle[s.status] ?? 'bg-slate-100 text-slate-600')
                             }`}
                           >
-                            {s.status === 'INITIATED' || s.status === 'ACTIVE' ? 'PENDING VERIFICATION' : s.status}
+                            {s.status === 'INITIATED' || s.status === 'ACTIVE' || s.status === 'PENDING_VERIFICATION' ? 'PENDING VERIFICATION' : s.status}
                             {s.verification_level === 'MANUAL' ? ' · manual' : s.verification_level === 'GMAIL' ? ' · observer' : ''}
                           </span>
                           <span

@@ -40,7 +40,21 @@ async function reconcileOrder(admin: SupabaseClient, session: Record<string, unk
       .select('*')
       .eq(col, paymentId)
       .maybeSingle();
-    if (existing) return { order: existing, err: null as string | null };
+    if (existing) {
+      if (existing.status !== 'successful') {
+        const { data: updated } = await admin
+          .from('orders')
+          .update({
+            status: 'successful',
+            upi_utr: session.bank_ref ?? existing.upi_utr,
+          })
+          .eq('id', existing.id)
+          .select('*')
+          .single();
+        return { order: updated ?? existing, err: null as string | null };
+      }
+      return { order: existing, err: null as string | null };
+    }
   }
 
   const payloads = [
