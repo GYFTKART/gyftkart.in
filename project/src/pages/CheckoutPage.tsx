@@ -11,13 +11,16 @@ import {
   Sparkles,
   PartyPopper,
   Copy,
+  Loader2,
+  Wallet as WalletIcon,
 } from 'lucide-react';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/CustomerAuthContext';
 import { useToast } from '@/components/Toast';
 import { supabase } from '@/lib/supabase';
 import { getSessionId } from '@/lib/session';
-import { inr } from '@/lib/format';
+import { inr, inrDecimal } from '@/lib/format';
 import type { CartItem, Purchase } from '@/lib/types';
 import type { OrderRow } from '@/components/RazorpayCheckoutButton';
 import RazorpayCheckoutButton from '@/components/RazorpayCheckoutButton';
@@ -26,7 +29,7 @@ import UpiDirectCheckoutButton from '@/components/UpiDirectCheckoutButton';
 import { isYoupiConfigured } from '@/lib/youpi';
 
 type Step = 'review' | 'pay' | 'success';
-type Gateway = 'razorpay' | 'youpi' | 'upi';
+type Gateway = 'razorpay' | 'youpi' | 'upi' | 'wallet';
 
 const stepsMeta: { id: Step; label: string }[] = [
   { id: 'review', label: 'Review' },
@@ -97,38 +100,46 @@ export default function CheckoutPage() {
   // id is stamped onto every issued row — with the
   // `uq_purchases_one_batch_per_payment` unique index this makes
   // duplicate issuance (double callbacks, re-submits, races) impossible
-  // at the DB level for both gateways.
+  // at the DB level for both gateways. Wallet orders carry NO gateway
+  // payment id (null label) and are issued through the same helper.
+  const insertPurchaseRows = async (
+    issuedUnderPaymentId: string | null
+  ): Promise<Purchase[]> => {
+    const sid = getSessionId();
+    // Guest checkouts (no session) leave this null — the ledger
+    // trigger still records the sale as company revenue, it just
+    // won't have a customer wallet to debit.
+    const uid = session?.id ?? null;
+    const rows = items.map((it) => ({
+      session_id: sid,
+      user_id: uid,
+      brand_slug: it.brand_slug,
+      brand_name: it.brand_name,
+      brand_color: it.brand_color,
+      brand_color2: it.brand_color2,
+      amount: it.amount,
+      quantity: it.quantity,
+      recipient_name: it.recipient_name,
+      recipient_email: it.recipient_email,
+      recipient_phone: it.recipient_phone,
+      message: it.message,
+      occasion: it.occasion,
+      gift_card_code: genCode(),
+      status: 'active',
+      balance: it.amount * it.quantity,
+      issued_under_payment_id: issuedUnderPaymentId,
+    }));
+    const { data, error } = await supabase.from('purchases').insert(rows).select('*');
+    if (error) throw error;
+    return (data ?? []) as Purchase[];
+  };
+
   const issueGiftCards = async (verifiedOrder?: OrderRow) => {
     try {
-      const sid = getSessionId();
-      // Guest checkouts (no session) leave this null — the ledger
-      // trigger still records the sale as company revenue, it just
-      // won't have a customer wallet to debit.
-      const uid = session?.id ?? null;
       const issuedUnderPaymentId =
         verifiedOrder?.youpi_payment_id ?? verifiedOrder?.razorpay_payment_id ?? null;
-      const rows = items.map((it) => ({
-        session_id: sid,
-        user_id: uid,
-        brand_slug: it.brand_slug,
-        brand_name: it.brand_name,
-        brand_color: it.brand_color,
-        brand_color2: it.brand_color2,
-        amount: it.amount,
-        quantity: it.quantity,
-        recipient_name: it.recipient_name,
-        recipient_email: it.recipient_email,
-        recipient_phone: it.recipient_phone,
-        message: it.message,
-        occasion: it.occasion,
-        gift_card_code: genCode(),
-        status: 'active',
-        balance: it.amount * it.quantity,
-        issued_under_payment_id: issuedUnderPaymentId,
-      }));
-      const { data, error } = await supabase.from('purchases').insert(rows).select('*');
-      if (error) throw error;
-      setPurchases((data ?? []) as Purchase[]);
+      const data = await insertPurchaseRows(issuedUnderPaymentId);
+      setPurchases(data);
       if (!isBuyNow) clear();
       setStep('success');
       push('Payment successful! Gift cards delivered.', 'success');
@@ -152,6 +163,74 @@ export default function CheckoutPage() {
 
   const handlePaymentError = (message: string) => {
     push(message, 'error');
+  };
+
+  // ---- GyftKart Wallet option (v1: full-balance purchase only) -------
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletBusy, setWalletBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!session?.token) {
+      setWalletBalance(null);
+      return;
+    }
+    (async () => {
+      const { data, error: err } = await supabase.rpc('ensure_wallet');
+      if (!active) return;
+      setWalletBalance(err ? null : Number((data as unknown as { balance?: number })?.balance ?? 0));
+    })();
+    return () => {
+      active = false;
+    };
+  }, [session?.token]);
+
+  const walletCanPay =
+    !!session?.token && walletBalance !== null && walletBalance >= Math.round(total * 100);
+
+  const handleWalletPay = async () => {
+    if (!session?.token || walletBusy) return;
+    setWalletBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'wallet-checkout',
+        {
+          body: { items },
+          headers: session.token ? { Authorization: `Bearer ${session.token}` } : undefined,
+        }
+      );
+      if (error) {
+        let bodyError: string | undefined;
+        if (error instanceof FunctionsHttpError) {
+          try {
+            const payload: unknown = await (error.context as Response).json();
+            if (payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string') {
+              bodyError = (payload as { error: string }).error;
+            }
+          } catch {
+            /* fall through */
+          }
+        }
+        throw new Error(bodyError ?? error.message ?? 'Wallet payment failed.');
+      }
+      if (data?.error) {
+        throw new Error(String(data.error));
+      }
+      // Same client issuance path as every gateway (issued_under_payment_id
+      // stays null for wallet orders — purchases rows are identical).
+      await insertPurchaseRows(null);
+      setWalletBalance(Number(data.balance_after));
+      push(
+        `Paid via GyftKart Wallet — ${inr(total)}. Order #${data.order_id} placed and voucher issued.`,
+        'success'
+      );
+      if (!isBuyNow) clear();
+      navigate('/orders');
+    } catch (err) {
+      push(err instanceof Error ? err.message : 'Wallet payment failed.', 'error');
+    } finally {
+      setWalletBusy(false);
+    }
   };
 
   const copyCode = async (code: string) => {
@@ -370,6 +449,32 @@ export default function CheckoutPage() {
                         <p className="text-xs font-bold text-slate-900">UPI Direct</p>
                         <p className="mt-0.5 text-[11px] text-slate-500">Pay any UPI app · 0% fee</p>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setGateway('wallet')}
+                        disabled={!session?.token}
+                        title={session?.token ? undefined : 'Sign in to use your GyftKart Wallet'}
+                        className={`rounded-2xl border p-3 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                          gateway === 'wallet'
+                            ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-500'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <p className="text-xs font-bold text-slate-900">GyftKart Wallet</p>
+                        <p className="mt-0.5 text-[11px]">
+                          {walletCanPay ? (
+                            <span className="text-emerald-700">Balance {inrDecimal(walletBalance! / 100)}</span>
+                          ) : (
+                            <Link
+                              to="/dashboard"
+                              className="font-semibold text-amber-700 hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Low Balance — Add Money
+                            </Link>
+                          )}
+                        </p>
+                      </button>
                     </div>
 
                     {gateway === 'razorpay' ? (
@@ -397,6 +502,45 @@ export default function CheckoutPage() {
                           onError={handlePaymentError}
                           label={`Pay ${inr(total)}`}
                         />
+                      </div>
+                    ) : gateway === 'wallet' ? (
+                      <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5">
+                        {!session?.token ? (
+                          <p className="text-xs font-semibold text-amber-700">
+                            Sign in to pay with your GyftKart Wallet.
+                          </p>
+                        ) : walletBalance !== null && walletCanPay ? (
+                          <div className="flex flex-col items-center justify-center gap-2 text-center">
+                            <p className="text-xs font-bold text-slate-700">Full-balance payment via your wallet</p>
+                            <p className="text-[11px] text-slate-500">
+                              Spends your entire balance on this order — the voucher codes will be generated and
+                              listed in your dashboard and /orders page on success.
+                            </p>
+                            <button
+                              onClick={() => void handleWalletPay()}
+                              disabled={walletBusy || !validBuyer}
+                              className="mt-2 w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 px-5 py-4 text-sm font-bold text-white hover:shadow-glow transition-shadow disabled:opacity-70 disabled:cursor-not-allowed"
+                            >
+                              {walletBusy ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" /> Debiting wallet…
+                                </>
+                              ) : (
+                                <>
+                                  <WalletIcon className="h-4 w-4" /> Pay {inr(total)} with Wallet
+                                </>
+                              )}
+                            </button>
+                            <p className="mt-2 text-[11px] font-semibold text-amber-700">
+                              Low Balance — Add Money from the Wallet tab on your dashboard.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="flex items-center gap-2 text-xs font-semibold text-amber-700">
+                            <WalletIcon className="h-3.5 w-3.5 shrink-0" />
+                            Low Balance — Add Money from the Wallet tab on your dashboard to pay with the wallet.
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <div className="mt-3">

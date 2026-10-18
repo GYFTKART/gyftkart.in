@@ -10,11 +10,18 @@ import type { OrderRow } from '@/components/RazorpayCheckoutButton';
 interface UpiDirectProps {
   /** Total amount in rupees (e.g. 499 for ₹499). */
   amount: number;
-  items: unknown[];
+  /** Cart items — required only for category 'VOUCHER' (default). */
+  items?: unknown[];
+  /** 'TOPUP' switches the intent/w pods to a wallet top-up session. */
+  category?: 'VOUCHER' | 'TOPUP';
+  /** For 'TOPUP': the top-up amount in paisa (1..10000000), sent as-is. */
+  topUpAmountPaise?: number;
   buyerName: string;
   buyerEmail: string;
   disabled?: boolean;
-  onSuccess: (order: OrderRow) => void;
+  onSuccess?: (order: OrderRow) => void;
+  /** Fired when a top-up session is CONFIRMED server-side (balance credited there). */
+  onTopUpCompleted?: () => void;
   onError?: (message: string) => void;
   onCancel?: () => void;
   label?: string;
@@ -40,18 +47,22 @@ const PROOF_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 export default function UpiDirectCheckoutButton({
   amount,
   items,
+  category = 'VOUCHER',
+  topUpAmountPaise,
   buyerName,
   buyerEmail,
   disabled,
   onSuccess,
+  onTopUpCompleted,
   onError,
   onCancel,
   label,
   className,
 }: UpiDirectProps) {
+  const topUp = category === 'TOPUP';
   const { session: authSession } = useAuth();
   const navigate = useNavigate();
-  const [phase, setPhase] = useState<'idle' | 'creating' | 'awaiting' | 'stalled' | 'expired' | 'verifying'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'creating' | 'awaiting' | 'stalled' | 'expired' | 'verifying' | 'topupDone'>('idle');
   const [session, setSession] = useState<CreateUpiResponse | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(0);
@@ -98,8 +109,7 @@ export default function UpiDirectCheckoutButton({
         payment_id: created.paymentId,
         total_amount: amount,
       },
-    });
-    if (error) {
+    });if (error) {
       const message = error.message ?? '';
       if (message.includes('SESSION_EXPIRED') || message === 'EXPIRED') {
         throw new Error('EXPIRED');
@@ -112,14 +122,50 @@ export default function UpiDirectCheckoutButton({
     return null;
   };
 
+  // Top-up sessions must NOT hit verify-upi-intent-payment (it would
+  // create voucher orders for them) — poll the status endpoint only;
+  // crediting happens server-side on confirmation, never client-side.
+  const statusNow = async (created: CreateUpiResponse): Promise<string> => {
+    const { data, error } = await supabase.functions.invoke('upi-direct-status', {
+      body: {
+        order_id: created.orderId,
+        payment_id: created.paymentId,
+        total_amount: (topUpAmountPaise ?? 0) / 100,
+      },
+    });
+    if (error) {
+      throw new Error(error.message || 'Status check failed.');
+    }
+    return (data as { status?: string })?.status ?? 'PENDING';
+  };
+
   const drivePolling = async (created: CreateUpiResponse, bumpAttempt = true) => {
     try {
       setPhase(attempts >= STALL_AFTER_ATTEMPTS ? 'stalled' : 'verifying');
+      if (topUp) {
+        const status = await statusNow(created);
+        if (status === 'SUCCESS') {
+          // Wallet credit has happened server-side; refresh balance upward.
+          setSession(null);
+          setPhase('topupDone');
+          onTopUpCompleted?.();
+          return;
+        }
+        if (status === 'EXPIRED') {
+          setPhase('expired');
+          return;
+        }
+        const nextAttempt = bumpAttempt ? attempts + 1 : attempts;
+        setAttempts(nextAttempt);
+        pollRef.current = window.setTimeout(() => void drivePolling(created), POLL_INTERVAL_MS);
+        setPhase(nextAttempt >= STALL_AFTER_ATTEMPTS ? 'stalled' : 'awaiting');
+        return;
+      }
       const order = await verifyNow(created);
       if (order) {
         setPhase('idle');
         setSession(null);
-        onSuccess(order);
+        onSuccess?.(order);
         return;
       }
       const nextAttempt = bumpAttempt ? attempts + 1 : attempts;
@@ -145,11 +191,13 @@ export default function UpiDirectCheckoutButton({
       const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
         'create-upi-intent-payment',
         {
-          body: {
-            amount,
-            items,
-            buyer: { name: buyerName, email: buyerEmail },
-          },
+          body: topUp
+            ? { category: 'TOPUP', amount: Math.round(topUpAmountPaise ?? 0) }
+            : {
+                amount,
+                items,
+                buyer: { name: buyerName, email: buyerEmail },
+              },
         }
       );
       if (paymentError || !paymentData?.paymentId) {
@@ -325,38 +373,88 @@ export default function UpiDirectCheckoutButton({
         <div className="w-full max-w-full min-w-0 overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:p-5">
           <div className="rounded-xl border border-emerald-100 bg-white p-4">
             <p className="flex items-center gap-2 text-sm font-bold text-emerald-700">
-              <ShieldCheck className="h-4 w-4 shrink-0" /> Order submitted — under review
+              <ShieldCheck className="h-4 w-4 shrink-0" />{' '}
+              {topUp ? 'Top-up submitted — under manual verification' : 'Order submitted — under review'}
             </p>
-            <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
-              Payment proof submitted successfully! Your order is placed and under manual verification. You will
-              receive confirmation / gift card delivery within 15–30 minutes once verified.
-            </p>
-            <p className="mt-2 text-xs text-slate-600">
-              Reported UTR: <span className="font-mono font-bold tracking-wider text-slate-900">{utr}</span>
-            </p>
-            <p className="mt-2 text-[11px] leading-snug text-slate-500">
-              <span className="font-semibold text-slate-600">Wrong details?</span> Details on a submitted order can't
-              be edited — this payment reference is now protected against changes on our side. If something looks
-              wrong, cancel this payment and start a fresh one instead of trying to correct it here.
-            </p>
+            {topUp ? (
+              <>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                  Payment details submitted successfully! Your top-up is under manual verification — nothing is
+                  added to your balance automatically. It lands within 15–30 minutes once verified.
+                </p>
+                <p className="mt-2 text-xs text-slate-600">
+                  Reported UTR: <span className="font-mono font-bold tracking-wider text-slate-900">{utr}</span>
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                  Payment proof submitted successfully! Your order is placed and under manual verification. You will
+                  receive confirmation / gift card delivery within 15–30 minutes once verified.
+                </p>
+                <p className="mt-2 text-xs text-slate-600">
+                  Reported UTR: <span className="font-mono font-bold tracking-wider text-slate-900">{utr}</span>
+                </p>
+                <p className="mt-2 text-[11px] leading-snug text-slate-500">
+                  <span className="font-semibold text-slate-600">Wrong details?</span> Details on a submitted order can't
+                  be edited — this payment reference is now protected against changes on our side. If something looks
+                  wrong, cancel this payment and start a fresh one instead of trying to correct it here.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={viewOrders}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700"
+                  >
+                    View Orders
+                  </button>
+                  <button
+                    onClick={dismissOutcome}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-2.5 text-xs font-bold text-white hover:shadow-glow transition-shadow"
+                  >
+                    Continue Shopping
+                  </button>
+                </div>
+              </>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                onClick={viewOrders}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700"
-              >
-                View Orders
-              </button>
-              <button
-                onClick={dismissOutcome}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-2.5 text-xs font-bold text-white hover:shadow-glow transition-shadow"
-              >
-                Continue Shopping
-              </button>
+              {topUp && (
+                <button
+                  onClick={cancelSession}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-2.5 text-xs font-bold text-white hover:shadow-glow transition-shadow"
+                >
+                  Back to wallet
+                </button>
+              )}
               <button
                 onClick={cancelSession}
                 className="rounded-lg px-2 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50"
               >
                 Cancel &amp; start a new payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phase === 'topupDone' && (
+        <div className="w-full max-w-full min-w-0 overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:p-5">
+          <div className="rounded-xl border border-emerald-100 bg-white p-4">
+            <p className="flex items-center gap-2 text-sm font-bold text-emerald-700">
+              <ShieldCheck className="h-4 w-4 shrink-0" /> Top-up verified — balance updated
+            </p>
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+              The payment was confirmed with the bank and your wallet balance has been credited. Refresh the wallet
+              dashboard if the amount hasn't shown up yet.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => {
+                  setPhase('idle');
+                  onCancel?.();
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-2.5 text-xs font-bold text-white hover:shadow-glow transition-shadow"
+              >
+                Done
               </button>
             </div>
           </div>
@@ -415,8 +513,10 @@ export default function UpiDirectCheckoutButton({
                 {isMobile
                   ? 'Opens your UPI app prefilled with these exact details.'
                   : 'Scan with any UPI app on your phone (GPay/PhonePe/Paytm).'}
-                {' '}Gift cards are issued only after this payment is verified with the bank — links and clicks alone
-                never trigger issuance.
+                {' '}
+                {topUp
+                  ? 'Your wallet balance is credited only after this payment is verified with the bank — links and clicks alone never trigger a top-up.'
+                  : 'Gift cards are issued only after this payment is verified with the bank — links and clicks alone never trigger issuance.'}
               </p>
             </div>
           </div>

@@ -21,6 +21,7 @@ import { getSessionId } from '@/lib/session';
 import type { Purchase } from '@/lib/types';
 import { inr, inrDecimal, formatDateTime } from '@/lib/format';
 import Reveal from '@/components/Reveal';
+import WalletLedgerPanel from '@/components/WalletLedgerPanel';
 
 type Tab = 'wallet' | 'cards' | 'history';
 
@@ -161,9 +162,16 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : purchases.length === 0 ? (
-            <EmptyState />
+            tab === 'wallet' ? (
+              <WalletLedgerPanel />
+            ) : (
+              <EmptyState />
+            )
           ) : tab === 'wallet' ? (
-            <WalletView purchases={purchases} totalBalance={totals.totalBalance} />
+            <div className="space-y-8">
+              <WalletLedgerPanel />
+              <WalletView purchases={purchases} totalBalance={totals.totalBalance} />
+            </div>
           ) : tab === 'cards' ? (
             <CardsView
               purchases={purchases}
