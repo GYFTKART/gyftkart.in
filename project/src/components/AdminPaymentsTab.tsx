@@ -964,8 +964,10 @@ export default function AdminPaymentsTab() {
                         ) : (
                           <p className="text-[11px] text-slate-400">—</p>
                         )}
-                        {s.bank_ref && (
-                          <p className="break-all text-[11px] text-emerald-700">verified {s.bank_ref}</p>
+                        {(s.bank_ref || s.status === 'SUCCESS') && (
+                          <p className="mt-0.5 text-[11px] font-semibold text-emerald-700" title={s.bank_ref ? `Bank Ref: ${s.bank_ref}` : undefined}>
+                            Approve
+                          </p>
                         )}
                         {s.proof_path && (
                           <button
@@ -979,7 +981,9 @@ export default function AdminPaymentsTab() {
                           </button>
                         )}
                         {s.admin_remark && (
-                          <p className="mt-1 text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
+                          <p className="mt-1 text-[11px] font-semibold text-rose-600">
+                            {s.admin_remark.replace(/^Remark:\s*/i, '')}
+                          </p>
                         )}
                       </td>
                       <td className="w-[14%] min-w-[160px] px-3 py-3 pr-4 text-right md:text-center">
