@@ -136,10 +136,11 @@ export default function AdminPaymentsTab() {
   // The Supabase singleton has persistSession:false and
   // autoRefreshToken:false, and the auth context refreshes only on mount;
   // a tab left open past the ~1h token expiry holds an expired
-  // access_token, so tokens are resolved at CALL time — preferring a
-  // fresh refreshSession grant (safe single-shot, never touching the
-  // context's setSession-rotation code) and falling back to the cached
-  // token, then to whatever the SDK session holds.
+  // access_token, so tokens are resolved at CALL time. NO cross-identity
+  // fallback: if the ADMIN cache holds no tokens we resolve to null and
+  // the pre-flight guard stops the request — a shared/customer session
+  // on the singleton is NEVER used as the admin's bearer (that silently
+  // mailed a non-admin identity → 403 'Admins only' with a valid Bearer).
   const resolveBearerHeaders = async (): Promise<Record<string, string> | null> => {
     let token: string | undefined = authSession?.refreshToken ? undefined : authSession?.token;
     const refreshToken = authSession?.refreshToken;
@@ -151,9 +152,6 @@ export default function AdminPaymentsTab() {
       } catch {
         token = authSession?.token;
       }
-    } else {
-      const { data } = await supabase.auth.getSession();
-      token = token ?? data.session?.access_token ?? undefined;
     }
     return token ? { Authorization: `Bearer ${token}` } : null;
   };
@@ -571,8 +569,12 @@ export default function AdminPaymentsTab() {
                   return (
                     <tr key={s.id} className="border-t border-slate-100 align-top">
                       <td className="px-3 py-3 min-w-[10rem]">
-                        <p className="truncate font-semibold text-slate-600">{buyer.name || buyer.email || 'Customer'}</p>
-                        <p className="break-all text-[11px] text-slate-500">{buyer.email}</p>
+                        {buyer.name ? (
+                          <p className="truncate font-semibold text-slate-600">{buyer.name}</p>
+                        ) : (
+                          <p className="truncate font-semibold text-slate-400">Unnamed customer</p>
+                        )}
+                        <p className="break-all text-[11px] text-slate-500">{buyer.email || '—'}</p>
                       </td>
                       <td className="px-3 py-3">
                         <p className="whitespace-nowrap font-bold text-slate-900">{s.order_id}</p>
@@ -806,7 +808,7 @@ export default function AdminPaymentsTab() {
             <div className="mt-3 space-y-1 rounded-xl bg-slate-50 p-3 text-xs">
               <p className="flex justify-between gap-3">
                 <span className="font-semibold text-slate-500">Customer name</span>
-                <span className="text-right text-slate-900">{buyerOf(confirmTarget.buyer).name || '—'}</span>
+                <span className="text-right text-slate-900">{buyerOf(confirmTarget.buyer).name || 'Unnamed customer'}</span>
               </p>
               <p className="flex justify-between gap-3">
                 <span className="font-semibold text-slate-500">UTR number</span>
