@@ -71,11 +71,14 @@ function itemsOf(s: UpSession): ItemView[] {
       const it = raw as Record<string, unknown> | null;
       if (!it || typeof it !== 'object') return null;
       const brand = String(it.brand ?? it.brand_name ?? '').trim();
-      const name = String(it.name ?? it.gift_card_name ?? it.brand_name ?? '').trim();
+      const nameRaw = String(it.name ?? it.gift_card_name ?? it.brand_name ?? '').trim();
       const denom = Number(it.amount ?? it.denomination ?? 0) || 0;
       const qty = Math.max(1, Number(it.quantity ?? it.qty ?? 1) || 1);
-      const label = [brand, name].filter(Boolean).join(' ') || 'Gift card';
-      return { label, size: `${inr(denom)} × ${qty}` };
+      // When brand and gift-card name are the same ("GyftKart GyftKart"),
+      // say it once — compare on whitespace-collapsed lowercase.
+      const dup = brand.toLowerCase().replace(/\s+/g, ' ') === nameRaw.toLowerCase().replace(/\s+/g, ' ');
+      const label = dup ? brand : [brand, nameRaw].filter(Boolean).join(' ');
+      return { label: label || 'Gift card', size: `${inr(denom)} × ${qty}` };
     })
     .filter((v): v is ItemView => v !== null);
 }
@@ -500,12 +503,14 @@ export default function AdminPaymentsTab() {
                             {items.length > 2 ? ` · +${items.length - 2} more` : ''}
                           </p>
                         )}
-                        <p
-                          className="mt-0.5 whitespace-nowrap font-mono text-[11px] font-semibold text-slate-900"
-                          title={s.order_id}
-                        >
-                          {shortOrderId(s.order_id)}
-                        </p>
+                        {!s.order_id.startsWith('UPI-') && (
+                          <p
+                            className="mt-0.5 whitespace-nowrap font-mono text-[11px] font-semibold text-slate-900"
+                            title={s.order_id}
+                          >
+                            Order #{shortOrderId(s.order_id)}
+                          </p>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">
                         {inr(Number(s.amount_paise) / 100)}
