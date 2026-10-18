@@ -18,6 +18,7 @@ create index if not exists profiles_phone_verified_idx on public.profiles(phone_
 create index if not exists profiles_email_confirmed_at_idx on public.profiles(email_confirmed_at);
 
 -- 2. Create security definer function for single admin customer verification (target_user_id, verify_type, is_verified)
+drop function if exists public.admin_verify_customer(uuid, text, boolean);
 create or replace function public.admin_verify_customer(
   target_user_id uuid,
   verify_type text, -- 'email' or 'phone'
@@ -28,24 +29,30 @@ language plpgsql
 security definer
 set search_path = public, auth
 as $$
-declare
-  v_now timestamptz := now();
 begin
   if verify_type = 'email' then
     update public.profiles
     set 
       email_verified = is_verified,
-      email_verified_at = case when is_verified then v_now else null end,
-      email_confirmed_at = case when is_verified then coalesce(email_confirmed_at, v_now) else null end,
-      updated_at = v_now
+      email_verified_at = case when is_verified then now() else null end,
+      email_confirmed_at = case when is_verified then coalesce(email_confirmed_at, now()) else null end,
+      updated_at = now()
     where id = target_user_id;
 
-    -- Sync to auth.users if verifying
-    if is_verified then
+    -- If unverified, clear auth confirmation
+    if not is_verified then
       begin
         update auth.users
-        set email_confirmed_at = coalesce(email_confirmed_at, v_now)
-        where id = target_user_id and email_confirmed_at is null;
+        set email_confirmed_at = null
+        where id = target_user_id;
+      exception when others then
+        null;
+      end;
+    else
+      begin
+        update auth.users
+        set email_confirmed_at = coalesce(email_confirmed_at, now())
+        where id = target_user_id;
       exception when others then
         null;
       end;
@@ -55,17 +62,24 @@ begin
     update public.profiles
     set 
       phone_verified = is_verified,
-      phone_verified_at = case when is_verified then v_now else null end,
-      phone_confirmed_at = case when is_verified then coalesce(phone_confirmed_at, v_now) else null end,
-      updated_at = v_now
+      phone_verified_at = case when is_verified then now() else null end,
+      phone_confirmed_at = case when is_verified then coalesce(phone_confirmed_at, now()) else null end,
+      updated_at = now()
     where id = target_user_id;
 
-    -- Sync to auth.users if verifying
-    if is_verified then
+    if not is_verified then
       begin
         update auth.users
-        set phone_confirmed_at = coalesce(phone_confirmed_at, v_now)
-        where id = target_user_id and phone_confirmed_at is null;
+        set phone_confirmed_at = null
+        where id = target_user_id;
+      exception when others then
+        null;
+      end;
+    else
+      begin
+        update auth.users
+        set phone_confirmed_at = coalesce(phone_confirmed_at, now())
+        where id = target_user_id;
       exception when others then
         null;
       end;
@@ -76,9 +90,9 @@ begin
 
   return jsonb_build_object(
     'success', true,
-    'target_user_id', target_user_id,
-    'verify_type', verify_type,
-    'is_verified', is_verified
+    'user_id', target_user_id,
+    'type', verify_type,
+    'verified', is_verified
   );
 end;
 $$;

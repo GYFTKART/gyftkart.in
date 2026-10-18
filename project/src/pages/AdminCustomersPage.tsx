@@ -50,34 +50,53 @@ const VERIFIED_STORAGE_KEY = 'gyftkart_verified_contacts_cache_v1';
 interface VerifiedCache {
   emails: Record<string, string>; // customerId -> timestamp ISO
   phones: Record<string, string>; // customerId -> timestamp ISO
+  unverifiedEmails: Record<string, boolean>; // customerId -> true (explicit unverify)
+  unverifiedPhones: Record<string, boolean>; // customerId -> true (explicit unverify)
 }
 
 function getStoredVerificationCache(): VerifiedCache {
   try {
     const raw = localStorage.getItem(VERIFIED_STORAGE_KEY);
-    if (!raw) return { emails: {}, phones: {} };
+    if (!raw) {
+      return { emails: {}, phones: {}, unverifiedEmails: {}, unverifiedPhones: {} };
+    }
     const parsed = JSON.parse(raw);
     return {
       emails: parsed?.emails || {},
       phones: parsed?.phones || {},
+      unverifiedEmails: parsed?.unverifiedEmails || {},
+      unverifiedPhones: parsed?.unverifiedPhones || {},
     };
   } catch {
-    return { emails: {}, phones: {} };
+    return { emails: {}, phones: {}, unverifiedEmails: {}, unverifiedPhones: {} };
   }
 }
 
 function saveStoredVerification(
   targetIds: string[],
   type: 'email' | 'phone',
+  isVerified: boolean,
   timestampIso = new Date().toISOString()
 ) {
   try {
     const cache = getStoredVerificationCache();
     targetIds.forEach((id) => {
       if (type === 'email') {
-        cache.emails[id] = timestampIso;
+        if (isVerified) {
+          cache.emails[id] = timestampIso;
+          delete cache.unverifiedEmails[id];
+        } else {
+          delete cache.emails[id];
+          cache.unverifiedEmails[id] = true;
+        }
       } else {
-        cache.phones[id] = timestampIso;
+        if (isVerified) {
+          cache.phones[id] = timestampIso;
+          delete cache.unverifiedPhones[id];
+        } else {
+          delete cache.phones[id];
+          cache.unverifiedPhones[id] = true;
+        }
       }
     });
     localStorage.setItem(VERIFIED_STORAGE_KEY, JSON.stringify(cache));
@@ -139,10 +158,11 @@ export default function AdminCustomersPage() {
   >(null);
   const [isUpdatingBulk, setIsUpdatingBulk] = useState(false);
 
-  // Single customer verification modal state
+  // Single customer verification modal state (Toggle: verify or unverify)
   const [verifyModalCustomer, setVerifyModalCustomer] = useState<{
     customer: AdminCustomerRecord;
     type: 'EMAIL' | 'PHONE';
+    targetVerified: boolean;
   } | null>(null);
   const [isVerifyingSingle, setIsVerifyingSingle] = useState(false);
 
@@ -183,33 +203,38 @@ export default function AdminCustomersPage() {
             String(p.status || '').toLowerCase() === 'suspended';
 
           const cachedEmailAt = cache.emails[p.id];
-          const cachedPhoneAt = cache.phones[p.id];
+          const isExplicitlyUnverifiedEmail = Boolean(cache.unverifiedEmails[p.id]);
 
-          const isEmailVerified = Boolean(
+          const isEmailVerified = !isExplicitlyUnverifiedEmail && Boolean(
             p.email_verified ||
             p.email_verified_at ||
             p.email_confirmed_at ||
             cachedEmailAt
           );
 
-          const emailConfirmed =
-            p.email_verified_at ||
-            p.email_confirmed_at ||
-            cachedEmailAt ||
-            (p.email_verified ? p.created_at : null);
+          const emailConfirmed = isEmailVerified
+            ? (p.email_verified_at ||
+               p.email_confirmed_at ||
+               cachedEmailAt ||
+               (p.email_verified ? p.created_at : null))
+            : null;
 
-          const isPhoneVerified = Boolean(
+          const cachedPhoneAt = cache.phones[p.id];
+          const isExplicitlyUnverifiedPhone = Boolean(cache.unverifiedPhones[p.id]);
+
+          const isPhoneVerified = !isExplicitlyUnverifiedPhone && Boolean(
             p.phone_verified ||
             p.phone_verified_at ||
             p.phone_confirmed_at ||
             cachedPhoneAt
           );
 
-          const phoneConfirmed =
-            p.phone_verified_at ||
-            p.phone_confirmed_at ||
-            cachedPhoneAt ||
-            null;
+          const phoneConfirmed = isPhoneVerified
+            ? (p.phone_verified_at ||
+               p.phone_confirmed_at ||
+               cachedPhoneAt ||
+               null)
+            : null;
 
           return {
             id: p.id,
@@ -220,10 +245,10 @@ export default function AdminCustomersPage() {
             is_blocked: isBlocked,
             phone_verified: isPhoneVerified,
             phone_confirmed_at: phoneConfirmed,
-            phone_verified_at: p.phone_verified_at || cachedPhoneAt || null,
+            phone_verified_at: isPhoneVerified ? (p.phone_verified_at || cachedPhoneAt || null) : null,
             email_verified: isEmailVerified,
             email_confirmed_at: emailConfirmed,
-            email_verified_at: p.email_verified_at || cachedEmailAt || null,
+            email_verified_at: isEmailVerified ? (p.email_verified_at || cachedEmailAt || null) : null,
             created_at: p.created_at || new Date().toISOString(),
             company_name: null,
           };
@@ -351,11 +376,11 @@ export default function AdminCustomersPage() {
     }
   };
 
-  // Single verification handler (Email or Phone)
+  // Single verification handler (Email or Phone - Toggle Verify/Unverify)
   const handleConfirmSingleVerify = async () => {
     if (!verifyModalCustomer) return;
     setIsVerifyingSingle(true);
-    const { customer, type } = verifyModalCustomer;
+    const { customer, type, targetVerified } = verifyModalCustomer;
     const isEmail = type === 'EMAIL';
     const verifyType: 'email' | 'phone' = isEmail ? 'email' : 'phone';
     const nowIso = new Date().toISOString();
@@ -365,70 +390,66 @@ export default function AdminCustomersPage() {
       const { error: rpcError } = await supabase.rpc('admin_verify_customer', {
         target_user_id: customer.id,
         verify_type: verifyType,
-        is_verified: true,
+        is_verified: targetVerified,
       });
 
-      // 2. Secondary fallback: Try batch RPC admin_verify_customer_contacts
+      // 2. Secondary fallback: direct profiles update if RPC is missing
       if (rpcError) {
-        console.warn('RPC admin_verify_customer error, trying batch RPC:', rpcError.message);
-        const { error: batchRpcError } = await supabase.rpc(
-          'admin_verify_customer_contacts',
-          {
-            target_user_ids: [customer.id],
-            verify_email: isEmail,
-            verify_phone: !isEmail,
-          }
-        );
+        console.warn('RPC admin_verify_customer error, falling back to direct profiles update:', rpcError.message);
+        const payload = isEmail
+          ? {
+              email_verified: targetVerified,
+              email_verified_at: targetVerified ? nowIso : null,
+              email_confirmed_at: targetVerified ? nowIso : null,
+            }
+          : {
+              phone_verified: targetVerified,
+              phone_verified_at: targetVerified ? nowIso : null,
+              phone_confirmed_at: targetVerified ? nowIso : null,
+            };
 
-        // 3. Fallback to direct profiles table update
-        if (batchRpcError) {
-          console.warn('Batch RPC error, falling back to profiles update:', batchRpcError.message);
-          const payload = isEmail
-            ? { email_confirmed_at: nowIso, email_verified: true, email_verified_at: nowIso }
-            : { phone_confirmed_at: nowIso, phone_verified: true, phone_verified_at: nowIso };
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update(payload)
+          .eq('id', customer.id);
 
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update(payload)
-            .eq('id', customer.id);
-
-          if (updateError) {
-            console.warn('Direct verification update error:', updateError.message);
-          }
+        if (updateError) {
+          console.warn('Direct verification update error:', updateError.message);
         }
       }
 
-      // 4. Update localStorage cache so it strictly persists across F5 refresh immediately
-      saveStoredVerification([customer.id], verifyType, nowIso);
+      // 3. Update localStorage cache so it strictly persists across F5 refresh immediately
+      saveStoredVerification([customer.id], verifyType, targetVerified, nowIso);
 
-      // 5. Update local state immediately
+      // 4. Update local state immediately
       setCustomers((prev) =>
         prev.map((c) => {
           if (c.id !== customer.id) return c;
           return isEmail
             ? {
                 ...c,
-                email_verified: true,
-                email_confirmed_at: nowIso,
-                email_verified_at: nowIso,
+                email_verified: targetVerified,
+                email_confirmed_at: targetVerified ? nowIso : null,
+                email_verified_at: targetVerified ? nowIso : null,
               }
             : {
                 ...c,
-                phone_verified: true,
-                phone_confirmed_at: nowIso,
-                phone_verified_at: nowIso,
+                phone_verified: targetVerified,
+                phone_confirmed_at: targetVerified ? nowIso : null,
+                phone_verified_at: targetVerified ? nowIso : null,
               };
         })
       );
 
+      const actionText = targetVerified ? 'verified' : 'unverified';
       push(
-        `Successfully marked ${isEmail ? 'email' : 'phone'} as verified for ${customer.full_name || customer.email}.`,
+        `Successfully marked ${isEmail ? 'email' : 'phone'} as ${actionText} for ${customer.full_name || customer.email}.`,
         'success'
       );
       setVerifyModalCustomer(null);
     } catch (err: unknown) {
-      console.error('Failed to verify contact:', err);
-      const msg = err instanceof Error ? err.message : 'Verification failed';
+      console.error('Failed to toggle verification:', err);
+      const msg = err instanceof Error ? err.message : 'Verification update failed';
       push(`Verification error: ${msg}`, 'error');
     } finally {
       setIsVerifyingSingle(false);
@@ -497,7 +518,7 @@ export default function AdminCustomersPage() {
         }
 
         // 4. Persist to localStorage cache
-        saveStoredVerification(targetIds, verifyType, nowIso);
+        saveStoredVerification(targetIds, verifyType, true, nowIso);
 
         // 5. Update local state immediately
         setCustomers((prev) =>
@@ -1024,17 +1045,31 @@ export default function AdminCustomersPage() {
                                   {customer.email || 'No email provided'}
                                 </span>
                                 {hasEmailVerification ? (
-                                  <span
-                                    className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700"
-                                    title="Email Verified"
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setVerifyModalCustomer({
+                                        customer,
+                                        type: 'EMAIL',
+                                        targetVerified: false,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700 transition cursor-pointer"
+                                    title="Click to Unverify"
                                   >
                                     <CheckCircle2 className="h-2.5 w-2.5" />
                                     Verified
-                                  </span>
+                                  </button>
                                 ) : (
                                   <button
                                     type="button"
-                                    onClick={() => setVerifyModalCustomer({ customer, type: 'EMAIL' })}
+                                    onClick={() =>
+                                      setVerifyModalCustomer({
+                                        customer,
+                                        type: 'EMAIL',
+                                        targetVerified: true,
+                                      })
+                                    }
                                     className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-1.5 py-0.2 text-[9px] font-bold text-amber-700 transition cursor-pointer"
                                     title="Click to manually verify email"
                                   >
@@ -1055,16 +1090,30 @@ export default function AdminCustomersPage() {
                             </p>
                             {customer.phone ? (
                               customer.phone_verified ? (
-                                <span
-                                  className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700"
-                                  title="Phone Verified"
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setVerifyModalCustomer({
+                                      customer,
+                                      type: 'PHONE',
+                                      targetVerified: false,
+                                    })
+                                  }
+                                  className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700 transition cursor-pointer"
+                                  title="Click to Unverify"
                                 >
                                   <CheckCircle2 className="h-2.5 w-2.5" /> Verified
-                                </span>
+                                </button>
                               ) : (
                                 <button
                                   type="button"
-                                  onClick={() => setVerifyModalCustomer({ customer, type: 'PHONE' })}
+                                  onClick={() =>
+                                    setVerifyModalCustomer({
+                                      customer,
+                                      type: 'PHONE',
+                                      targetVerified: true,
+                                    })
+                                  }
                                   className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-1.5 py-0.2 text-[9px] font-bold text-amber-700 transition cursor-pointer"
                                   title="Click to manually verify phone"
                                 >
@@ -1427,22 +1476,52 @@ export default function AdminCustomersPage() {
       />
 
       {/* ───── Modal 5: Single Contact Verification Confirmation Modal ───── */}
-      <ConfirmActionModal
-        isOpen={Boolean(verifyModalCustomer)}
-        actionType={verifyModalCustomer?.type === 'EMAIL' ? 'VERIFY_EMAIL' : 'VERIFY_PHONE'}
-        title={verifyModalCustomer?.type === 'EMAIL' ? 'Verify Customer Email?' : 'Verify Customer Phone?'}
-        description={
-          verifyModalCustomer?.type === 'EMAIL'
-            ? `Are you sure you want to mark ${verifyModalCustomer.customer.email || 'this email'} as verified for ${verifyModalCustomer.customer.full_name}?`
-            : `Are you sure you want to mark phone ${verifyModalCustomer?.customer.phone || ''} as verified for ${verifyModalCustomer?.customer.full_name}?`
-        }
-        confirmLabel={verifyModalCustomer?.type === 'EMAIL' ? 'Yes, Verify Email' : 'Yes, Verify Phone'}
-        customerName={verifyModalCustomer?.customer.full_name}
-        customerEmail={verifyModalCustomer?.customer.email}
-        isProcessing={isVerifyingSingle}
-        onConfirm={handleConfirmSingleVerify}
-        onClose={() => !isVerifyingSingle && setVerifyModalCustomer(null)}
-      />
+      {verifyModalCustomer && (
+        <ConfirmActionModal
+          isOpen={Boolean(verifyModalCustomer)}
+          actionType={
+            verifyModalCustomer.targetVerified
+              ? verifyModalCustomer.type === 'EMAIL'
+                ? 'VERIFY_EMAIL'
+                : 'VERIFY_PHONE'
+              : verifyModalCustomer.type === 'EMAIL'
+              ? 'UNVERIFY_EMAIL'
+              : 'UNVERIFY_PHONE'
+          }
+          title={
+            verifyModalCustomer.targetVerified
+              ? verifyModalCustomer.type === 'EMAIL'
+                ? 'Verify Customer Email?'
+                : 'Verify Customer Phone?'
+              : verifyModalCustomer.type === 'EMAIL'
+              ? 'Unverify Customer Email?'
+              : 'Unverify Customer Phone?'
+          }
+          description={
+            verifyModalCustomer.targetVerified
+              ? verifyModalCustomer.type === 'EMAIL'
+                ? `Are you sure you want to mark ${verifyModalCustomer.customer.email || 'this email'} as verified for ${verifyModalCustomer.customer.full_name}?`
+                : `Are you sure you want to mark phone ${verifyModalCustomer.customer.phone || ''} as verified for ${verifyModalCustomer.customer.full_name}?`
+              : `Are you sure you want to mark ${
+                  verifyModalCustomer.type === 'EMAIL'
+                    ? verifyModalCustomer.customer.email || 'email'
+                    : verifyModalCustomer.customer.phone || 'phone'
+                } as unverified for ${verifyModalCustomer.customer.full_name}?`
+          }
+          confirmLabel={
+            verifyModalCustomer.targetVerified
+              ? verifyModalCustomer.type === 'EMAIL'
+                ? 'Yes, Verify Email'
+                : 'Yes, Verify Phone'
+              : 'Yes, Unverify'
+          }
+          customerName={verifyModalCustomer.customer.full_name}
+          customerEmail={verifyModalCustomer.customer.email}
+          isProcessing={isVerifyingSingle}
+          onConfirm={handleConfirmSingleVerify}
+          onClose={() => !isVerifyingSingle && setVerifyModalCustomer(null)}
+        />
+      )}
     </div>
   );
 }

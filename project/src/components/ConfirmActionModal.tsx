@@ -17,7 +17,9 @@ export type ConfirmActionType =
   | 'UNBLOCK'
   | 'RESET_PASSWORD'
   | 'VERIFY_EMAIL'
-  | 'VERIFY_PHONE';
+  | 'VERIFY_PHONE'
+  | 'UNVERIFY_EMAIL'
+  | 'UNVERIFY_PHONE';
 
 export interface ConfirmActionModalProps {
   isOpen: boolean;
@@ -103,6 +105,26 @@ const ACTION_METAS: Record<ConfirmActionType, ActionMeta> = {
     icon: CheckCircle2,
     iconBg: 'bg-teal-100 text-teal-700 border-teal-200',
     confirmBtnClass: 'bg-teal-600 hover:bg-teal-700 text-white shadow-sm',
+  },
+  UNVERIFY_EMAIL: {
+    title: 'Unverify Customer Email?',
+    description: (email) =>
+      email
+        ? `Are you sure you want to mark ${email} as unverified for this customer?`
+        : 'Are you sure you want to mark this customer\'s email as unverified?',
+    confirmLabel: 'Yes, Unverify',
+    icon: MailCheck,
+    iconBg: 'bg-amber-100 text-amber-700 border-amber-200',
+    confirmBtnClass: 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm',
+  },
+  UNVERIFY_PHONE: {
+    title: 'Unverify Customer Phone?',
+    description: () =>
+      'Are you sure you want to mark this customer\'s phone number as unverified?',
+    confirmLabel: 'Yes, Unverify',
+    icon: CheckCircle2,
+    iconBg: 'bg-amber-100 text-amber-700 border-amber-200',
+    confirmBtnClass: 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm',
   },
 };
 
