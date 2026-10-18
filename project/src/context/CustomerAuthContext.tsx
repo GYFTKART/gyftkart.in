@@ -230,6 +230,11 @@ async function performRestore(): Promise<Session | null> {
       .eq('id', data.session.user.id)
       .maybeSingle();
     if (prof) {
+      if (prof.is_blocked || (data.session.user.app_metadata as Record<string, unknown>)?.is_blocked === true) {
+        cacheSession(null);
+        await supabase.auth.signOut();
+        return null;
+      }
       freshProfileFields = {
         name: prof.full_name || cached.name,
         phone: prof.phone || cached.phone,
@@ -406,6 +411,18 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       // fallback to metadata
+    }
+
+    const isBlocked =
+      (profileData as Record<string, unknown>)?.is_blocked === true ||
+      (data.user.app_metadata as Record<string, unknown>)?.is_blocked === true;
+    if (isBlocked) {
+      await supabase.auth.signOut();
+      cacheSession(null);
+      return {
+        ok: false,
+        error: 'Your account has been suspended/blocked. Please contact support@gyftkart.in for assistance.',
+      };
     }
 
     const newSession: Session = {

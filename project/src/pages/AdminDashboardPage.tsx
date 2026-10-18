@@ -48,7 +48,7 @@ export default function AdminDashboardPage() {
     } else if (t === 'brands') {
       navigate('/admin/brands', { replace: true });
     } else if (t === 'customers') {
-      navigate('/admin/customer-ledger', { replace: true });
+      navigate('/admin/customers', { replace: true });
     } else if (t === 'payments') {
       navigate('/admin/upi-direct', { replace: true });
     } else if (t === 'ledger') {
@@ -123,6 +123,14 @@ export default function AdminDashboardPage() {
   if (!admin) return null;
 
   const quickNavCards = [
+    {
+      title: 'Customers',
+      desc: 'Oversee B2C and B2B user accounts, verification flags, security blocks/suspensions, and password resets.',
+      to: '/admin/customers',
+      icon: Users,
+      accent: 'from-blue-600 to-indigo-700',
+      badge: `${stats.customerCount} Accounts`,
+    },
     {
       title: 'Gift Card Sales',
       desc: 'Browse all issued gift cards, voucher codes, recipient details, and GST tax invoices.',
