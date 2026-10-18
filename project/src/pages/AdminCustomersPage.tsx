@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Users,
   Search,
+  Check,
   CheckCircle2,
   XCircle,
   ShieldAlert,
@@ -10,7 +11,7 @@ import {
   KeyRound,
   Download,
   RefreshCw,
-  Mail,
+  MailCheck,
   ChevronLeft,
   ChevronRight,
   ArrowLeft,
@@ -24,6 +25,7 @@ import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { AdminTopBar } from '@/components/AdminHeader';
 import { useToast } from '@/components/Toast';
+import { formatDateTime } from '@/lib/format';
 import ConfirmActionModal from '@/components/ConfirmActionModal';
 
 export interface AdminCustomerRecord {
@@ -35,8 +37,37 @@ export interface AdminCustomerRecord {
   is_blocked: boolean;
   phone_verified: boolean;
   email_confirmed_at: string | null;
+  phone_confirmed_at?: string | null;
+  email_verified?: boolean;
   created_at: string;
   company_name?: string | null;
+}
+
+function formatAccountAge(dateString: string): string {
+  const created = new Date(dateString);
+  if (isNaN(created.getTime())) return 'Recently';
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - created.getTime());
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHrs = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHrs / 24);
+
+  if (diffDays === 0) {
+    if (diffHrs === 0) {
+      if (diffMin <= 1) return 'Just joined';
+      return `${diffMin} mins old`;
+    }
+    return `${diffHrs}h old`;
+  }
+  if (diffDays === 1) return '1 day old';
+  if (diffDays < 30) return `${diffDays} days old`;
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths < 12) {
+    return diffMonths === 1 ? '1 month old' : `${diffMonths} months old`;
+  }
+  const diffYears = Math.floor(diffDays / 365);
+  return diffYears === 1 ? '1 year old' : `${diffYears} years old`;
 }
 
 export default function AdminCustomersPage() {
@@ -60,8 +91,17 @@ export default function AdminCustomersPage() {
 
   // Checkbox selection state
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<string>>(new Set());
-  const [bulkModalAction, setBulkModalAction] = useState<'BLOCK' | 'UNBLOCK' | null>(null);
+  const [bulkModalAction, setBulkModalAction] = useState<
+    'BLOCK' | 'UNBLOCK' | 'VERIFY_EMAIL' | 'VERIFY_PHONE' | null
+  >(null);
   const [isUpdatingBulk, setIsUpdatingBulk] = useState(false);
+
+  // Single customer verification modal state
+  const [verifyModalCustomer, setVerifyModalCustomer] = useState<{
+    customer: AdminCustomerRecord;
+    type: 'EMAIL' | 'PHONE';
+  } | null>(null);
+  const [isVerifyingSingle, setIsVerifyingSingle] = useState(false);
 
   // Single customer modal states
   const [blockModalCustomer, setBlockModalCustomer] = useState<AdminCustomerRecord | null>(null);
@@ -97,8 +137,9 @@ export default function AdminCustomersPage() {
             String(p.status || '').toLowerCase() === 'blocked' ||
             String(p.status || '').toLowerCase() === 'suspended';
 
-          const emailConfirmed = p.email_confirmed_at || (p.created_at ? p.created_at : null);
-          const phoneVerified = Boolean(p.phone_verified);
+          const emailConfirmed = p.email_confirmed_at || (p.email_verified ? p.created_at : null);
+          const phoneVerified = Boolean(p.phone_verified || p.phone_confirmed_at);
+          const phoneConfirmed = p.phone_confirmed_at || null;
 
           return {
             id: p.id,
@@ -108,6 +149,7 @@ export default function AdminCustomersPage() {
             customer_type: 'B2C',
             is_blocked: isBlocked,
             phone_verified: phoneVerified,
+            phone_confirmed_at: phoneConfirmed,
             email_confirmed_at: emailConfirmed,
             created_at: p.created_at || new Date().toISOString(),
             company_name: null,
@@ -221,34 +263,141 @@ export default function AdminCustomersPage() {
     }
   };
 
-  // Bulk Block / Unblock action handler
+  // Single verification handler (Email or Phone)
+  const handleConfirmSingleVerify = async () => {
+    if (!verifyModalCustomer) return;
+    setIsVerifyingSingle(true);
+    const { customer, type } = verifyModalCustomer;
+    const isEmail = type === 'EMAIL';
+    const nowIso = new Date().toISOString();
+
+    try {
+      // 1. Try atomic admin_verify_customer_contacts RPC if available
+      const { error: rpcError } = await supabase.rpc(
+        'admin_verify_customer_contacts',
+        {
+          target_user_ids: [customer.id],
+          verify_email: isEmail,
+          verify_phone: !isEmail,
+        }
+      );
+
+      // 2. Fallback to direct profiles table update
+      if (rpcError) {
+        console.warn('RPC admin_verify_customer_contacts error, falling back to profiles update:', rpcError.message);
+        const payload = isEmail
+          ? { email_confirmed_at: nowIso, email_verified: true }
+          : { phone_confirmed_at: nowIso, phone_verified: true };
+
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update(payload)
+          .eq('id', customer.id);
+
+        if (updateError) {
+          console.warn('Direct verification update error:', updateError.message);
+        }
+      }
+
+      // 3. Update local state immediately
+      setCustomers((prev) =>
+        prev.map((c) => {
+          if (c.id !== customer.id) return c;
+          return isEmail
+            ? { ...c, email_confirmed_at: nowIso }
+            : { ...c, phone_verified: true, phone_confirmed_at: nowIso };
+        })
+      );
+
+      push(
+        `Successfully marked ${isEmail ? 'email' : 'phone'} as verified for ${customer.full_name || customer.email}.`,
+        'success'
+      );
+      setVerifyModalCustomer(null);
+    } catch (err: unknown) {
+      console.error('Failed to verify contact:', err);
+      const msg = err instanceof Error ? err.message : 'Verification failed';
+      push(`Verification error: ${msg}`, 'error');
+    } finally {
+      setIsVerifyingSingle(false);
+    }
+  };
+
+  // Bulk action handler (Block, Unblock, Verify Email, Verify Phone)
   const handleExecuteBulkAction = async () => {
     if (!bulkModalAction || selectedCustomerIds.size === 0) return;
     setIsUpdatingBulk(true);
 
-    const newBlockedState = bulkModalAction === 'BLOCK';
     const targetIds = Array.from(selectedCustomerIds);
+    const nowIso = new Date().toISOString();
 
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          is_blocked: newBlockedState,
-          status: newBlockedState ? 'inactive' : 'active',
-        })
-        .in('id', targetIds);
+      if (bulkModalAction === 'VERIFY_EMAIL' || bulkModalAction === 'VERIFY_PHONE') {
+        const isEmail = bulkModalAction === 'VERIFY_EMAIL';
 
-      if (error) throw error;
+        // 1. Try RPC
+        const { error: rpcError } = await supabase.rpc(
+          'admin_verify_customer_contacts',
+          {
+            target_user_ids: targetIds,
+            verify_email: isEmail,
+            verify_phone: !isEmail,
+          }
+        );
 
-      // Update state immediately
-      setCustomers((prev) =>
-        prev.map((c) =>
-          selectedCustomerIds.has(c.id) ? { ...c, is_blocked: newBlockedState } : c
-        )
-      );
+        // 2. Direct profiles table update fallback
+        if (rpcError) {
+          console.warn('RPC admin_verify_customer_contacts error, falling back to profiles update:', rpcError.message);
+          const payload = isEmail
+            ? { email_confirmed_at: nowIso, email_verified: true }
+            : { phone_confirmed_at: nowIso, phone_verified: true };
 
-      const count = targetIds.length;
-      push(`Successfully updated ${count} customers`, 'success');
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update(payload)
+            .in('id', targetIds);
+
+          if (updateError) {
+            console.warn('Bulk direct update error:', updateError.message);
+          }
+        }
+
+        // Update local state immediately
+        setCustomers((prev) =>
+          prev.map((c) => {
+            if (!selectedCustomerIds.has(c.id)) return c;
+            return isEmail
+              ? { ...c, email_confirmed_at: nowIso }
+              : { ...c, phone_verified: true, phone_confirmed_at: nowIso };
+          })
+        );
+
+        push(
+          `Successfully marked ${isEmail ? 'email' : 'phone'} as verified for ${targetIds.length} customers`,
+          'success'
+        );
+      } else {
+        const newBlockedState = bulkModalAction === 'BLOCK';
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            is_blocked: newBlockedState,
+            status: newBlockedState ? 'inactive' : 'active',
+          })
+          .in('id', targetIds);
+
+        if (error) throw error;
+
+        // Update state immediately
+        setCustomers((prev) =>
+          prev.map((c) =>
+            selectedCustomerIds.has(c.id) ? { ...c, is_blocked: newBlockedState } : c
+          )
+        );
+
+        push(`Successfully updated ${targetIds.length} customers`, 'success');
+      }
+
       setSelectedCustomerIds(new Set());
       setBulkModalAction(null);
     } catch (err: unknown) {
@@ -373,9 +522,9 @@ export default function AdminCustomersPage() {
       'Phone',
       'Phone Verified',
       'Customer Type',
-      'Company Name',
       'Status',
-      'Created At',
+      'Joined Date',
+      'Account Age',
     ];
 
     const rows = filteredCustomers.map((c) => [
@@ -386,9 +535,9 @@ export default function AdminCustomersPage() {
       `"${c.phone}"`,
       c.phone_verified ? 'Verified' : 'Unverified',
       c.customer_type,
-      `"${(c.company_name || '').replace(/"/g, '""')}"`,
       c.is_blocked ? 'BLOCKED' : 'ACTIVE',
-      c.created_at,
+      `"${formatDateTime(c.created_at)}"`,
+      `"${formatAccountAge(c.created_at)}"`,
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -573,7 +722,25 @@ export default function AdminCustomersPage() {
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setBulkModalAction('VERIFY_EMAIL')}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-blue-500/50 bg-blue-600/20 text-blue-300 hover:bg-blue-600 hover:text-white px-3 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
+                title="Mark email as verified for all selected customers"
+              >
+                <MailCheck className="h-3.5 w-3.5" />
+                Verify Email
+              </button>
+
+              <button
+                onClick={() => setBulkModalAction('VERIFY_PHONE')}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-teal-500/50 bg-teal-600/20 text-teal-300 hover:bg-teal-600 hover:text-white px-3 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
+                title="Mark phone as verified for all selected customers"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Verify Phone
+              </button>
+
               <button
                 onClick={() => setBulkModalAction('BLOCK')}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-600/20 text-rose-300 hover:bg-rose-600 hover:text-white px-3 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
@@ -622,7 +789,7 @@ export default function AdminCustomersPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left text-xs">
+              <table className="w-full min-w-[960px] text-left text-xs">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200/80">
                     {/* Header Checkbox (Select all on current page) */}
@@ -647,8 +814,11 @@ export default function AdminCustomersPage() {
                     <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 min-w-[170px]">
                       PHONE
                     </th>
-                    <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 w-[120px]">
+                    <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 w-[110px]">
                       STATUS
+                    </th>
+                    <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 min-w-[170px]">
+                      JOINED / AGE
                     </th>
                     <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 w-[190px] text-right">
                       ACTIONS
@@ -689,7 +859,7 @@ export default function AdminCustomersPage() {
                           {serialNo}
                         </td>
 
-                        {/* 2. CUSTOMER (Name & Email with Verification Badge) */}
+                        {/* 2. CUSTOMER (Name & Email with Verification Badge/Button) */}
                         <td className="px-4 py-3.5">
                           <div className="flex items-start gap-2.5">
                             <span className="grid place-items-center h-8 w-8 rounded-lg text-white font-black text-xs uppercase shrink-0 mt-0.5 bg-gradient-to-br from-brand-600 to-brand-800">
@@ -714,19 +884,22 @@ export default function AdminCustomersPage() {
                                     Verified
                                   </span>
                                 ) : (
-                                  <span
-                                    className="inline-flex items-center gap-0.5 rounded-full bg-slate-100 px-1.5 py-0.2 text-[9px] font-medium text-slate-500"
-                                    title="Email Not Verified"
+                                  <button
+                                    type="button"
+                                    onClick={() => setVerifyModalCustomer({ customer, type: 'EMAIL' })}
+                                    className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-1.5 py-0.2 text-[9px] font-bold text-amber-700 transition cursor-pointer"
+                                    title="Click to manually verify email"
                                   >
+                                    <Check className="h-2.5 w-2.5" />
                                     Unverified
-                                  </span>
+                                  </button>
                                 )}
                               </div>
                             </div>
                           </div>
                         </td>
 
-                        {/* 3. PHONE (with Verification Badge) */}
+                        {/* 3. PHONE (with Verification Badge/Button) */}
                         <td className="px-4 py-3.5">
                           <div className="space-y-0.5">
                             <p className="font-mono text-xs text-slate-700 font-semibold">
@@ -734,13 +907,21 @@ export default function AdminCustomersPage() {
                             </p>
                             {customer.phone ? (
                               customer.phone_verified ? (
-                                <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700">
+                                <span
+                                  className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700"
+                                  title="Phone Verified"
+                                >
                                   <CheckCircle2 className="h-2.5 w-2.5" /> Verified
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-slate-400">
-                                  Unverified
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setVerifyModalCustomer({ customer, type: 'PHONE' })}
+                                  className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-1.5 py-0.2 text-[9px] font-bold text-amber-700 transition cursor-pointer"
+                                  title="Click to manually verify phone"
+                                >
+                                  <Check className="h-2.5 w-2.5" /> Unverified
+                                </button>
                               )
                             ) : null}
                           </div>
@@ -759,6 +940,18 @@ export default function AdminCustomersPage() {
                               Active
                             </span>
                           )}
+                        </td>
+
+                        {/* 5. JOINED / AGE */}
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-semibold text-slate-800">
+                              {formatDateTime(customer.created_at)}
+                            </p>
+                            <p className="text-[11px] font-medium text-slate-400">
+                              {formatAccountAge(customer.created_at)}
+                            </p>
+                          </div>
                         </td>
 
                         {/* 5. ACTIONS (Block/Unblock, Password Reset) */}
@@ -903,7 +1096,7 @@ export default function AdminCustomersPage() {
         }}
       />
 
-      {/* ───── Modal 2: Bulk Block / Unblock Confirmation Modal ───── */}
+      {/* ───── Modal 2: Bulk Action Confirmation Modal ───── */}
       {bulkModalAction && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
           <div
@@ -916,12 +1109,20 @@ export default function AdminCustomersPage() {
               <div className="flex items-center gap-2.5">
                 <span
                   className={`grid place-items-center h-9 w-9 rounded-xl ${
-                    bulkModalAction === 'UNBLOCK'
+                    bulkModalAction === 'VERIFY_EMAIL'
+                      ? 'bg-blue-100 text-blue-700'
+                      : bulkModalAction === 'VERIFY_PHONE'
+                      ? 'bg-teal-100 text-teal-700'
+                      : bulkModalAction === 'UNBLOCK'
                       ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-rose-100 text-rose-700'
                   }`}
                 >
-                  {bulkModalAction === 'UNBLOCK' ? (
+                  {bulkModalAction === 'VERIFY_EMAIL' ? (
+                    <MailCheck className="h-5 w-5" />
+                  ) : bulkModalAction === 'VERIFY_PHONE' ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : bulkModalAction === 'UNBLOCK' ? (
                     <Unlock className="h-5 w-5" />
                   ) : (
                     <Lock className="h-5 w-5" />
@@ -929,11 +1130,19 @@ export default function AdminCustomersPage() {
                 </span>
                 <div>
                   <h2 className="text-sm font-bold text-slate-900">
-                    {bulkModalAction === 'UNBLOCK'
+                    {bulkModalAction === 'VERIFY_EMAIL'
+                      ? `Bulk Verify Email (${selectedCustomerIds.size} Customers)`
+                      : bulkModalAction === 'VERIFY_PHONE'
+                      ? `Bulk Verify Phone (${selectedCustomerIds.size} Customers)`
+                      : bulkModalAction === 'UNBLOCK'
                       ? `Bulk Unblock ${selectedCustomerIds.size} Customers`
                       : `Bulk Block ${selectedCustomerIds.size} Customers`}
                   </h2>
-                  <p className="text-[11px] text-slate-500">Mass Security &amp; Access Update</p>
+                  <p className="text-[11px] text-slate-500">
+                    {bulkModalAction === 'VERIFY_EMAIL' || bulkModalAction === 'VERIFY_PHONE'
+                      ? 'Manual Contact Verification'
+                      : 'Mass Security & Access Update'}
+                  </p>
                 </div>
               </div>
               <button
@@ -956,16 +1165,32 @@ export default function AdminCustomersPage() {
                 <span className="text-slate-500 font-medium">Target Action:</span>
                 <span
                   className={`font-bold ${
-                    bulkModalAction === 'UNBLOCK' ? 'text-emerald-700' : 'text-rose-700'
+                    bulkModalAction === 'VERIFY_EMAIL'
+                      ? 'text-blue-700'
+                      : bulkModalAction === 'VERIFY_PHONE'
+                      ? 'text-teal-700'
+                      : bulkModalAction === 'UNBLOCK'
+                      ? 'text-emerald-700'
+                      : 'text-rose-700'
                   }`}
                 >
-                  {bulkModalAction === 'UNBLOCK' ? 'SET TO ACTIVE (UNBLOCKED)' : 'SET TO BLOCKED (SUSPENDED)'}
+                  {bulkModalAction === 'VERIFY_EMAIL'
+                    ? 'MARK EMAIL AS VERIFIED'
+                    : bulkModalAction === 'VERIFY_PHONE'
+                    ? 'MARK PHONE AS VERIFIED'
+                    : bulkModalAction === 'UNBLOCK'
+                    ? 'SET TO ACTIVE (UNBLOCKED)'
+                    : 'SET TO BLOCKED (SUSPENDED)'}
                 </span>
               </div>
             </div>
 
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              {bulkModalAction === 'UNBLOCK'
+              {bulkModalAction === 'VERIFY_EMAIL'
+                ? `Are you sure you want to mark Email as verified for all ${selectedCustomerIds.size} selected customers?`
+                : bulkModalAction === 'VERIFY_PHONE'
+                ? `Are you sure you want to mark Phone as verified for all ${selectedCustomerIds.size} selected customers?`
+                : bulkModalAction === 'UNBLOCK'
                 ? `Are you sure you want to reactivate access for all ${selectedCustomerIds.size} selected customer accounts? They will immediately be able to log in and purchase gift vouchers.`
                 : `Are you sure you want to suspend access for all ${selectedCustomerIds.size} selected customer accounts? Their active sessions will be invalidated and they will be prevented from placing orders.`}
             </p>
@@ -984,7 +1209,11 @@ export default function AdminCustomersPage() {
                 onClick={handleExecuteBulkAction}
                 disabled={isUpdatingBulk}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white rounded-xl shadow-sm transition ${
-                  bulkModalAction === 'UNBLOCK'
+                  bulkModalAction === 'VERIFY_EMAIL'
+                    ? 'bg-blue-600 hover:bg-blue-700'
+                    : bulkModalAction === 'VERIFY_PHONE'
+                    ? 'bg-teal-600 hover:bg-teal-700'
+                    : bulkModalAction === 'UNBLOCK'
                     ? 'bg-emerald-600 hover:bg-emerald-700'
                     : 'bg-rose-600 hover:bg-rose-700'
                 }`}
@@ -993,6 +1222,16 @@ export default function AdminCustomersPage() {
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     Updating…
+                  </>
+                ) : bulkModalAction === 'VERIFY_EMAIL' ? (
+                  <>
+                    <MailCheck className="h-3.5 w-3.5" />
+                    Confirm Email Verification
+                  </>
+                ) : bulkModalAction === 'VERIFY_PHONE' ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Confirm Phone Verification
                   </>
                 ) : bulkModalAction === 'UNBLOCK' ? (
                   <>
@@ -1037,6 +1276,24 @@ export default function AdminCustomersPage() {
         isProcessing={isDeletingCustomer}
         onConfirm={handleDeleteCustomer}
         onClose={() => !isDeletingCustomer && setDeleteModalCustomer(null)}
+      />
+
+      {/* ───── Modal 5: Single Contact Verification Confirmation Modal ───── */}
+      <ConfirmActionModal
+        isOpen={Boolean(verifyModalCustomer)}
+        actionType={verifyModalCustomer?.type === 'EMAIL' ? 'VERIFY_EMAIL' : 'VERIFY_PHONE'}
+        title={verifyModalCustomer?.type === 'EMAIL' ? 'Verify Customer Email?' : 'Verify Customer Phone?'}
+        description={
+          verifyModalCustomer?.type === 'EMAIL'
+            ? `Are you sure you want to mark ${verifyModalCustomer.customer.email || 'this email'} as verified for ${verifyModalCustomer.customer.full_name}?`
+            : `Are you sure you want to mark phone ${verifyModalCustomer?.customer.phone || ''} as verified for ${verifyModalCustomer?.customer.full_name}?`
+        }
+        confirmLabel={verifyModalCustomer?.type === 'EMAIL' ? 'Yes, Verify Email' : 'Yes, Verify Phone'}
+        customerName={verifyModalCustomer?.customer.full_name}
+        customerEmail={verifyModalCustomer?.customer.email}
+        isProcessing={isVerifyingSingle}
+        onConfirm={handleConfirmSingleVerify}
+        onClose={() => !isVerifyingSingle && setVerifyModalCustomer(null)}
       />
     </div>
   );

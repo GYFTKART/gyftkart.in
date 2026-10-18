@@ -6,11 +6,18 @@ import {
   KeyRound,
   X,
   Loader2,
-  AlertTriangle,
+  CheckCircle2,
+  MailCheck,
   type LucideIcon,
 } from 'lucide-react';
 
-export type ConfirmActionType = 'DELETE' | 'BLOCK' | 'UNBLOCK' | 'RESET_PASSWORD';
+export type ConfirmActionType =
+  | 'DELETE'
+  | 'BLOCK'
+  | 'UNBLOCK'
+  | 'RESET_PASSWORD'
+  | 'VERIFY_EMAIL'
+  | 'VERIFY_PHONE';
 
 export interface ConfirmActionModalProps {
   isOpen: boolean;
@@ -76,6 +83,26 @@ const ACTION_METAS: Record<ConfirmActionType, ActionMeta> = {
     icon: KeyRound,
     iconBg: 'bg-amber-100 text-amber-700 border-amber-200',
     confirmBtnClass: 'bg-brand-600 hover:bg-brand-700 text-white shadow-sm',
+  },
+  VERIFY_EMAIL: {
+    title: 'Verify Customer Email?',
+    description: (email) =>
+      email
+        ? `Are you sure you want to mark ${email} as manually verified for this customer?`
+        : 'Are you sure you want to mark this customer\'s email as verified?',
+    confirmLabel: 'Yes, Verify Email',
+    icon: MailCheck,
+    iconBg: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    confirmBtnClass: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm',
+  },
+  VERIFY_PHONE: {
+    title: 'Verify Customer Phone?',
+    description: () =>
+      'Are you sure you want to mark this customer\'s phone number as manually verified?',
+    confirmLabel: 'Yes, Verify Phone',
+    icon: CheckCircle2,
+    iconBg: 'bg-teal-100 text-teal-700 border-teal-200',
+    confirmBtnClass: 'bg-teal-600 hover:bg-teal-700 text-white shadow-sm',
   },
 };
 
