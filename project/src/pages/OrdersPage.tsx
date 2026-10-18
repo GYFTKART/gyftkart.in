@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Gift, CheckCircle2, Clock, Mail, Loader2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Gift, CheckCircle2, Clock, Mail, Loader2, XCircle, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/CustomerAuthContext';
 import { inr, formatDateTime } from '@/lib/format';
+import { OrderInvoiceModal } from '@/components/OrderInvoiceModal';
+import { extractInvoiceItems, type InvoiceData } from '@/lib/invoice';
 
 // Real data shapes (server-verified): no order_number column on orders —
 // the GK- ref is derived display-side only; total_amount is ALREADY in
@@ -14,6 +16,11 @@ type OrderRow = {
   status: string;
   items: unknown;
   created_at: string;
+  razorpay_order_id?: string | null;
+  razorpay_payment_id?: string | null;
+  youpi_order_id?: string | null;
+  youpi_payment_id?: string | null;
+  youpi_utr?: string | null;
 };
 
 type PurchaseRow = {
@@ -40,6 +47,8 @@ type PendingUpiRow = {
   admin_remark?: string | null;
   created_at: string;
   completed_at?: string | null;
+  customer_utr?: string | null;
+  bank_ref?: string | null;
 };
 
 // Display refs — derivation ONLY (same pattern as topupRef); no writes.
@@ -101,6 +110,69 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Invoice modal state
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceData | null>(null);
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+
+  const handleOpenUpiInvoice = (s: PendingUpiRow) => {
+    const amountRs = Number(s.amount_paise) / 100;
+    const invItems = extractInvoiceItems(s.items, amountRs);
+    const invData: InvoiceData = {
+      invoiceNumber: `INV-${s.order_id}`,
+      orderId: s.order_id,
+      date: s.created_at,
+      completedAt: s.completed_at,
+      paymentMethod: 'UPI Direct',
+      paymentRef: s.customer_utr || s.bank_ref || null,
+      status: s.status,
+      customer: {
+        name: session?.name || 'Customer',
+        email: session?.email || '',
+        phone: session?.phone || '',
+        userId: session?.id,
+      },
+      items: invItems,
+      subtotal: amountRs,
+      totalAmount: amountRs,
+      category: 'VOUCHER',
+    };
+    setSelectedInvoice(invData);
+    setIsInvoiceOpen(true);
+  };
+
+  const handleOpenOrderInvoice = (order: OrderRow) => {
+    const amountRs = Number(order.total_amount);
+    const invItems = extractInvoiceItems(order.items, amountRs);
+    const refCode = orderRef(order);
+    const payMethod = order.youpi_payment_id
+      ? 'UPI Direct'
+      : order.razorpay_payment_id
+      ? 'Razorpay'
+      : 'Online Payment';
+    const payRef = order.youpi_utr || order.razorpay_payment_id || order.youpi_payment_id || null;
+
+    const invData: InvoiceData = {
+      invoiceNumber: `INV-${refCode}`,
+      orderId: refCode,
+      date: order.created_at,
+      paymentMethod: payMethod,
+      paymentRef: payRef,
+      status: order.status,
+      customer: {
+        name: session?.name || 'Customer',
+        email: session?.email || '',
+        phone: session?.phone || '',
+        userId: session?.id,
+      },
+      items: invItems,
+      subtotal: amountRs,
+      totalAmount: amountRs,
+      category: 'VOUCHER',
+    };
+    setSelectedInvoice(invData);
+    setIsInvoiceOpen(true);
+  };
+
   const load = useCallback(async () => {
     if (!authReady) return;
     if (!session?.id) {
@@ -115,7 +187,7 @@ export default function OrdersPage() {
     const [ordersRes, purchasesRes, upiRes] = await Promise.all([
       supabase
         .from('orders')
-        .select('id, total_amount, status, items, created_at')
+        .select('id, total_amount, status, items, created_at, razorpay_order_id, razorpay_payment_id, youpi_order_id, youpi_payment_id, youpi_utr')
         .eq('user_id', session.id)
         .order('created_at', { ascending: false })
         .limit(50),
@@ -132,7 +204,7 @@ export default function OrdersPage() {
       // TOPUP category rows belong to the Wallet page, not here.
       supabase
         .from('upi_payment_sessions')
-        .select('id, order_id, amount_paise, status, items, admin_remark, created_at, completed_at')
+        .select('id, order_id, amount_paise, status, items, admin_remark, created_at, completed_at, customer_utr, bank_ref')
         .eq('user_id', session.id)
         .or('category.neq.TOPUP,category.is.null')
         .in('status', ['INITIATED', 'ACTIVE', 'SUCCESS', 'PENDING_VERIFICATION', 'CONFIRMED', 'DELIVERED', 'REJECTED', 'REVERTED'])
@@ -316,10 +388,20 @@ export default function OrdersPage() {
                                           Rejected
                                         </span>
                                       ) : isSuccess ? (
-                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
-                                          <CheckCircle2 className="h-3 w-3" />
-                                          Delivered
-                                        </span>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Delivered
+                                          </span>
+                                          <button
+                                            onClick={() => handleOpenUpiInvoice(s)}
+                                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition shadow-xs"
+                                            title="Download Invoice"
+                                          >
+                                            <FileText className="h-3 w-3 text-brand-600" />
+                                            Invoice
+                                          </button>
+                                        </div>
                                       ) : (
                                         <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
                                           <Clock className="h-3 w-3" />
@@ -418,7 +500,19 @@ export default function OrdersPage() {
 
                     <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 sm:gap-2 shrink-0">
                       <p className="text-base font-extrabold text-slate-900">{inr(Number(order.total_amount))}</p>
-                      <StatusBadge status={order.status} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={order.status} />
+                        {order.status === 'successful' && (
+                          <button
+                            onClick={() => handleOpenOrderInvoice(order)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition shadow-xs"
+                            title="Download Invoice"
+                          >
+                            <FileText className="h-3.5 w-3.5 text-brand-600" />
+                            Invoice
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -484,6 +578,12 @@ export default function OrdersPage() {
           )}
         </div>
 
+        {/* Reusable Tax Invoice Modal */}
+        <OrderInvoiceModal
+          isOpen={isInvoiceOpen}
+          onClose={() => setIsInvoiceOpen(false)}
+          invoice={selectedInvoice}
+        />
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Download,
   Eye,
+  FileText,
   Loader2,
   RefreshCw,
   RotateCcw,
@@ -18,8 +19,11 @@ import { supabase } from '@/lib/supabase';
 import { inr, formatDateTime } from '@/lib/format';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/components/Toast';
+import { OrderInvoiceModal } from '@/components/OrderInvoiceModal';
+import { extractInvoiceItems, type InvoiceData } from '@/lib/invoice';
 
 type UpSession = {
+
   id: string;
   order_id: string;
   user_id: string;
@@ -165,6 +169,37 @@ export default function AdminPaymentsTab() {
   const [batchRejectOpen, setBatchRejectOpen] = useState(false);
   const [batchRejectRemark, setBatchRejectRemark] = useState('');
   const [batchRejectError, setBatchRejectError] = useState<string | null>(null);
+
+  // Invoice modal state
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceData | null>(null);
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+
+  const handleOpenInvoice = (s: UpSession) => {
+    const amountRs = Number(s.amount_paise) / 100;
+    const invItems = extractInvoiceItems(s.items, amountRs);
+    const buyer = buyerOf(s.buyer);
+    const invData: InvoiceData = {
+      invoiceNumber: `INV-${displayRef(s)}`,
+      orderId: displayRef(s),
+      date: s.created_at,
+      completedAt: s.completed_at,
+      paymentMethod: 'UPI Direct',
+      paymentRef: s.customer_utr || s.bank_ref || null,
+      status: s.status,
+      customer: {
+        name: buyer.name || 'Valued Customer',
+        email: buyer.email || '',
+        userId: s.user_id,
+      },
+      items: invItems,
+      subtotal: amountRs,
+      totalAmount: amountRs,
+      category: s.category || 'VOUCHER',
+    };
+    setSelectedInvoice(invData);
+    setIsInvoiceOpen(true);
+  };
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1426,7 +1461,15 @@ export default function AdminPaymentsTab() {
                             </button>
                           </div>
                         ) : (s.status === 'CONFIRMED' || s.status === 'SUCCESS' || s.status === 'SUCCESS-manual') ? (
-                          <div className="flex items-center justify-end md:justify-center pr-2 shrink-0 whitespace-nowrap">
+                          <div className="flex items-center justify-end md:justify-center pr-2 shrink-0 whitespace-nowrap gap-1.5">
+                            <button
+                              onClick={() => handleOpenInvoice(s)}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs whitespace-nowrap font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand-700 hover:border-brand-300 transition-colors shadow-xs"
+                              title="View and download tax invoice"
+                            >
+                              <FileText className="h-3.5 w-3.5 text-brand-600" />
+                              Invoice
+                            </button>
                             <button
                               onClick={() => openRevert(s)}
                               disabled={revertingId === s.id}
@@ -2000,6 +2043,14 @@ export default function AdminPaymentsTab() {
           </div>
         </div>
       )}
+
+      {/* Tax Invoice / Receipt Modal */}
+      <OrderInvoiceModal
+        isOpen={isInvoiceOpen}
+        onClose={() => setIsInvoiceOpen(false)}
+        invoice={selectedInvoice}
+      />
     </div>
   );
 }
+

@@ -19,11 +19,14 @@ import {
   Check,
   TrendingDown,
   TrendingUp,
+  FileText,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { AdminTopBar } from '@/components/AdminHeader';
 import { inr, inrDecimal, formatDateTime } from '@/lib/format';
+import { OrderInvoiceModal } from '@/components/OrderInvoiceModal';
+import { extractInvoiceItems, type InvoiceData } from '@/lib/invoice';
 
 export type CustomerProfile = {
   id: string;
@@ -47,6 +50,9 @@ export type LedgerTransaction = {
   source: 'wallet_transactions' | 'orders' | 'upi_payment_sessions' | 'customer_ledger';
   status?: string;
   rawRef?: string;
+  rawItems?: unknown;
+  orderId?: string;
+  paymentMethod?: string;
 };
 
 // Quick date presets
@@ -135,7 +141,39 @@ export default function AdminCustomerLedgerPage() {
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
+  // Invoice modal state
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceData | null>(null);
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+
+  const handleOpenLedgerInvoice = (tx: LedgerTransaction) => {
+    if (!selectedCustomer) return;
+    const isCredit = tx.credit > 0 && tx.debit === 0;
+    const amountRs = tx.debit > 0 ? tx.debit : tx.credit;
+    const invItems = extractInvoiceItems(tx.rawItems, amountRs);
+    const invData: InvoiceData = {
+      invoiceNumber: `INV-${tx.voucherNo}`,
+      orderId: tx.orderId || tx.voucherNo,
+      date: tx.date,
+      paymentMethod: tx.paymentMethod || (isCredit ? 'UPI Direct / Bank' : 'Wallet'),
+      paymentRef: tx.rawRef || null,
+      status: tx.status || 'CONFIRMED',
+      customer: {
+        name: selectedCustomer.full_name || 'Customer',
+        email: selectedCustomer.email || '',
+        phone: selectedCustomer.phone || '',
+        userId: selectedCustomer.id,
+      },
+      items: invItems,
+      subtotal: amountRs,
+      totalAmount: amountRs,
+      category: isCredit ? 'TOPUP' : 'VOUCHER',
+    };
+    setSelectedInvoice(invData);
+    setIsInvoiceOpen(true);
+  };
+
   // Load all customers with profile and wallet balance
+
   const loadCustomers = useCallback(async () => {
     setCustomersLoading(true);
     try {
@@ -281,6 +319,9 @@ export default function AdminCustomerLedgerPage() {
           balanceType: 'Cr',
           source: 'wallet_transactions',
           rawRef: tx.reference_id,
+          rawItems: matchedOrder?.items || matchedSession?.items || null,
+          orderId: ordId || `WTX-${tx.id.slice(0, 8).toUpperCase()}`,
+          paymentMethod: tx.category === 'TOPUP' ? 'UPI Direct' : 'Wallet',
         });
       });
 
@@ -309,6 +350,9 @@ export default function AdminCustomerLedgerPage() {
             source: 'orders',
             status: order.status,
             rawRef: order.razorpay_payment_id || order.youpi_payment_id,
+            rawItems: order.items,
+            orderId: refNo,
+            paymentMethod,
           });
         }
       });
@@ -951,12 +995,13 @@ export default function AdminCustomerLedgerPage() {
                   <th className="px-4 py-3 text-right w-[110px]">DEBIT (₹)</th>
                   <th className="px-4 py-3 text-right w-[110px]">CREDIT (₹)</th>
                   <th className="px-4 py-3 text-right w-[130px]">BALANCE (₹)</th>
+                  <th className="px-4 py-3 text-center w-[90px] print:hidden">ACTION</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-sans">
                 {ledgerLoading ? (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center text-slate-500">
+                    <td colSpan={9} className="py-16 text-center text-slate-500">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
                         Loading double-entry ledger records…
@@ -965,7 +1010,7 @@ export default function AdminCustomerLedgerPage() {
                   </tr>
                 ) : paginatedTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center text-slate-500">
+                    <td colSpan={9} className="py-16 text-center text-slate-500">
                       No ledger transactions found for the selected customer and date range.
                     </td>
                   </tr>
@@ -1022,6 +1067,16 @@ export default function AdminCustomerLedgerPage() {
                             {tx.balanceType}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-center whitespace-nowrap print:hidden">
+                          <button
+                            onClick={() => handleOpenLedgerInvoice(tx)}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-xs hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition"
+                            title="View and download invoice"
+                          >
+                            <FileText className="h-3 w-3 text-brand-600" />
+                            Invoice
+                          </button>
+                        </td>
                       </tr>
                     );
                   })
@@ -1045,6 +1100,7 @@ export default function AdminCustomerLedgerPage() {
                       {inrDecimal(closingBalance)}{' '}
                       <span className="text-[10px] font-bold text-emerald-700">{closingBalanceType}</span>
                     </td>
+                    <td className="print:hidden"></td>
                   </tr>
                 </tfoot>
               )}
@@ -1103,7 +1159,15 @@ export default function AdminCustomerLedgerPage() {
             All debits represent customer spending or debit adjustments; all credits represent customer fund inflows, top-ups, or refunds.
           </p>
         </div>
+
+        {/* Tax Invoice / Receipt Modal */}
+        <OrderInvoiceModal
+          isOpen={isInvoiceOpen}
+          onClose={() => setIsInvoiceOpen(false)}
+          invoice={selectedInvoice}
+        />
       </div>
     </div>
   );
 }
+

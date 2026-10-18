@@ -179,3 +179,38 @@
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #2E7A5C, #0A4A34);
 }
+
+/* Order Invoice Print Optimization */
+@media print {
+  body.printing-invoice {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    overflow: visible !important;
+  }
+  body.printing-invoice * {
+    visibility: hidden;
+  }
+  body.printing-invoice .order-invoice-printable,
+  body.printing-invoice .order-invoice-printable * {
+    visibility: visible;
+  }
+  body.printing-invoice .order-invoice-printable {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+    padding: 8mm 10mm !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    z-index: 999999 !important;
+  }
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+}
+
