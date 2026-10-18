@@ -44,6 +44,41 @@ create index if not exists upi_sessions_pending_utr_idx
   on public.upi_payment_sessions (status, customer_utr)
   where customer_utr is not null;
 
+-- Ensure public.orders has upi_* columns and widened status check
+alter table public.orders
+  add column if not exists upi_order_id text,
+  add column if not exists upi_payment_id text,
+  add column if not exists upi_utr text;
+
+do $$
+declare
+  con_name text;
+begin
+  select con.conname into con_name
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+   where nsp.nspname = 'public'
+     and rel.relname = 'orders'
+     and con.contype = 'c'
+     and con.conname like 'orders_status%';
+  if con_name is not null then
+    execute format('alter table public.orders drop constraint %I', con_name);
+  end if;
+end $$;
+
+alter table public.orders
+  add constraint orders_status_check
+  check (status in (
+    'pending',
+    'successful',
+    'failed',
+    'PENDING_VERIFICATION',
+    'DELIVERED',
+    'REJECTED',
+    'CONFIRMED'
+  ));
+
 -- ---------------------------------------------------------------------------
 -- Atomic RPC: submit_upi_payment_proof
 -- Called when buyer submits their 12-digit UTR and optional proof screenshot.
