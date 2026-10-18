@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Wallet,
   Gift,
   Receipt,
   TrendingUp,
@@ -24,7 +23,7 @@ import Reveal from '@/components/Reveal';
 
 type Tab = 'cards' | 'history';
 
-const tabs: { id: Tab; label: string; icon: typeof Wallet }[] = [
+const tabs: { id: Tab; label: string; icon: typeof Gift }[] = [
   { id: 'cards', label: 'My Gift Cards', icon: Gift },
   { id: 'history', label: 'Purchase History', icon: Receipt },
 ];
@@ -77,36 +76,20 @@ export default function DashboardPage() {
 
   return (
     <div className="pt-16 min-h-screen bg-gradient-to-b from-brand-50/40 to-white">
-      {/* Header */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 to-white border-b border-slate-100">
-        <div className="absolute inset-0 bg-grid opacity-50 pointer-events-none" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
-          <Reveal>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-700">
-              <Wallet className="h-3.5 w-3.5" /> Your dashboard
-            </span>
-            <h1 className="mt-3 font-display text-4xl sm:text-5xl font-extrabold text-slate-900">
-              Welcome back
-            </h1>
-            <p className="mt-2 text-slate-600 max-w-xl">
-              Track your gift card balances, revisit past purchases and manage your wallet.
-            </p>
-          </Reveal>
-        </div>
-      </section>
+      {/* Breadcrumb (BrandsPage pattern) — replaces the old hero header */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6">
+        <nav className="flex items-center gap-2 text-sm text-slate-500">
+          <Link to="/" className="hover:text-brand-700">Home</Link>
+          <span>/</span>
+          <span className="text-slate-800 font-medium">Dashboard</span>
+        </nav>
+      </div>
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
-        {/* Stat cards */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-4 pb-10">
+        {/* Stat cards — wallet balance card dropped (wallet now lives on
+            /wallet); 3 cards fill the grid evenly. */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           <Reveal>
-            <StatCard
-              icon={Wallet}
-              label="Wallet balance"
-              value={inrDecimal(totals.totalBalance)}
-              accent="from-brand-600 to-brand-800"
-            />
-          </Reveal>
-          <Reveal delay={60}>
             <StatCard
               icon={Gift}
               label="Gift cards owned"
@@ -114,7 +97,7 @@ export default function DashboardPage() {
               accent="from-fuchsia-500 to-purple-700"
             />
           </Reveal>
-          <Reveal delay={120}>
+          <Reveal delay={60}>
             <StatCard
               icon={TrendingUp}
               label="Total value"
@@ -122,7 +105,7 @@ export default function DashboardPage() {
               accent="from-gold-400 to-gold-600"
             />
           </Reveal>
-          <Reveal delay={180}>
+          <Reveal delay={120}>
             <StatCard
               icon={Receipt}
               label="Total spent"
@@ -186,7 +169,7 @@ function StatCard({
   value,
   accent,
 }: {
-  icon: typeof Wallet;
+  icon: typeof Gift;
   label: string;
   value: string;
   accent: string;
