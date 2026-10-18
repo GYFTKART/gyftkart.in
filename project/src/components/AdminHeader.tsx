@@ -10,6 +10,7 @@ import {
   Wallet,
   Scale,
   Users,
+  Settings,
 } from 'lucide-react';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/components/Toast';
@@ -86,6 +87,12 @@ export function AdminTopBar() {
       label: 'UPI Direct',
       icon: Wallet,
       isActive: pathname.startsWith('/admin/upi-direct') || pathname.startsWith('/admin/payments'),
+    },
+    {
+      to: '/admin/settings',
+      label: 'Payment Settings',
+      icon: Settings,
+      isActive: pathname.startsWith('/admin/settings'),
     },
   ];
 

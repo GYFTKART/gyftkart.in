@@ -33,9 +33,9 @@ type OrderRow = {
   created_at: string;
   razorpay_order_id?: string | null;
   razorpay_payment_id?: string | null;
-  youpi_order_id?: string | null;
-  youpi_payment_id?: string | null;
-  youpi_utr?: string | null;
+  upi_order_id?: string | null;
+  upi_payment_id?: string | null;
+  upi_utr?: string | null;
 };
 
 type PurchaseRow = {
@@ -208,12 +208,12 @@ export default function OrdersPage() {
     const amountRs = Number(order.total_amount);
     const invItems = extractInvoiceItems(order.items, amountRs);
     const refCode = orderRef(order);
-    const payMethod = order.youpi_payment_id
+    const payMethod = order.upi_payment_id
       ? 'UPI Direct'
       : order.razorpay_payment_id
       ? 'Razorpay'
       : 'Online Payment';
-    const payRef = order.youpi_utr || order.razorpay_payment_id || order.youpi_payment_id || null;
+    const payRef = order.upi_utr || order.razorpay_payment_id || order.upi_payment_id || null;
 
     const invData: InvoiceData = {
       invoiceNumber: `INV-${refCode}`,
@@ -260,7 +260,7 @@ export default function OrdersPage() {
     const [ordersRes, purchasesRes, upiRes] = await Promise.all([
       supabase
         .from('orders')
-        .select('id, total_amount, status, items, created_at, razorpay_order_id, razorpay_payment_id, youpi_order_id, youpi_payment_id, youpi_utr')
+        .select('id, total_amount, status, items, created_at, razorpay_order_id, razorpay_payment_id, upi_order_id, upi_payment_id, upi_utr')
         .eq('user_id', session.id)
         .order('created_at', { ascending: false })
         .limit(50),

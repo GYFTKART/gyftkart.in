@@ -12,7 +12,7 @@
 This document presents the security posture, vulnerability audit results, database hardening policies, and client-side defense mechanisms implemented across the GyftKart platform. GyftKart processes digital voucher issuance, UPI Direct bank payments, and digital wallet transactions, demanding stringent defense-in-depth security across database transactions, authentication flows, client bundles, and HTTP transport.
 
 ### Key Security Achievements
-- **Zero Secret Leakage:** Verified that no backend secrets (`SUPABASE_SERVICE_ROLE_KEY`, `YOUPI_WEBHOOK_SECRET`, admin credentials) are bundled into client-side Vite builds or exposed via `VITE_*` prefixes.
+- **Zero Secret Leakage:** Verified that no backend secrets (`SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_SECRET`, admin credentials) are bundled into client-side Vite builds or exposed via `VITE_*` prefixes.
 - **Strict Row Level Security (RLS):** 100% of tables enforce active RLS with strict `auth.uid() = user_id` ownership checks. Direct client-side `UPDATE` and `DELETE` permissions are revoked on financial ledgers and payment sessions.
 - **Append-Only Financial Ledgers:** `wallet_transactions` and `company_ledger` can only be modified via atomic Postgres `SECURITY DEFINER` RPCs or authenticated admin workflows.
 - **Input Sanitization & Injection Defense:** Implemented universal XSS and injection guards for search bars, form inputs, emails, phone numbers, and banking UTR strings.
@@ -32,10 +32,7 @@ Vite bundles any environment variable prefixed with `VITE_` into client-side Jav
 | `VITE_SUPABASE_ANON_KEY` | Client | Frontend bundle | Public `anon` role key (RLS-governed) |
 | `VITE_RAZORPAY_KEY_ID` | Client | Frontend bundle | Public checkout merchant key |
 | `VITE_UPI_DIRECT_ENABLED` | Client | Frontend bundle | Feature flag boolean |
-| `VITE_YOUPI_PUBLIC_KEY` | Client | Frontend bundle | Public gateway identifier |
-| `VITE_YOUPI_API_URL` | Client | Frontend bundle | Public API gateway URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Supabase Deno Edge Functions | **Confidential** (Bypasses RLS; NEVER in frontend) |
-| `YOUPI_WEBHOOK_SECRET` | Server only | Supabase Edge Functions | **Confidential** (HMAC signature verification) |
 
 ### 2.2 Dependency Vulnerability Audit (`npm audit`)
 - **Total Scan Surface:** 1,607 modules.

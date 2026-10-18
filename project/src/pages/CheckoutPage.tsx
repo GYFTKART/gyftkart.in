@@ -24,12 +24,16 @@ import { inr, inrDecimal } from '@/lib/format';
 import type { CartItem, Purchase } from '@/lib/types';
 import type { OrderRow } from '@/components/RazorpayCheckoutButton';
 import RazorpayCheckoutButton from '@/components/RazorpayCheckoutButton';
-import YoupiCheckoutButton from '@/components/YoupiCheckoutButton';
 import UpiDirectCheckoutButton from '@/components/UpiDirectCheckoutButton';
-import { isYoupiConfigured } from '@/lib/youpi';
+import {
+  getPublicPaymentSettings,
+  type PaymentGatewaySettings,
+  DEFAULT_PAYMENT_SETTINGS,
+  SETTINGS_UPDATED_EVENT,
+} from '@/lib/paymentSettings';
 
 type Step = 'review' | 'pay' | 'success';
-type Gateway = 'razorpay' | 'youpi' | 'upi' | 'wallet';
+type Gateway = 'upi' | 'wallet' | 'razorpay';
 
 const stepsMeta: { id: Step; label: string }[] = [
   { id: 'review', label: 'Review' },
@@ -60,11 +64,40 @@ export default function CheckoutPage() {
   const count = isBuyNow ? (buyNowItem as CartItem).quantity : cartCount;
 
   const [step, setStep] = useState<Step>('review');
-  const [gateway, setGateway] = useState<Gateway>('razorpay');
+  const [gateway, setGateway] = useState<Gateway>('upi');
+  const [paymentSettings, setPaymentSettings] = useState<PaymentGatewaySettings>(DEFAULT_PAYMENT_SETTINGS);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [buyerName, setBuyerName] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
+
+  // Load public payment gateway configuration
+  useEffect(() => {
+    let mounted = true;
+    void getPublicPaymentSettings().then((s) => {
+      if (mounted) setPaymentSettings(s);
+    });
+
+    const handleSettingsUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<PaymentGatewaySettings>).detail;
+      if (detail && mounted) {
+        setPaymentSettings(detail);
+      }
+    };
+
+    window.addEventListener(SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
+    return () => {
+      mounted = false;
+      window.removeEventListener(SETTINGS_UPDATED_EVENT, handleSettingsUpdated);
+    };
+  }, []);
+
+  // Ensure only enabled gateways can be selected
+  useEffect(() => {
+    if (gateway === 'razorpay' && !paymentSettings.razorpay_enabled) {
+      setGateway('upi');
+    }
+  }, [gateway, paymentSettings.razorpay_enabled]);
 
   // Sender details ("Your details") used to be a visible form — now we
   // just pull them from the logged-in session automatically.
@@ -89,10 +122,7 @@ export default function CheckoutPage() {
   const total = subtotal + convenienceFee;
 
   const validBuyer = buyerName.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(buyerEmail);
-  const youpiReady = isYoupiConfigured();
-  const upiDirectReady =
-    import.meta.env.VITE_UPI_DIRECT_ENABLED === 'true' ||
-    import.meta.env.VITE_UPI_DIRECT_ENABLED === '1';
+  const upiDirectReady = paymentSettings.upi_direct_enabled;
 
   // Runs only after the chosen gateway (Razorpay or YouPI) has been
   // verified server-side (see the verify-*payment Edge Functions). This
@@ -137,7 +167,7 @@ export default function CheckoutPage() {
   const issueGiftCards = async (verifiedOrder?: OrderRow) => {
     try {
       const issuedUnderPaymentId =
-        verifiedOrder?.youpi_payment_id ?? verifiedOrder?.razorpay_payment_id ?? null;
+        verifiedOrder?.upi_payment_id ?? verifiedOrder?.razorpay_payment_id ?? null;
       const data = await insertPurchaseRows(issuedUnderPaymentId);
       setPurchases(data);
       if (!isBuyNow) clear();
@@ -350,18 +380,22 @@ export default function CheckoutPage() {
                     <div>
                       <h2 className="font-display text-2xl font-bold text-slate-900">Secure payment</h2>
                       <p className="text-xs text-slate-500">
-                        {gateway === 'youpi'
-                          ? 'Powered by YouPI · direct UPI, 0% gateway fees'
+                        {gateway === 'upi'
+                          ? 'Powered by UPI Direct · 0% gateway fees'
+                          : gateway === 'wallet'
+                          ? 'Powered by GyftKart Digital Wallet'
                           : 'Powered by Razorpay'}
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-6 rounded-2xl bg-slate-50 p-5 text-sm text-slate-600">
-                    {gateway === 'youpi' ? (
-                      "You'll scan a UPI QR or tap to open GPay / PhonePe / Paytm in the next step — YouPI's secure checkout window handles that for you."
+                    {gateway === 'upi' ? (
+                      "You'll scan a UPI QR or open your preferred UPI app (GPay, PhonePe, Paytm, BHIM) and confirm with your 12-digit UTR reference."
+                    ) : gateway === 'wallet' ? (
+                      "Pay directly and instantly using your GyftKart wallet balance."
                     ) : (
-                      "You'll be able to choose UPI, card, net banking, or wallet in the next step — Razorpay's secure checkout window handles that for you."
+                      "You'll be able to choose card or net banking in the next step — Razorpay's secure checkout window handles that for you."
                     )}
                   </div>
 
@@ -407,34 +441,9 @@ export default function CheckoutPage() {
 
                 {step === 'pay' && (
                   <div className="mt-5">
-                    {/* Gateway selector — Razorpay (cards/netbanking/wallets) or YouPI (direct UPI) */}
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setGateway('razorpay')}
-                        className={`rounded-2xl border p-3 text-left transition-all ${
-                          gateway === 'razorpay'
-                            ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-500'
-                            : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <p className="text-xs font-bold text-slate-900">Razorpay</p>
-                        <p className="mt-0.5 text-[11px] text-slate-500">Card · Netbanking · Wallet</p>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGateway('youpi')}
-                        disabled={!youpiReady}
-                        title={youpiReady ? undefined : 'YouPI UPI is not configured yet'}
-                        className={`rounded-2xl border p-3 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                          gateway === 'youpi'
-                            ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-500'
-                            : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <p className="text-xs font-bold text-slate-900">YouPI UPI</p>
-                        <p className="mt-0.5 text-[11px] text-slate-500">QR · GPay · PhonePe · Paytm</p>
-                      </button>
+                    {/* Gateway selector — UPI Direct & Wallet Balance active; Razorpay only if enabled by admin */}
+                    <div className={`grid gap-2.5 ${paymentSettings.razorpay_enabled ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                      {/* 1. UPI Direct */}
                       <button
                         type="button"
                         onClick={() => setGateway('upi')}
@@ -446,9 +455,14 @@ export default function CheckoutPage() {
                             : 'border-slate-200 hover:border-slate-300'
                         }`}
                       >
-                        <p className="text-xs font-bold text-slate-900">UPI Direct</p>
-                        <p className="mt-0.5 text-[11px] text-slate-500">Pay any UPI app · 0% fee</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-slate-900">UPI Direct</p>
+                          <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">0% fee</span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-slate-500">QR · GPay · PhonePe · Paytm</p>
                       </button>
+
+                      {/* 2. GyftKart Wallet */}
                       <button
                         type="button"
                         onClick={() => setGateway('wallet')}
@@ -463,7 +477,7 @@ export default function CheckoutPage() {
                         <p className="text-xs font-bold text-slate-900">GyftKart Wallet</p>
                         <p className="mt-0.5 text-[11px]">
                           {walletCanPay ? (
-                            <span className="text-emerald-700">Balance {inrDecimal(walletBalance! / 100)}</span>
+                            <span className="text-emerald-700 font-semibold">Balance {inrDecimal(walletBalance! / 100)}</span>
                           ) : (
                             <Link
                               to="/wallet"
@@ -475,11 +489,27 @@ export default function CheckoutPage() {
                           )}
                         </p>
                       </button>
+
+                      {/* 3. Razorpay (ONLY if enabled in Admin Settings) */}
+                      {paymentSettings.razorpay_enabled && (
+                        <button
+                          type="button"
+                          onClick={() => setGateway('razorpay')}
+                          className={`rounded-2xl border p-3 text-left transition-all ${
+                            gateway === 'razorpay'
+                              ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-500'
+                              : 'border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <p className="text-xs font-bold text-slate-900">Razorpay</p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">Cards · Netbanking</p>
+                        </button>
+                      )}
                     </div>
 
-                    {gateway === 'razorpay' ? (
+                    {gateway === 'upi' ? (
                       <div className="mt-3">
-                        <RazorpayCheckoutButton
+                        <UpiDirectCheckoutButton
                           amount={total}
                           items={items}
                           buyerName={buyerName}
@@ -487,19 +517,7 @@ export default function CheckoutPage() {
                           disabled={!validBuyer}
                           onSuccess={handlePaymentSuccess}
                           onError={handlePaymentError}
-                          label={`Pay ${inr(total)}`}
-                        />
-                      </div>
-                    ) : gateway === 'youpi' ? (
-                      <div className="mt-3">
-                        <YoupiCheckoutButton
-                          amount={total}
-                          items={items}
-                          buyerName={buyerName}
-                          buyerEmail={buyerEmail}
-                          disabled={!validBuyer}
-                          onSuccess={handlePaymentSuccess}
-                          onError={handlePaymentError}
+                          onCancel={() => setGateway('upi')}
                           label={`Pay ${inr(total)}`}
                         />
                       </div>
@@ -542,9 +560,9 @@ export default function CheckoutPage() {
                           </p>
                         )}
                       </div>
-                    ) : (
+                    ) : gateway === 'razorpay' && paymentSettings.razorpay_enabled ? (
                       <div className="mt-3">
-                        <UpiDirectCheckoutButton
+                        <RazorpayCheckoutButton
                           amount={total}
                           items={items}
                           buyerName={buyerName}
@@ -552,11 +570,10 @@ export default function CheckoutPage() {
                           disabled={!validBuyer}
                           onSuccess={handlePaymentSuccess}
                           onError={handlePaymentError}
-                          onCancel={() => setGateway('razorpay')}
                           label={`Pay ${inr(total)}`}
                         />
                       </div>
-                    )}
+                    ) : null}
                     <button
                       onClick={() => setStep('review')}
                       className="mt-3 w-full text-center text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors"

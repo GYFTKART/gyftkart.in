@@ -141,11 +141,8 @@ Configure these variables in your hosting environment (e.g., Vercel Project Sett
 | `VITE_SITE_URL` | **Yes** | `https://gyftkart.in` | Primary public canonical origin |
 | `VITE_SUPABASE_URL` | **Yes** | `https://xyzcompany.supabase.co` | Production Supabase Project URL (Strict HTTPS) |
 | `VITE_SUPABASE_ANON_KEY` | **Yes** | `eyJhbGciOi...` | Supabase Public Anonymous Key |
-| `VITE_RAZORPAY_KEY_ID` | **Yes** | `rzp_live_...` | Live Razorpay Key for Cards & NetBanking |
+| `VITE_RAZORPAY_KEY_ID` | Optional | `rzp_live_...` | Razorpay Key (configurable in Admin Settings; disabled by default) |
 | `VITE_UPI_DIRECT_ENABLED` | **Yes** | `true` | Enables zero-fee serverless UPI Direct payment method |
-| `VITE_YOUPI_PUBLIC_KEY` | Optional | `yp_pk_live_...` | Optional self-hosted YouPI-PG Gateway Public Key |
-| `VITE_YOUPI_API_URL` | Optional | `https://pay.gyftkart.in` | Optional YouPI-PG API origin (leave empty to hide) |
-| `VITE_YOUPI_PORTAL_URL`| Optional | `https://checkout.gyftkart.in` | Optional YouPI-PG Modal checkout origin |
 
 ---
 

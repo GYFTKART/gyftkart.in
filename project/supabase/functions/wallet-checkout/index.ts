@@ -6,7 +6,7 @@
 // is a customer surface.
 //
 //   POST (auth: Supabase JWT) body { items }  — the SAME cart shape the
-//   checkout posts to the razorpay/youpi intent fns (amount in rupees,
+//   checkout posts to the gateway intent fns (amount in rupees,
 //   quantity, recipient fields…).
 //
 // Semantics:

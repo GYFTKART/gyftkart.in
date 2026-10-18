@@ -168,12 +168,12 @@ export default function AdminCompanyLedgerPage() {
 
         coveredOrderIds.add(order.id);
         if (order.razorpay_order_id) coveredOrderIds.add(order.razorpay_order_id);
-        if (order.youpi_order_id) coveredOrderIds.add(order.youpi_order_id);
+        if (order.upi_order_id) coveredOrderIds.add(order.upi_order_id);
 
         const amountRs = Number(order.total_amount || 0);
         const refNo =
           order.razorpay_order_id ||
-          order.youpi_order_id ||
+          order.upi_order_id ||
           `GK-${order.id.slice(0, 8).toUpperCase()}`;
 
         transactions.push({

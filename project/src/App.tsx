@@ -44,6 +44,7 @@ const AdminGiftCardSalesPage = lazy(() => import('@/pages/AdminGiftCardSalesPage
 const AdminCorporateInquiriesPage = lazy(() => import('@/pages/AdminCorporateInquiriesPage'));
 const AdminBrandsPage = lazy(() => import('@/pages/AdminBrandsPage'));
 const AdminCustomersPage = lazy(() => import('@/pages/AdminCustomersPage'));
+const AdminSettingsPage = lazy(() => import('@/pages/AdminSettingsPage'));
 
 
 // We take over scroll restoration entirely ourselves (see ScrollManager
@@ -458,6 +459,16 @@ export default function App() {
                       <AdminAuthProvider>
                         <ProtectedAdminRoute>
                           <AdminUpiDirectPage />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/settings"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminSettingsPage />
                         </ProtectedAdminRoute>
                       </AdminAuthProvider>
                     }

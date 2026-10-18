@@ -53,10 +53,10 @@ export interface OrderRow {
   status: 'pending' | 'successful' | 'failed';
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;
-  /** YouPI gateway references when the order came through that gateway. */
-  youpi_order_id?: string | null;
-  youpi_payment_id?: string | null;
-  youpi_utr?: string | null;
+  /** UPI Direct session references when the order came through UPI Direct. */
+  upi_order_id?: string | null;
+  upi_payment_id?: string | null;
+  upi_utr?: string | null;
   items: unknown[];
   created_at: string;
 }

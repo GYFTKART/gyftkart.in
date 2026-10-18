@@ -5,7 +5,7 @@
 // logic, and UPI deep-link construction. Plain ES module so Edge
 // Functions import it and node --test executes the same logic locally.
 //
-// SAFETY RULES (mirroring the YouPI hardening):
+// SAFETY RULES:
 //   * only "credited in to your account / money received" style phrases
 //     admit a payment — debits, reversals and balances are ignored;
 //   * buyer/sender identities are never used as proof, only refs;

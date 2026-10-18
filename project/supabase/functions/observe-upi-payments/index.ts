@@ -1,6 +1,6 @@
 // supabase/functions/observe-upi-payments/index.ts
 //
-// UPI Direct observer: the replacement for YouPI-PG's resident Gmail
+// UPI Direct observer: automated bank credit
 // observer, made serverless-safe. Invoked on a schedule (cron-job.org
 // free tier or Supabase pg_cron per migration 20261017203010) and by
 // admins; it:

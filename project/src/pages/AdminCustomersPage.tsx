@@ -8,27 +8,20 @@ import {
   ShieldAlert,
   ShieldCheck,
   KeyRound,
-  FileText,
-  RotateCcw,
-  ArrowRight,
   Download,
   RefreshCw,
   Mail,
-  Phone,
   Building2,
   ChevronLeft,
   ChevronRight,
-  AlertTriangle,
   Loader2,
   X,
   Lock,
   Unlock,
-  Wallet,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { AdminTopBar } from '@/components/AdminHeader';
-import { inr, inrDecimal, formatDateTime } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 
 export interface AdminCustomerRecord {
@@ -41,7 +34,6 @@ export interface AdminCustomerRecord {
   phone_verified: boolean;
   email_confirmed_at: string | null;
   created_at: string;
-  wallet_balance_paise: number;
   company_name?: string | null;
 }
 
@@ -65,7 +57,12 @@ export default function AdminCustomersPage() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Modal states
+  // Checkbox selection state
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<string>>(new Set());
+  const [bulkModalAction, setBulkModalAction] = useState<'BLOCK' | 'UNBLOCK' | null>(null);
+  const [isUpdatingBulk, setIsUpdatingBulk] = useState(false);
+
+  // Single customer modal states
   const [blockModalCustomer, setBlockModalCustomer] = useState<AdminCustomerRecord | null>(null);
   const [blockReason, setBlockReason] = useState('');
   const [isUpdatingBlock, setIsUpdatingBlock] = useState(false);
@@ -78,7 +75,7 @@ export default function AdminCustomersPage() {
     else setLoading(true);
 
     try {
-      // 1. Fetch profiles
+      // Fetch customer profiles
       const { data: profs, error: profError } = await supabase
         .from('profiles')
         .select('*')
@@ -86,29 +83,13 @@ export default function AdminCustomersPage() {
 
       if (profError) throw profError;
 
-      // 2. Fetch wallets for balances
-      const { data: wallets, error: walError } = await supabase
-        .from('wallets')
-        .select('user_id, balance');
-
-      if (walError) {
-        console.warn('Could not load wallets, using 0 balance:', walError.message);
-      }
-
-      const walletMap = new Map<string, number>();
-      (wallets ?? []).forEach((w) => {
-        walletMap.set(w.user_id, Number(w.balance || 0));
-      });
-
-      // 3. Assemble customer records
+      // Assemble customer records
       const records: AdminCustomerRecord[] = (profs ?? []).map((p) => {
         const isBlocked =
           Boolean(p.is_blocked) ||
           String(p.status || '').toLowerCase() === 'blocked' ||
           String(p.status || '').toLowerCase() === 'suspended';
 
-        // An email is considered verified if email_confirmed_at is set,
-        // or if phone_verified flag is present, or if it has established credentials
         const emailConfirmed = p.email_confirmed_at || (p.created_at ? p.created_at : null);
         const phoneVerified = Boolean(p.phone_verified);
 
@@ -122,7 +103,6 @@ export default function AdminCustomersPage() {
           phone_verified: phoneVerified,
           email_confirmed_at: emailConfirmed,
           created_at: p.created_at || new Date().toISOString(),
-          wallet_balance_paise: walletMap.get(p.id) || 0,
           company_name: p.company_name || null,
         };
       });
@@ -142,7 +122,7 @@ export default function AdminCustomersPage() {
     void fetchCustomers();
   }, [fetchCustomers]);
 
-  // Block / Unblock action handler
+  // Single Block / Unblock action handler
   const handleToggleBlock = async () => {
     if (!blockModalCustomer) return;
     setIsUpdatingBlock(true);
@@ -152,7 +132,7 @@ export default function AdminCustomersPage() {
 
     try {
       // 1. Try atomic RPC if installed
-      const { data: rpcData, error: rpcError } = await supabase.rpc(
+      const { error: rpcError } = await supabase.rpc(
         'admin_toggle_customer_block',
         {
           target_user_id: targetId,
@@ -192,6 +172,45 @@ export default function AdminCustomersPage() {
       push(`Block status update failed: ${msg}`, 'error');
     } finally {
       setIsUpdatingBlock(false);
+    }
+  };
+
+  // Bulk Block / Unblock action handler
+  const handleExecuteBulkAction = async () => {
+    if (!bulkModalAction || selectedCustomerIds.size === 0) return;
+    setIsUpdatingBulk(true);
+
+    const newBlockedState = bulkModalAction === 'BLOCK';
+    const targetIds = Array.from(selectedCustomerIds);
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          is_blocked: newBlockedState,
+          status: newBlockedState ? 'inactive' : 'active',
+        })
+        .in('id', targetIds);
+
+      if (error) throw error;
+
+      // Update state immediately
+      setCustomers((prev) =>
+        prev.map((c) =>
+          selectedCustomerIds.has(c.id) ? { ...c, is_blocked: newBlockedState } : c
+        )
+      );
+
+      const count = targetIds.length;
+      push(`Successfully updated ${count} customers`, 'success');
+      setSelectedCustomerIds(new Set());
+      setBulkModalAction(null);
+    } catch (err: unknown) {
+      console.error('Failed bulk update:', err);
+      const msg = err instanceof Error ? err.message : 'Bulk update failed';
+      push(`Bulk update error: ${msg}`, 'error');
+    } finally {
+      setIsUpdatingBulk(false);
     }
   };
 
@@ -254,16 +273,50 @@ export default function AdminCustomersPage() {
     return filteredCustomers.slice(start, start + pageSize);
   }, [filteredCustomers, currentPage, pageSize]);
 
-  // Summary Metrics
+  // Checkbox selection states
+  const isAllCurrentPageSelected = useMemo(() => {
+    if (paginatedCustomers.length === 0) return false;
+    return paginatedCustomers.every((c) => selectedCustomerIds.has(c.id));
+  }, [paginatedCustomers, selectedCustomerIds]);
+
+  const isSomeCurrentPageSelected = useMemo(() => {
+    if (paginatedCustomers.length === 0) return false;
+    return (
+      paginatedCustomers.some((c) => selectedCustomerIds.has(c.id)) &&
+      !isAllCurrentPageSelected
+    );
+  }, [paginatedCustomers, selectedCustomerIds, isAllCurrentPageSelected]);
+
+  const handleToggleSelectAll = () => {
+    setSelectedCustomerIds((prev) => {
+      const next = new Set(prev);
+      if (isAllCurrentPageSelected) {
+        paginatedCustomers.forEach((c) => next.delete(c.id));
+      } else {
+        paginatedCustomers.forEach((c) => next.add(c.id));
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedCustomerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Summary Metrics (Keep only 3 cards)
   const metrics = useMemo(() => {
     const total = customers.length;
     const active = customers.filter((c) => !c.is_blocked).length;
     const blocked = customers.filter((c) => c.is_blocked).length;
-    const totalWalletBalance = customers.reduce(
-      (sum, c) => sum + c.wallet_balance_paise / 100,
-      0
-    );
-    return { total, active, blocked, totalWalletBalance };
+    return { total, active, blocked };
   }, [customers]);
 
   // CSV Export
@@ -283,7 +336,6 @@ export default function AdminCustomersPage() {
       'Customer Type',
       'Company Name',
       'Status',
-      'Wallet Balance (INR)',
       'Created At',
     ];
 
@@ -297,7 +349,6 @@ export default function AdminCustomersPage() {
       c.customer_type,
       `"${(c.company_name || '').replace(/"/g, '""')}"`,
       c.is_blocked ? 'BLOCKED' : 'ACTIVE',
-      (c.wallet_balance_paise / 100).toFixed(2),
       c.created_at,
     ]);
 
@@ -326,7 +377,7 @@ export default function AdminCustomersPage() {
               Customer Management
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Complete oversight of B2C and B2B client accounts, verification flags, security blocks, and wallet balances.
+              Complete oversight of B2C and B2B client accounts, verification flags, and security access.
             </p>
           </div>
 
@@ -358,8 +409,8 @@ export default function AdminCustomersPage() {
           </div>
         </div>
 
-        {/* ───── 4 KPI Summary Cards ───── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* ───── 3 KPI Summary Cards (Wallet Card Removed) ───── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -398,21 +449,6 @@ export default function AdminCustomersPage() {
             <p className="text-2xl font-black text-rose-600 mt-2">{metrics.blocked}</p>
             <p className="text-[11px] text-slate-400 mt-1">Prevented from login &amp; orders</p>
           </div>
-
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Wallet Holdings
-              </span>
-              <span className="grid place-items-center h-8 w-8 rounded-lg bg-brand-50 text-brand-600">
-                <Wallet className="h-4 w-4" />
-              </span>
-            </div>
-            <p className="text-2xl font-black text-slate-900 mt-2">
-              {inr(metrics.totalWalletBalance)}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1">Net customer wallet liability</p>
-          </div>
         </div>
 
         {/* ───── Filter & Search Section ───── */}
@@ -441,7 +477,7 @@ export default function AdminCustomersPage() {
               )}
             </div>
 
-            {/* Filter Pills & Selectors */}
+            {/* Filter Selectors */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Status Filter */}
               <select
@@ -488,6 +524,46 @@ export default function AdminCustomersPage() {
           </div>
         </div>
 
+        {/* ───── Bulk Action Floating Toolbar (When items selected) ───── */}
+        {selectedCustomerIds.size > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-900 text-white p-3.5 px-5 shadow-lg border border-slate-800 animate-slide-up">
+            <div className="flex items-center gap-2.5">
+              <span className="grid place-items-center h-6 w-6 rounded-full bg-brand-500 text-white text-xs font-black">
+                {selectedCustomerIds.size}
+              </span>
+              <span className="text-xs font-bold text-white">
+                {selectedCustomerIds.size} {selectedCustomerIds.size === 1 ? 'customer' : 'customers'} selected
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setBulkModalAction('BLOCK')}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-600/20 text-rose-300 hover:bg-rose-600 hover:text-white px-3 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                Bulk Block
+              </button>
+
+              <button
+                onClick={() => setBulkModalAction('UNBLOCK')}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/50 bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600 hover:text-white px-3 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <Unlock className="h-3.5 w-3.5" />
+                Bulk Unblock
+              </button>
+
+              <button
+                onClick={() => setSelectedCustomerIds(new Set())}
+                className="inline-flex items-center gap-1 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white px-3 py-1.5 text-xs font-bold transition cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+                Deselect All
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ───── Customer Directory Table ───── */}
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
           {loading ? (
@@ -509,10 +585,23 @@ export default function AdminCustomersPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-xs">
+              <table className="w-full min-w-[850px] text-left text-xs">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200/80">
-                    <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 w-[70px]">
+                    {/* Header Checkbox (Select all on current page) */}
+                    <th className="px-3.5 py-3.5 text-center w-[44px]">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all customers on current page"
+                        checked={isAllCurrentPageSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = isSomeCurrentPageSelected;
+                        }}
+                        onChange={handleToggleSelectAll}
+                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                      />
+                    </th>
+                    <th className="px-3 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 w-[60px]">
                       S. NO.
                     </th>
                     <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 min-w-[240px]">
@@ -524,10 +613,7 @@ export default function AdminCustomersPage() {
                     <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 w-[120px]">
                       STATUS
                     </th>
-                    <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 w-[140px] text-right">
-                      WALLET BALANCE
-                    </th>
-                    <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 w-[230px] text-right">
+                    <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 w-[190px] text-right">
                       ACTIONS
                     </th>
                   </tr>
@@ -536,19 +622,34 @@ export default function AdminCustomersPage() {
                   {paginatedCustomers.map((customer, index) => {
                     const totalCount = filteredCustomers.length;
                     const serialNo = totalCount - ((currentPage - 1) * pageSize + index);
-                    const walletRs = customer.wallet_balance_paise / 100;
                     const hasEmailVerification = Boolean(customer.email_confirmed_at);
                     const isB2B = customer.customer_type === 'B2B';
+                    const isSelected = selectedCustomerIds.has(customer.id);
 
                     return (
                       <tr
                         key={customer.id}
                         className={`hover:bg-slate-50/60 transition-colors ${
-                          customer.is_blocked ? 'bg-rose-50/20' : ''
+                          isSelected
+                            ? 'bg-brand-50/40'
+                            : customer.is_blocked
+                            ? 'bg-rose-50/20'
+                            : ''
                         }`}
                       >
+                        {/* Checkbox */}
+                        <td className="px-3.5 py-3.5 text-center w-[44px]">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${customer.full_name}`}
+                            checked={isSelected}
+                            onChange={() => handleToggleSelect(customer.id)}
+                            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                          />
+                        </td>
+
                         {/* 1. S. NO. */}
-                        <td className="px-4 py-3.5 font-mono text-slate-500 text-xs">
+                        <td className="px-3 py-3.5 font-mono text-slate-500 text-xs">
                           {serialNo}
                         </td>
 
@@ -635,15 +736,7 @@ export default function AdminCustomersPage() {
                           )}
                         </td>
 
-                        {/* 5. WALLET BALANCE */}
-                        <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                          <p className="font-black text-xs text-slate-900">
-                            {inrDecimal(walletRs)}
-                          </p>
-                          <p className="text-[10px] font-semibold text-emerald-600">Cr</p>
-                        </td>
-
-                        {/* 6. ACTIONS (Block/Unblock, Password Reset, View Ledger) */}
+                        {/* 5. ACTIONS (Block/Unblock, Password Reset) */}
                         <td className="px-4 py-3.5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             {/* Block / Unblock Button */}
@@ -677,16 +770,6 @@ export default function AdminCustomersPage() {
                               <KeyRound className="h-3 w-3 text-slate-500" />
                               Reset Pass
                             </button>
-
-                            {/* View Ledger Button */}
-                            <Link
-                              to={`/admin/customer-ledger?customerId=${customer.id}`}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:border-brand-500 hover:text-brand-700 hover:bg-brand-50/50 transition shadow-xs"
-                              title="View Customer Financial Statement"
-                            >
-                              <FileText className="h-3 w-3 text-brand-600" />
-                              Ledger
-                            </Link>
                           </div>
                         </td>
                       </tr>
@@ -759,7 +842,7 @@ export default function AdminCustomersPage() {
         </div>
       </main>
 
-      {/* ───── Modal 1: Block / Unblock Confirmation Modal ───── */}
+      {/* ───── Modal 1: Single Block / Unblock Confirmation Modal ───── */}
       {blockModalCustomer && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
           <div
@@ -847,7 +930,7 @@ export default function AdminCustomersPage() {
 
             <p className="text-[11px] text-slate-500 leading-relaxed">
               {blockModalCustomer.is_blocked
-                ? 'Unblocking will immediately restore the customer’s ability to sign in, purchase gift vouchers, and utilize their wallet.'
+                ? 'Unblocking will immediately restore the customer’s ability to sign in and purchase gift vouchers.'
                 : 'Blocking will immediately terminate active sessions and prevent this customer from logging in or placing new orders.'}
             </p>
 
@@ -892,7 +975,115 @@ export default function AdminCustomersPage() {
         </div>
       )}
 
-      {/* ───── Modal 2: Password Reset Confirmation Modal ───── */}
+      {/* ───── Modal 2: Bulk Block / Unblock Confirmation Modal ───── */}
+      {bulkModalAction && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
+          <div
+            className="fixed inset-0 -z-10"
+            onClick={() => !isUpdatingBulk && setBulkModalAction(null)}
+          />
+
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 p-6 space-y-5 animate-slide-up">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`grid place-items-center h-9 w-9 rounded-xl ${
+                    bulkModalAction === 'UNBLOCK'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-rose-100 text-rose-700'
+                  }`}
+                >
+                  {bulkModalAction === 'UNBLOCK' ? (
+                    <Unlock className="h-5 w-5" />
+                  ) : (
+                    <Lock className="h-5 w-5" />
+                  )}
+                </span>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">
+                    {bulkModalAction === 'UNBLOCK'
+                      ? `Bulk Unblock ${selectedCustomerIds.size} Customers`
+                      : `Bulk Block ${selectedCustomerIds.size} Customers`}
+                  </h2>
+                  <p className="text-[11px] text-slate-500">Mass Security &amp; Access Update</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBulkModalAction(null)}
+                disabled={isUpdatingBulk}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/70 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Selected Count:</span>
+                <span className="font-bold text-slate-900">
+                  {selectedCustomerIds.size} {selectedCustomerIds.size === 1 ? 'customer' : 'customers'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Target Action:</span>
+                <span
+                  className={`font-bold ${
+                    bulkModalAction === 'UNBLOCK' ? 'text-emerald-700' : 'text-rose-700'
+                  }`}
+                >
+                  {bulkModalAction === 'UNBLOCK' ? 'SET TO ACTIVE (UNBLOCKED)' : 'SET TO BLOCKED (SUSPENDED)'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              {bulkModalAction === 'UNBLOCK'
+                ? `Are you sure you want to reactivate access for all ${selectedCustomerIds.size} selected customer accounts? They will immediately be able to log in and purchase gift vouchers.`
+                : `Are you sure you want to suspend access for all ${selectedCustomerIds.size} selected customer accounts? Their active sessions will be invalidated and they will be prevented from placing orders.`}
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setBulkModalAction(null)}
+                disabled={isUpdatingBulk}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBulkAction}
+                disabled={isUpdatingBulk}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white rounded-xl shadow-sm transition ${
+                  bulkModalAction === 'UNBLOCK'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {isUpdatingBulk ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Updating…
+                  </>
+                ) : bulkModalAction === 'UNBLOCK' ? (
+                  <>
+                    <Unlock className="h-3.5 w-3.5" />
+                    Confirm Bulk Unblock
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-3.5 w-3.5" />
+                    Confirm Bulk Block
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───── Modal 3: Password Reset Confirmation Modal ───── */}
       {resetModalCustomer && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
           <div
