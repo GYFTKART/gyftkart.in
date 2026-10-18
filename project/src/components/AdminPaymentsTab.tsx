@@ -129,21 +129,53 @@ export default function AdminPaymentsTab() {
     // persistSession:false (auth.uid() null → zero rows → the blank-table
     // symptom) — so the admin bearer MUST ride the request. Convert SSR
     // postgrest syntax to the query-string equivalent.
-    const res = await fnGet(
-      'upi_payment_sessions',
-      '?select=*,items' +
-        '&or=(customer_utr.not.is.null,proof_path.not.is.null)' +
-        '&order=created_at.desc' +
-        `&limit=${FETCH_CAP}`
-    );
-    const json = res.json ?? {};
-    if (!res.ok || (json && typeof json.message === 'string' && json.message)) {
+    let fallbackNeeded = false;
+    let res: { ok: boolean; json: Record<string, unknown> | null; status: number } | null = null;
+    try {
+      res = await fnGet(
+        'upi_payment_sessions',
+        '?select=*,items' +
+          '&or=(customer_utr.not.is.null,proof_path.not.is.null)' +
+          '&order=created_at.desc' +
+          `&limit=${FETCH_CAP}`
+      );
+      if (!res.ok || res.status === 0) {
+        fallbackNeeded = true;
+      }
+    } catch {
+      fallbackNeeded = true;
+    }
+
+    if (fallbackNeeded) {
+      const { data, error } = await supabase
+        .from('upi_payment_sessions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        setMessage({
+          kind: 'err',
+          text: `Load failed: ${error.message || 'HTTP transport'}`,
+        });
+        setSessions([]);
+      } else {
+        setSessions((data as UpSession[]) ?? []);
+        setMessage(null);
+      }
+      setLoading(false);
+      return;
+    }
+
+    const json = res?.json ?? {};
+    if (json && typeof json.message === 'string' && json.message) {
       setMessage({
         kind: 'err',
-        text: `Load failed: ${typeof json.message === 'string' && json.message ? json.message : `HTTP ${res.status || 'transport'}`}`,
+        text: `Load failed: ${json.message}`,
       });
+    } else {
+      setMessage(null);
     }
-    setSessions(Array.isArray(res.json) ? (res.json as UpSession[]) : []);
+    setSessions(Array.isArray(res?.json) ? (res.json as UpSession[]) : []);
     setLoading(false);
     // fnGet intentionally excluded: it's stable-by-refs (tokens read via
     // authRef.current inside resolveAdminBearer), so this loader must not
@@ -259,16 +291,20 @@ export default function AdminPaymentsTab() {
       return { ok: false, json: { error: 'Admin session expired — please sign in again and retry.' }, status: 0 };
     }
     adminFnDebug(`rest:${path}`, bearer);
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${path}${qs}`, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${bearer.token}`,
-      },
-    });
-    const json = await res.json().catch(() => null);
-    return { ok: res.ok, json, status: res.status };
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${path}${qs}`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${bearer.token}`,
+        },
+      });
+      const json = await res.json().catch(() => null);
+      return { ok: res.ok, json, status: res.status };
+    } catch {
+      return { ok: false, json: null, status: 0 };
+    }
   };
 
   const confirm = async (s: UpSession) => {
