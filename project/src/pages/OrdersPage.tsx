@@ -29,6 +29,19 @@ type PurchaseRow = {
   created_at: string;
 };
 
+// Pending UPI Direct voucher checkouts (upi_payment_sessions, category
+// 'VOUCHER') — these rows exist BEFORE admin verification creates the
+// real order/purchases, so /orders shows them with a Pending badge
+// instead of blank "No orders yet".
+type PendingUpiRow = {
+  id: string;
+  order_id: string;
+  amount_paise: number | string;
+  status: string;
+  items: unknown;
+  created_at: string;
+};
+
 // Display refs — derivation ONLY (same pattern as topupRef); no writes.
 const orderRef = (o: OrderRow) => `GK-${o.id.slice(0, 8).toUpperCase()}`;
 
@@ -71,6 +84,7 @@ export default function OrdersPage() {
   const { session } = useAuth();
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [purchases, setPurchases] = useState<PurchaseRow[] | null>(null);
+  const [pendingUpi, setPendingUpi] = useState<PendingUpiRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,12 +92,13 @@ export default function OrdersPage() {
     if (!session?.id) {
       setOrders([]);
       setPurchases([]);
+      setPendingUpi([]);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
-    const [ordersRes, purchasesRes] = await Promise.all([
+    const [ordersRes, purchasesRes, upiRes] = await Promise.all([
       supabase
         .from('orders')
         .select('id, total_amount, status, items, created_at')
@@ -96,16 +111,30 @@ export default function OrdersPage() {
         .eq('user_id', session.id)
         .order('created_at', { ascending: false })
         .limit(100),
+      // Voucher checkouts awaiting (or under) manual verification — the
+      // owner-select RLS policy allows reading own sessions; TOPUP
+      // category rows belong to the Wallet page, not here. SUCCESS
+      // sessions have already minted orders/purchases (avoid duplicates).
+      supabase
+        .from('upi_payment_sessions')
+        .select('id, order_id, amount_paise, status, items, created_at')
+        .eq('user_id', session.id)
+        .eq('category', 'VOUCHER')
+        .in('status', ['INITIATED', 'ACTIVE'])
+        .order('created_at', { ascending: false })
+        .limit(50),
     ]);
-    if (ordersRes.error || purchasesRes.error) {
-      setError(ordersRes.error?.message || purchasesRes.error?.message || 'Could not load your orders.');
+    if (ordersRes.error || purchasesRes.error || upiRes.error) {
+      setError(ordersRes.error?.message || purchasesRes.error?.message || upiRes.error?.message || 'Could not load your orders.');
       setOrders([]);
       setPurchases([]);
+      setPendingUpi([]);
       setLoading(false);
       return;
     }
     setOrders((ordersRes.data ?? []) as OrderRow[]);
     setPurchases((purchasesRes.data ?? []) as PurchaseRow[]);
+    setPendingUpi((upiRes.data ?? []) as PendingUpiRow[]);
     setLoading(false);
   }, [session?.id]);
 
@@ -113,7 +142,10 @@ export default function OrdersPage() {
     void load();
   }, [load]);
 
-  const noData = (orders ?? []).length === 0 && (purchases ?? []).length === 0;
+  const noData =
+    (orders ?? []).length === 0 &&
+    (purchases ?? []).length === 0 &&
+    (pendingUpi ?? []).length === 0;
 
   return (
     <div className="bg-gradient-to-b from-brand-50/40 via-transparent to-transparent pt-28 pb-16 px-4 sm:px-6 lg:px-8">
@@ -158,6 +190,39 @@ export default function OrdersPage() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
+              {/* ───────── Pending verification (UPI Direct vouchers) ───────── */}
+              {(pendingUpi ?? []).length > 0 && (
+                <div className="p-5 sm:p-6 pb-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">Pending verification</h2>
+                </div>
+              )}
+              <ul className="divide-y divide-slate-100">
+                {(pendingUpi ?? []).map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 sm:p-6 hover:bg-slate-50/60 transition-colors"
+                  >
+                    <span className="grid place-items-center h-12 w-12 shrink-0 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-glow-sm">
+                      <Gift className="h-5 w-5" />
+                    </span>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-900">{itemsSummary(s.items)}</p>
+                      <p className="mt-1.5 text-xs font-medium text-slate-500 font-mono">Order #{s.order_id}</p>
+                      <p className="mt-1 text-xs text-slate-400">{formatDateTime(s.created_at)}</p>
+                    </div>
+
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
+                      <p className="text-base font-extrabold text-slate-900">{inr(Number(s.amount_paise) / 100)}</p>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                        <Clock className="h-3.5 w-3.5" />
+                        Pending Verification
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
               {/* ─────────────── Your orders ─────────────── */}
               {(orders ?? []).length > 0 && (
                 <div className="p-5 sm:p-6 pb-2">
