@@ -218,11 +218,15 @@ export default function AdminPaymentsTab() {
     const refreshToken = current?.refreshToken;
     if (refreshToken) {
       try {
-        const { data } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+        const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+        if (error) {
+          // If refresh failed (e.g. 400 bad/stale refresh token), do not fall through or retry invalid token
+          return null;
+        }
         const fresh = data.session?.access_token;
         if (fresh && tokenUsable(fresh)) return { token: fresh, via: 'refresh' };
       } catch {
-        /* refresh rejections fall through to the session/cached checks */
+        return null;
       }
     }
     try {

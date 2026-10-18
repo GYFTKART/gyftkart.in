@@ -121,7 +121,14 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
           access_token: cached.token,
           refresh_token: cached.refreshToken,
         });
-        if (!error && data.session) {
+        if (error) {
+          cacheAdminSession(null);
+          setAdmin(null);
+          await supabase.auth.signOut();
+          window.location.href = '/admin';
+          return;
+        }
+        if (data.session) {
           const refreshed: AdminSessionCache = {
             email: cached.email,
             userId: cached.userId,
@@ -145,7 +152,14 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     // present — that collision was the root cause of 403 'Admins only'.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'TOKEN_REFRESHED' && !session) {
+        cacheAdminSession(null);
+        setAdmin(null);
+        await supabase.auth.signOut();
+        window.location.href = '/admin';
+        return;
+      }
       const cached = readCachedAdminSession();
       if (session?.user) {
         if (active) {

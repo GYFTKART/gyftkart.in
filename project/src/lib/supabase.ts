@@ -21,3 +21,10 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     autoRefreshToken: false,
   },
 });
+
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'TOKEN_REFRESHED' && !session) {
+    await supabase.auth.signOut();
+    window.location.href = '/admin';
+  }
+});
