@@ -528,15 +528,20 @@ export default function AdminPaymentsTab() {
       </div>
 
       {message && (
-        <p
+        <div
           className={`mt-3 text-xs font-semibold rounded-lg px-3 py-2 ${
             message.kind === 'ok'
               ? 'bg-emerald-50 text-emerald-700'
               : 'bg-rose-50 text-rose-700'
           }`}
         >
-          {message.text}
-        </p>
+          <p>{message.text}</p>
+          {message.kind === 'err' && (
+            <p className="mt-1 text-[11px] font-normal text-slate-500">
+              Admin identity: <span className="font-mono">{authSession?.email || '—'}</span>
+            </p>
+          )}
+        </div>
       )}
 
       {loading ? (
@@ -877,7 +882,14 @@ export default function AdminPaymentsTab() {
               placeholder="Rejection remark (mandatory, 3–500 chars)"
               className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-slate-400"
             />
-            {rejectError && <p className="mt-1 text-[11px] font-semibold text-rose-600">{rejectError}</p>}
+            {rejectError && (
+              <p className="mt-1 text-[11px] font-semibold text-rose-600">
+                {rejectError}
+                <span className="ml-2 font-normal text-slate-500">
+                  Admin identity: <span className="font-mono">{authSession?.email || '—'}</span>
+                </span>
+              </p>
+            )}
             <div className="mt-3 flex items-center justify-end gap-2">
               <button
                 onClick={() => setRejectTarget(null)}
