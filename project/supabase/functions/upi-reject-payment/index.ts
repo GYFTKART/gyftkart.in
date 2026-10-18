@@ -48,12 +48,13 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    const { data: adminRow } = await admin
+    const { data: adminRow, error: adminSelectError } = await admin
       .from('admins')
       .select('id')
       .eq('id', user.id)
       .maybeSingle();
-    if (!adminRow) return jsonResponse({ error: 'Admins only' }, 403);
+    if (adminSelectError) return jsonResponse({ error: `Admin lookup failed: ${adminSelectError.message}` }, 500);
+    if (!adminRow) return jsonResponse({ error: `Admins only (bearer: ${user.email ?? user.id}, id: ${user.id})` }, 403);
 
     const body = await req.json();
     if (!body?.payment_id) return jsonResponse({ error: 'Missing payment_id' }, 400);
