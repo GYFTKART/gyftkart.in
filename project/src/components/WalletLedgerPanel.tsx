@@ -31,7 +31,13 @@ type TopupRow = {
   created_at: string;
 };
 
-const MONTHLY_TOPUP_CAP_PAISE = 10_000_000; // ₹10,000
+// ₹10,000/month in paise — kept in LOCKSTEP with the wallet_credit RPC
+// cap (migration 20261018090000_wallet_cap_10k.sql fixed the RPC from a
+// 10x-paise 10_000_000; both layers must read ₹10,000, never ₹100,000).
+const MONTHLY_TOPUP_CAP_PAISE = 1_000_000;
+
+// Display ref for top-up rows: TOP-XXXXXXXX derived from the session id.
+const topupRef = (s: Pick<TopupRow, 'id'>) => `TOP-${s.id.slice(0, 8).toUpperCase()}`;
 
 const categoryLabel: Record<LedgerRow['category'], string> = {
   TOPUP: 'Top-up',
@@ -140,7 +146,7 @@ export default function WalletLedgerPanel() {
     if (t.status === 'CANCELLED') return { label: 'Cancelled', cls: 'bg-slate-100 text-slate-500' };
     if (t.status === 'ACTIVE') {
       return t.customer_utr
-        ? { label: 'Pending verification', cls: 'bg-amber-100 text-amber-700' }
+        ? { label: 'Pending Verification', cls: 'bg-amber-100 text-amber-700' }
         : { label: 'Awaiting your payment', cls: 'bg-amber-100 text-amber-700' };
     }
     return { label: t.status, cls: 'bg-slate-100 text-slate-500' };
@@ -263,29 +269,47 @@ export default function WalletLedgerPanel() {
             No top-up requests yet — Add Balance to start.
           </p>
         ) : (
-          <div className="mt-4 space-y-2">
-            {(topups ?? []).map((t) => {
-              const st = topupStatus(t);
-              return (
-                <div key={t.id} className="rounded-xl border border-slate-100 px-4 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-display text-sm font-bold text-slate-900">
-                      {inr(Number(t.amount_paise) / 100)}
-                    </span>
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${st.cls}`}>
-                      {st.label}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-500">{formatDateTime(t.created_at)}</p>
-                  {t.customer_utr && (
-                    <p className="mt-1 break-all font-mono text-[11px] text-slate-600">UTR: {t.customer_utr}</p>
-                  )}
-                  {t.status === 'REJECTED' && t.admin_remark && (
-                    <p className="mt-1 text-[11px] font-semibold text-rose-600">Reason: {t.admin_remark}</p>
-                  )}
-                </div>
-              );
-            })}
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-xs">
+              <thead>
+                <tr className="bg-slate-50">
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Sr No.</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Order ID</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">UTR</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(topups ?? []).map((t, i) => {
+                  const st = topupStatus(t);
+                  return (
+                    <tr key={t.id} className="border-t border-slate-100">
+                      <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">{i + 1}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] font-semibold text-slate-900">
+                        {topupRef(t)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900">
+                        {inr(Number(t.amount_paise) / 100)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">{formatDateTime(t.created_at)}</td>
+                      <td className="break-all px-3 py-2.5 font-mono text-[11px] text-slate-600">
+                        {t.customer_utr ?? '—'}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${st.cls}`}>
+                          {st.label}
+                        </span>
+                        {t.status === 'REJECTED' && t.admin_remark && (
+                          <p className="mt-0.5 text-[10px] font-semibold text-rose-600">Reason: {t.admin_remark}</p>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

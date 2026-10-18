@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, ImageOff, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { inr, formatDateTime } from '@/lib/format';
 import { useAdminAuth } from '@/context/AdminAuthContext';
@@ -36,6 +36,11 @@ const statusStyle: Record<string, string> = {
 const REJECT_REASONS = ['Invalid UTR', 'Amount mismatch', 'Screenshot unreadable'];
 const PAGE_SIZES = [10, 20, 30, 40, 50];
 const FETCH_CAP = 500;
+
+// Display ref for TOPUP rows: TOP-XXXXXXXX derived from the session id
+// (double-tapped: order/ID columns); VOUCHER rows keep the raw order_id.
+const topupRef = (s: Pick<UpSession, 'id'>) => `TOP-${s.id.slice(0, 8).toUpperCase()}`;
+const displayRef = (s: UpSession) => (s.category === 'TOPUP' ? topupRef(s) : s.order_id);
 
 const isLocalToday = (iso: string | null) => {
   if (!iso) return false;
@@ -620,7 +625,7 @@ export default function AdminPaymentsTab() {
                         <p className="break-all text-[11px] text-slate-500">{buyer.email || '—'}</p>
                       </td>
                       <td className="px-3 py-3">
-                        <p className="whitespace-nowrap font-bold text-slate-900">{s.order_id}</p>
+                        <p className="whitespace-nowrap font-bold text-slate-900">{displayRef(s)}</p>
                         <p className="mt-0.5 flex flex-wrap items-center gap-1">
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -644,7 +649,11 @@ export default function AdminPaymentsTab() {
                         </p>
                       </td>
                       <td className="px-3 py-3 min-w-[12rem]">
-                        {items.length === 0 ? (
+                        {s.category === 'TOPUP' ? (
+                          <p className="whitespace-nowrap font-mono text-[11px] font-semibold text-slate-900" title={s.order_id}>
+                            {topupRef(s)}
+                          </p>
+                        ) : items.length === 0 ? (
                           <p className="text-[11px] text-slate-400">—</p>
                         ) : (
                           <p className="truncate text-[11px] text-slate-600" title={items.map((it) => `${it.label} (${it.size})`).join(' · ')}>
@@ -685,26 +694,17 @@ export default function AdminPaymentsTab() {
                         {s.bank_ref && (
                           <p className="break-all text-[11px] text-emerald-700">verified {s.bank_ref}</p>
                         )}
-                        <button
-                          onClick={() => void openProofPreview(s)}
-                          disabled={!s.proof_path || previewLoading}
-                          title={s.proof_path ? 'View screenshot' : 'No screenshot'}
-                          className={`mt-1 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold ${
-                            s.proof_path
-                              ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                              : 'border-slate-100 text-slate-400'
-                          } disabled:cursor-not-allowed disabled:opacity-70`}
-                        >
-                          {previewLoading ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : s.proof_path ? (
-                            <Eye className="h-3 w-3" />
-                          ) : (
-                            <ImageOff className="h-3 w-3" />
-                          )}
-                          {s.proof_path ? 'View screenshot' : 'No screenshot'}
-                        </button>
-                        {!s.proof_path && <p className="mt-0.5 text-[10px] text-slate-400">none uploaded</p>}
+                        {s.proof_path && (
+                          <button
+                            onClick={() => void openProofPreview(s)}
+                            disabled={previewLoading}
+                            title="View screenshot"
+                            className="mt-1 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            {previewLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
+                            View screenshot
+                          </button>
+                        )}
                         {s.admin_remark && (
                           <p className="mt-1 text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
                         )}
