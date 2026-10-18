@@ -56,7 +56,7 @@ const REVERT_REASONS = [
   'UTR verification mismatch',
   'Duplicate credit / chargeback',
 ];
-const PAGE_SIZES = [10, 20, 30, 40, 50];
+const PAGE_SIZES = [10, 25, 50];
 const FETCH_CAP = 500;
 
 // Display ref for TOPUP rows: TOP-XXXXXXXX derived from the session id
@@ -948,21 +948,21 @@ export default function AdminPaymentsTab() {
               className={`${topSelectClass} w-36 shrink-0`}
             />
           )}
-          <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-slate-500">
-            Rows per page
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setPage(1);
-              }}
-              className={`${topSelectClass} py-1`}
-            >
-              {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </label>
+          <select
+            title="Items per page"
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+            className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg bg-white text-gray-700 font-medium hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 shrink-0"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>
+                {n} / page
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
