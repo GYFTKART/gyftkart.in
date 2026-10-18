@@ -91,7 +91,7 @@ function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
   if (s === 'successful' || s === 'delivered' || s === 'confirmed') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700">
         <CheckCircle2 className="h-3.5 w-3.5" />
         Delivered
       </span>
