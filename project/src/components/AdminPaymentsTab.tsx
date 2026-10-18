@@ -41,7 +41,6 @@ const isLocalToday = (iso: string | null) => {
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 };
 
-// Local calendar-day index (midnight-based) for created_at comparisons.
 const localDay = (iso: string | null) => {
   if (!iso) return null;
   const d = new Date(iso);
@@ -65,7 +64,6 @@ export default function AdminPaymentsTab() {
   const [sessions, setSessions] = useState<UpSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [utrDrafts, setUtrDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [search, setSearch] = useState('');
   const [dateMode, setDateMode] = useState<DateMode>('all');
@@ -101,9 +99,9 @@ export default function AdminPaymentsTab() {
   }, [load]);
 
   const confirm = async (s: UpSession) => {
-    const utr = (utrDrafts[s.id] ?? '').trim();
-    if (utr.length < 6) {
-      setMessage({ kind: 'err', text: 'Enter the bank reference / UTR first.' });
+    const bankRef = (s.customer_utr ?? '').trim();
+    if (!bankRef) {
+      setMessage({ kind: 'err', text: 'This session has no customer UTR to confirm against.' });
       return;
     }
     setConfirmingId(s.id);
@@ -112,7 +110,7 @@ export default function AdminPaymentsTab() {
       body: {
         payment_id: s.id,
         order_id: s.order_id,
-        bank_ref: utr,
+        bank_ref: bankRef,
         amount_rupees: Number(s.amount_paise) / 100,
       },
     });
@@ -125,7 +123,7 @@ export default function AdminPaymentsTab() {
       setMessage({ kind: 'err', text: data.error });
       return;
     }
-    setMessage({ kind: 'ok', text: `Confirmed ${s.order_id} against UTR ${utr}. Order recorded.` });
+    setMessage({ kind: 'ok', text: `Confirmed ${s.order_id} against UTR ${bankRef}. Order recorded.` });
     void load();
   };
 
@@ -133,22 +131,6 @@ export default function AdminPaymentsTab() {
     setRejectTarget(s);
     setRejectRemark('');
     setRejectError(null);
-  };
-
-  const openProofPreview = async (s: UpSession) => {
-    if (!s.proof_path) return;
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setProofPreview(null);
-    const { data, error } = await supabase.storage
-      .from('upi-payment-proofs')
-      .createSignedUrl(s.proof_path, 60);
-    setPreviewLoading(false);
-    if (error || !data?.signedUrl) {
-      setPreviewError(error?.message ?? 'Could not open the screenshot.');
-      return;
-    }
-    setProofPreview({ url: data.signedUrl, path: s.proof_path });
   };
 
   const submitReject = async () => {
@@ -179,6 +161,22 @@ export default function AdminPaymentsTab() {
     setMessage({ kind: 'ok', text: `Rejected ${rejectTarget.order_id}: ${remark}` });
     setRejectTarget(null);
     void load();
+  };
+
+  const openProofPreview = async (s: UpSession) => {
+    if (!s.proof_path) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setProofPreview(null);
+    const { data, error } = await supabase.storage
+      .from('upi-payment-proofs')
+      .createSignedUrl(s.proof_path, 60);
+    setPreviewLoading(false);
+    if (error || !data?.signedUrl) {
+      setPreviewError(error?.message ?? 'Could not open the screenshot.');
+      return;
+    }
+    setProofPreview({ url: data.signedUrl, path: s.proof_path });
   };
 
   const inDateRange = useCallback(
@@ -290,7 +288,7 @@ export default function AdminPaymentsTab() {
     URL.revokeObjectURL(url);
   };
 
-  const dateFilterClass =
+  const topSelectClass =
     'rounded-lg border border-slate-200 py-2 px-3 text-xs outline-none focus:border-slate-400';
 
   return (
@@ -301,7 +299,7 @@ export default function AdminPaymentsTab() {
             <Smartphone className="h-4 w-4 text-emerald-600" /> UPI Direct Payments
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Confirm a session when you've seen the credit in your bank — paste the bank reference (UTR). razorpay stays the default; this only applies to "UPI Direct" sessions.
+            Confirm a session when you've verified the credit in your bank against the customer's UTR. razorpay stays the default; this only applies to "UPI Direct" sessions.
           </p>
         </div>
         <button
@@ -338,7 +336,7 @@ export default function AdminPaymentsTab() {
         </button>
       </div>
 
-      {/* Search + date filter (combined AND) */}
+      {/* Search + date filter + rows-per-page (combined AND) */}
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1 min-w-0">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -359,7 +357,7 @@ export default function AdminPaymentsTab() {
               setDateMode(e.target.value as DateMode);
               setPage(1);
             }}
-            className={`${dateFilterClass} shrink-0`}
+            className={`${topSelectClass} shrink-0`}
           >
             <option value="all">All Dates</option>
             <option value="today">Today</option>
@@ -376,7 +374,7 @@ export default function AdminPaymentsTab() {
                 setCustomFrom(e.target.value);
                 setPage(1);
               }}
-              className={`${dateFilterClass} w-36`}
+              className={`${topSelectClass} w-36`}
             />
           )}
           {dateMode === 'custom' && (
@@ -388,9 +386,24 @@ export default function AdminPaymentsTab() {
                 setCustomTo(e.target.value);
                 setPage(1);
               }}
-              className={`${dateFilterClass} w-36 shrink-0`}
+              className={`${topSelectClass} w-36 shrink-0`}
             />
           )}
+          <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+            Rows per page
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className={`${topSelectClass} py-1`}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 
@@ -417,13 +430,14 @@ export default function AdminPaymentsTab() {
       ) : (
         <>
           <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[960px] text-left text-xs">
+            <table className="w-full min-w-[1020px] text-left text-xs">
               <thead>
                 <tr className="bg-slate-50">
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">User / Customer</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">UTR &amp; Proof</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
                 </tr>
               </thead>
@@ -470,75 +484,64 @@ export default function AdminPaymentsTab() {
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <div className="flex flex-wrap items-start justify-end gap-2 whitespace-nowrap">
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">UTR</p>
-                            {s.customer_utr ? (
-                              <p className="break-all font-mono text-[11px] font-semibold text-slate-900">{s.customer_utr}</p>
-                            ) : (
-                              <p className="text-[11px] text-slate-400">—</p>
-                            )}
-                            {s.bank_ref && (
-                              <p className="break-all text-[11px] text-emerald-700">verified {s.bank_ref}</p>
-                            )}
-                            <button
-                              onClick={() => void openProofPreview(s)}
-                              disabled={!s.proof_path || previewLoading}
-                              title={s.proof_path ? 'View screenshot' : 'No screenshot'}
-                              className={`mt-1 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold ${
-                                s.proof_path
-                                  ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                                  : 'border-slate-100 text-slate-400'
-                              } disabled:cursor-not-allowed disabled:opacity-70`}
-                            >
-                              {previewLoading ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : s.proof_path ? (
-                                <Eye className="h-3 w-3" />
-                              ) : (
-                                <ImageOff className="h-3 w-3" />
-                              )}
-                              {s.proof_path ? 'View screenshot' : 'No screenshot'}
-                            </button>
-                            {!s.proof_path && <p className="mt-0.5 text-[10px] text-slate-400">none uploaded</p>}
-                          </div>
-                          {s.admin_remark && (
-                            <p className="w-full text-right text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
-                          )}
-                          {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
-                            <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-                              <input
-                                value={utrDrafts[s.id] ?? ''}
-                                onChange={(e) =>
-                                  setUtrDrafts((d) => ({ ...d, [s.id]: e.target.value }))
-                                }
-                                placeholder="Bank ref / UTR"
-                                className="w-36 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
-                              />
-                              <button
-                                onClick={() => void confirm(s)}
-                                disabled={confirmingId === s.id}
-                                className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
-                              >
-                                {confirmingId === s.id ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                )}
-                                Confirm
-                              </button>
-                              <button
-                                onClick={() => openReject(s)}
-                                className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
-                              >
-                                <XCircle className="h-3.5 w-3.5" />
-                                Reject
-                              </button>
-                            </div>
+                        {s.customer_utr ? (
+                          <p className="break-all font-mono text-[11px] font-semibold text-slate-900">{s.customer_utr}</p>
+                        ) : (
+                          <p className="text-[11px] text-slate-400">—</p>
+                        )}
+                        {s.bank_ref && (
+                          <p className="break-all text-[11px] text-emerald-700">verified {s.bank_ref}</p>
+                        )}
+                        <button
+                          onClick={() => void openProofPreview(s)}
+                          disabled={!s.proof_path || previewLoading}
+                          title={s.proof_path ? 'View screenshot' : 'No screenshot'}
+                          className={`mt-1 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold ${
+                            s.proof_path
+                              ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                              : 'border-slate-100 text-slate-400'
+                          } disabled:cursor-not-allowed disabled:opacity-70`}
+                        >
+                          {previewLoading ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : s.proof_path ? (
+                            <Eye className="h-3 w-3" />
                           ) : (
-                            <p className="whitespace-nowrap text-[11px] text-slate-400">No action</p>
+                            <ImageOff className="h-3 w-3" />
                           )}
-                        </div>
+                          {s.proof_path ? 'View screenshot' : 'No screenshot'}
+                        </button>
+                        {!s.proof_path && <p className="mt-0.5 text-[10px] text-slate-400">none uploaded</p>}
+                        {s.admin_remark && (
+                          <p className="mt-1 text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
+                          <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+                            <button
+                              onClick={() => void confirm(s)}
+                              disabled={confirmingId === s.id || !s.customer_utr}
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              {confirmingId === s.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              )}
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => openReject(s)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="whitespace-nowrap text-[11px] text-slate-400">No action</p>
+                        )}
                       </td>
                     </tr>
                   );
@@ -547,28 +550,13 @@ export default function AdminPaymentsTab() {
             </table>
           </div>
 
-          {/* Pagination footer */}
+          {/* Pagination footer (rows-per-page selects live in the top filter bar) */}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
             <p>
               Showing {showingFrom}–{showingTo} of {filtered.length} results
               {sessions.length >= FETCH_CAP ? ' (showing latest 500)' : ''}
             </p>
             <div className="flex flex-wrap items-center gap-1.5">
-              <label className="flex items-center gap-1.5">
-                Rows per page
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  className={`${dateFilterClass} py-1`}
-                >
-                  {PAGE_SIZES.map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </label>
               <button
                 onClick={() => setPage(currentPage - 1)}
                 disabled={currentPage <= 1}
