@@ -440,6 +440,23 @@ export default function AdminPaymentsTab() {
           return;
         }
 
+        // Also decrement monthly_added_amount in wallets table
+        const { data: currentWallet } = await supabase
+          .from('wallets')
+          .select('monthly_added_amount')
+          .eq('user_id', s.user_id)
+          .maybeSingle();
+
+        if (currentWallet) {
+          await supabase
+            .from('wallets')
+            .update({
+              monthly_added_amount: Math.max(0, Number(currentWallet.monthly_added_amount || 0) - amountPaise),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', s.user_id);
+        }
+
         const remarkNote = `Reverted by Admin: ${effectiveReason}`;
 
         // Update session status: try REVERTED, then REJECTED if check constraint limits

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowLeftRight,
@@ -169,16 +169,32 @@ export default function WalletLedgerPanel() {
   const pageStart = (page - 1) * pageSize;
   const paginated = filtered.slice(pageStart, pageStart + pageSize);
 
-  // Remaining monthly top-up quota in paise (the RPC applies rollover at
-  // credit time; mirror the same arithmetic for the display).
-  const quotaLeft = (() => {
+  // Remaining monthly top-up quota in paise (cap of ₹10,000/month).
+  // Calculation sums only active sessions where status is CONFIRMED or SUCCESS.
+  // Excludes any sessions where status is REVERTED, REJECTED, FAILED, or CANCELLED.
+  const quotaLeft = useMemo(() => {
+    if (topups !== null) {
+      const monthStartStr = currentMonthStart();
+      const monthStartTime = new Date(monthStartStr).getTime();
+      const netActiveConfirmedPaise = topups
+        .filter((t) => {
+          const st = (t.status || '').toUpperCase();
+          const isConfirmed = st === 'CONFIRMED' || st === 'SUCCESS';
+          const tTime = new Date(t.created_at).getTime();
+          return isConfirmed && !isNaN(tTime) && tTime >= monthStartTime;
+        })
+        .reduce((sum, t) => sum + Number(t.amount_paise || 0), 0);
+
+      return Math.max(0, MONTHLY_TOPUP_CAP_PAISE - netActiveConfirmedPaise);
+    }
+
     if (!wallet) return MONTHLY_TOPUP_CAP_PAISE;
     const used =
       wallet.last_reset_month === currentMonthStart()
         ? Number(wallet.monthly_added_amount) || 0
         : 0;
     return Math.max(0, MONTHLY_TOPUP_CAP_PAISE - used);
-  })();
+  }, [topups, wallet]);
 
   const loadWallet = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -340,8 +356,8 @@ export default function WalletLedgerPanel() {
             />
           </label>
           <p className="mt-1.5 text-[11px] text-slate-500">
-            Remaining limit this month: <span className="font-bold text-slate-700">{inr(quotaLeft / 100)}</span>
-            {' '}· cap ₹10,000/month
+            Remaining in this month: <span className="font-bold text-slate-700">{inr(quotaLeft / 100)}</span>
+            {' '}(cap of ₹10,000/month)
           </p>
           {amountError && <p className="mt-1 text-[11px] font-semibold text-rose-600">{amountError}</p>}
           {!authSession?.token ? (
