@@ -90,10 +90,8 @@ serve(async (req) => {
       .from('upi_payment_sessions')
       .update({
         customer_utr: utr.trim(),
-        utr: utr.trim(),
         proof_path: proof_path ?? null,
         status: 'PENDING_VERIFICATION',
-        submitted_at: new Date().toISOString(),
       })
       .eq('id', payment_id)
       .select('id')
