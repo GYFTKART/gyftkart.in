@@ -11,7 +11,6 @@ import {
   Download,
   RefreshCw,
   Mail,
-  Building2,
   ChevronLeft,
   ChevronRight,
   ArrowLeft,
@@ -54,7 +53,6 @@ export default function AdminCustomersPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'BLOCKED'>('ALL');
-  const [typeFilter, setTypeFilter] = useState<'ALL' | 'B2C' | 'B2B'>('ALL');
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
@@ -76,37 +74,40 @@ export default function AdminCustomersPage() {
     else setLoading(true);
 
     try {
-      // Fetch customer profiles
+      // Fetch retail B2C customer profiles strictly (customer_type = 'B2C' or NULL)
       const { data: profs, error: profError } = await supabase
         .from('profiles')
         .select('*')
+        .or('customer_type.eq.B2C,customer_type.is.null')
         .order('created_at', { ascending: false });
 
       if (profError) throw profError;
 
-      // Assemble customer records
-      const records: AdminCustomerRecord[] = (profs ?? []).map((p) => {
-        const isBlocked =
-          Boolean(p.is_blocked) ||
-          String(p.status || '').toLowerCase() === 'blocked' ||
-          String(p.status || '').toLowerCase() === 'suspended';
+      // Assemble customer records strictly excluding any B2B accounts
+      const records: AdminCustomerRecord[] = (profs ?? [])
+        .filter((p) => String(p.customer_type || '').toUpperCase() !== 'B2B')
+        .map((p) => {
+          const isBlocked =
+            Boolean(p.is_blocked) ||
+            String(p.status || '').toLowerCase() === 'blocked' ||
+            String(p.status || '').toLowerCase() === 'suspended';
 
-        const emailConfirmed = p.email_confirmed_at || (p.created_at ? p.created_at : null);
-        const phoneVerified = Boolean(p.phone_verified);
+          const emailConfirmed = p.email_confirmed_at || (p.created_at ? p.created_at : null);
+          const phoneVerified = Boolean(p.phone_verified);
 
-        return {
-          id: p.id,
-          full_name: String(p.full_name || p.contact_person_name || 'Customer').trim(),
-          email: String(p.email || p.contact_email || '').trim().toLowerCase(),
-          phone: String(p.phone || p.contact_phone || '').trim(),
-          customer_type: (p.customer_type as 'B2C' | 'B2B') || 'B2C',
-          is_blocked: isBlocked,
-          phone_verified: phoneVerified,
-          email_confirmed_at: emailConfirmed,
-          created_at: p.created_at || new Date().toISOString(),
-          company_name: p.company_name || null,
-        };
-      });
+          return {
+            id: p.id,
+            full_name: String(p.full_name || p.contact_person_name || 'Customer').trim(),
+            email: String(p.email || p.contact_email || '').trim().toLowerCase(),
+            phone: String(p.phone || p.contact_phone || '').trim(),
+            customer_type: 'B2C',
+            is_blocked: isBlocked,
+            phone_verified: phoneVerified,
+            email_confirmed_at: emailConfirmed,
+            created_at: p.created_at || new Date().toISOString(),
+            company_name: null,
+          };
+        });
 
       setCustomers(records);
     } catch (err: unknown) {
@@ -242,15 +243,12 @@ export default function AdminCustomersPage() {
     }
   };
 
-  // Filtered customers
+  // Filtered customers (strictly B2C)
   const filteredCustomers = useMemo(() => {
     return customers.filter((c) => {
       // Status filter
       if (statusFilter === 'ACTIVE' && c.is_blocked) return false;
       if (statusFilter === 'BLOCKED' && !c.is_blocked) return false;
-
-      // Type filter
-      if (typeFilter !== 'ALL' && c.customer_type !== typeFilter) return false;
 
       // Search query
       if (searchQuery.trim()) {
@@ -259,13 +257,12 @@ export default function AdminCustomersPage() {
         const emailMatch = c.email.toLowerCase().includes(q);
         const phoneMatch = c.phone.includes(q);
         const idMatch = c.id.toLowerCase().includes(q);
-        const compMatch = c.company_name?.toLowerCase().includes(q) ?? false;
-        return nameMatch || emailMatch || phoneMatch || idMatch || compMatch;
+        return nameMatch || emailMatch || phoneMatch || idMatch;
       }
 
       return true;
     });
-  }, [customers, statusFilter, typeFilter, searchQuery]);
+  }, [customers, statusFilter, searchQuery]);
 
   // Paginated customers
   const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
@@ -397,7 +394,7 @@ export default function AdminCustomersPage() {
               Customer Management
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Complete oversight of B2C and B2B client accounts, verification flags, and security access.
+              Complete oversight of retail B2C user accounts, verification flags, and security access.
             </p>
           </div>
 
@@ -419,13 +416,6 @@ export default function AdminCustomersPage() {
               <Download className="h-3.5 w-3.5 text-slate-500" />
               Export CSV
             </button>
-            <Link
-              to="/admin/b2b-customers"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-700 transition"
-            >
-              <Building2 className="h-3.5 w-3.5" />
-              B2B Accounts
-            </Link>
           </div>
         </div>
 
@@ -513,20 +503,6 @@ export default function AdminCustomersPage() {
                 <option value="BLOCKED">Blocked Only</option>
               </select>
 
-              {/* Type Filter */}
-              <select
-                value={typeFilter}
-                onChange={(e) => {
-                  setTypeFilter(e.target.value as 'ALL' | 'B2C' | 'B2B');
-                  setCurrentPage(1);
-                }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs focus:border-brand-500 focus:outline-none"
-              >
-                <option value="ALL">All Customer Types</option>
-                <option value="B2C">B2C Retail</option>
-                <option value="B2B">B2B Corporate</option>
-              </select>
-
               {/* Page Size Selector */}
               <select
                 value={pageSize}
@@ -598,7 +574,7 @@ export default function AdminCustomersPage() {
               </span>
               <p className="text-sm font-bold text-slate-800">No customers found</p>
               <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                {searchQuery || statusFilter !== 'ALL' || typeFilter !== 'ALL'
+                {searchQuery || statusFilter !== 'ALL'
                   ? 'No accounts match the current filter or search criteria.'
                   : 'Customer accounts will appear here automatically when registered.'}
               </p>
@@ -643,7 +619,6 @@ export default function AdminCustomersPage() {
                     const totalCount = filteredCustomers.length;
                     const serialNo = totalCount - ((currentPage - 1) * pageSize + index);
                     const hasEmailVerification = Boolean(customer.email_confirmed_at);
-                    const isB2B = customer.customer_type === 'B2B';
                     const isSelected = selectedCustomerIds.has(customer.id);
 
                     return (
@@ -676,13 +651,7 @@ export default function AdminCustomersPage() {
                         {/* 2. CUSTOMER (Name & Email with Verification Badge) */}
                         <td className="px-4 py-3.5">
                           <div className="flex items-start gap-2.5">
-                            <span
-                              className={`grid place-items-center h-8 w-8 rounded-lg text-white font-black text-xs uppercase shrink-0 mt-0.5 ${
-                                isB2B
-                                  ? 'bg-gradient-to-br from-amber-600 to-amber-800'
-                                  : 'bg-gradient-to-br from-brand-600 to-brand-800'
-                              }`}
-                            >
+                            <span className="grid place-items-center h-8 w-8 rounded-lg text-white font-black text-xs uppercase shrink-0 mt-0.5 bg-gradient-to-br from-brand-600 to-brand-800">
                               {customer.full_name.charAt(0) || 'C'}
                             </span>
                             <div className="min-w-0">
@@ -690,11 +659,6 @@ export default function AdminCustomersPage() {
                                 <span className="font-bold text-slate-900 text-xs truncate">
                                   {customer.full_name}
                                 </span>
-                                {isB2B && (
-                                  <span className="rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.2 text-[9px] font-bold text-amber-800">
-                                    B2B {customer.company_name ? `· ${customer.company_name}` : ''}
-                                  </span>
-                                )}
                               </div>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="font-mono text-[11px] text-slate-500 truncate max-w-[200px]">

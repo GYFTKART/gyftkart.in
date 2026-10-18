@@ -63,7 +63,7 @@ export default function AdminDashboardPage() {
       const [purchasesRes, inquiriesRes, profilesRes] = await Promise.all([
         supabase.from('purchases').select('amount, quantity, recipient_email'),
         supabase.from('corporate_inquiries').select('id, status'),
-        supabase.from('profiles').select('id, email'),
+        supabase.from('profiles').select('id, email, customer_type').or('customer_type.eq.B2C,customer_type.is.null'),
       ]);
 
       if (purchasesRes.error) throw purchasesRes.error;
@@ -72,7 +72,9 @@ export default function AdminDashboardPage() {
 
       const purchases = purchasesRes.data ?? [];
       const inquiries = inquiriesRes.data ?? [];
-      const profiles = profilesRes.data ?? [];
+      const profiles = (profilesRes.data ?? []).filter(
+        (pf) => String(pf.customer_type || '').toUpperCase() !== 'B2B'
+      );
 
       const totalRevenue = purchases.reduce(
         (sum, p) => sum + Number(p.amount || 0) * (p.quantity || 1),
@@ -81,7 +83,7 @@ export default function AdminDashboardPage() {
       const totalCards = purchases.reduce((sum, p) => sum + (p.quantity || 1), 0);
       const orderCount = purchases.length;
 
-      // Unique customer accounts (profiles + distinct recipient emails)
+      // Unique retail B2C customer accounts (profiles + distinct recipient emails)
       const customerEmails = new Set<string>();
       profiles.forEach((pf) => {
         if (pf.email) customerEmails.add(pf.email.trim().toLowerCase());
