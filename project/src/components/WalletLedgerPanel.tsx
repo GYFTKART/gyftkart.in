@@ -22,6 +22,15 @@ type LedgerRow = {
   created_at: string;
 };
 
+type TopupRow = {
+  id: string;
+  amount_paise: number | string;
+  status: string;
+  customer_utr: string | null;
+  admin_remark: string | null;
+  created_at: string;
+};
+
 const MONTHLY_TOPUP_CAP_PAISE = 10_000_000; // ₹10,000
 
 const categoryLabel: Record<LedgerRow['category'], string> = {
@@ -45,6 +54,8 @@ export default function WalletLedgerPanel() {
   const [topupKey, setTopupKey] = useState(0);
   const [ledger, setLedger] = useState<LedgerRow[] | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [topups, setTopups] = useState<TopupRow[] | null>(null);
+  const [topupsLoading, setTopupsLoading] = useState(false);
 
   // Remaining monthly top-up quota in paise (the RPC applies rollover at
   // credit time; mirror the same arithmetic for the display).
@@ -93,6 +104,47 @@ export default function WalletLedgerPanel() {
   useEffect(() => {
     void loadLedger();
   }, [loadLedger]);
+
+  // Top-up requests (upi_payment_sessions, category TOPUP) — read under
+  // the CUSTOMER'S OWN session; the owner-select RLS policy
+  // ('owner reads own upi session') authorizes user_id = auth.uid() via
+  // the shared singleton. No admin-token reuse, no manual headers.
+  const loadTopups = useCallback(async () => {
+    if (!authSession?.token) return;
+    setTopupsLoading(true);
+    const { data, error: err } = await supabase
+      .from('upi_payment_sessions')
+      .select('id, amount_paise, status, customer_utr, admin_remark, created_at')
+      .eq('category', 'TOPUP')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (err) {
+      setError(err.message || 'Could not load top-up requests.');
+    } else {
+      setTopups((data ?? []) as TopupRow[]);
+    }
+    setTopupsLoading(false);
+  }, [authSession?.token]);
+
+  useEffect(() => {
+    void loadTopups();
+  }, [loadTopups]);
+
+  // Status mapping for the top-up request block:
+  // CONFIRMED→Confirmed; REJECTED→Rejected (+admin_remark reason);
+  // CANCELLED→Cancelled; ACTIVE+UTR→Pending verification (UTR shown);
+  // ACTIVE no UTR→Awaiting your payment; anything else → raw status.
+  const topupStatus = (t: TopupRow): { label: string; cls: string } => {
+    if (t.status === 'CONFIRMED') return { label: 'Confirmed', cls: 'bg-emerald-100 text-emerald-700' };
+    if (t.status === 'REJECTED') return { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' };
+    if (t.status === 'CANCELLED') return { label: 'Cancelled', cls: 'bg-slate-100 text-slate-500' };
+    if (t.status === 'ACTIVE') {
+      return t.customer_utr
+        ? { label: 'Pending verification', cls: 'bg-amber-100 text-amber-700' }
+        : { label: 'Awaiting your payment', cls: 'bg-amber-100 text-amber-700' };
+    }
+    return { label: t.status, cls: 'bg-slate-100 text-slate-500' };
+  };
 
   const rupees = Number(amountInput);
   const toUpPaise = Math.round(rupees * 100);
@@ -174,6 +226,7 @@ export default function WalletLedgerPanel() {
                 onTopUpCompleted={() => {
                   void loadWallet();
                   void loadLedger();
+                  void loadTopups();
                   setTopupKey((k) => k + 1);
                 }}
                 onCancel={() => setTopupKey((k) => k + 1)}
@@ -190,6 +243,51 @@ export default function WalletLedgerPanel() {
             </p>
           )}
         </div>
+      </div>
+
+      {/* Top-up requests (upi_payment_sessions / owner-RLS) */}
+      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-display text-lg font-bold text-slate-900">Top-up requests</h3>
+          <button
+            onClick={() => void loadTopups()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            {topupsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Refresh
+          </button>
+        </div>
+
+        {topups !== null && topups.length === 0 ? (
+          <p className="mt-6 text-sm text-slate-500">
+            No top-up requests yet — Add Balance to start.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {(topups ?? []).map((t) => {
+              const st = topupStatus(t);
+              return (
+                <div key={t.id} className="rounded-xl border border-slate-100 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-display text-sm font-bold text-slate-900">
+                      {inr(Number(t.amount_paise) / 100)}
+                    </span>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${st.cls}`}>
+                      {st.label}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">{formatDateTime(t.created_at)}</p>
+                  {t.customer_utr && (
+                    <p className="mt-1 break-all font-mono text-[11px] text-slate-600">UTR: {t.customer_utr}</p>
+                  )}
+                  {t.status === 'REJECTED' && t.admin_remark && (
+                    <p className="mt-1 text-[11px] font-semibold text-rose-600">Reason: {t.admin_remark}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Wallet transaction history (ledger) */}
