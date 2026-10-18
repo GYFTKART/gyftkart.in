@@ -25,9 +25,7 @@ import { useToast } from '@/components/Toast';
 import { inr, inrDecimal, formatDateTime } from '@/lib/format';
 import { AdminTopBar, AdminNavTabs, type AdminTabId } from '@/components/AdminHeader';
 import BrandManager from '@/components/BrandManager';
-import CompanyLedgerTab from '@/components/CompanyLedgerTab';
 import CustomerLedgerModal, { type LedgerCustomer } from '@/components/CustomerLedgerModal';
-import type { CompanyLedgerEntry } from '@/lib/types';
 
 type Purchase = {
   id: string;
@@ -71,7 +69,7 @@ type Profile = {
 
 type PurchaseStat = { orders: number; spent: number; lastOrder: string; name: string };
 
-type Tab = 'overview' | 'sales' | 'inquiries' | 'brands' | 'customers' | 'ledger';
+type Tab = 'overview' | 'sales' | 'inquiries' | 'brands' | 'customers';
 
 export default function AdminDashboardPage() {
   const { admin } = useAdminAuth();
@@ -81,7 +79,7 @@ export default function AdminDashboardPage() {
 
   const [tab, setTab] = useState<Tab>(() => {
     const t = searchParams.get('tab');
-    if (t && ['sales', 'inquiries', 'brands', 'customers', 'ledger'].includes(t)) {
+    if (t && ['sales', 'inquiries', 'brands', 'customers'].includes(t)) {
       return t as Tab;
     }
     return 'overview';
@@ -93,7 +91,11 @@ export default function AdminDashboardPage() {
       navigate('/admin/upi-direct', { replace: true });
       return;
     }
-    if (t && ['sales', 'inquiries', 'brands', 'customers', 'ledger'].includes(t)) {
+    if (t === 'ledger') {
+      navigate('/admin/company-ledger', { replace: true });
+      return;
+    }
+    if (t && ['sales', 'inquiries', 'brands', 'customers'].includes(t)) {
       setTab(t as Tab);
     } else if (!t) {
       setTab('overview');
@@ -111,7 +113,6 @@ export default function AdminDashboardPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [companyLedger, setCompanyLedger] = useState<CompanyLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [salesSearch, setSalesSearch] = useState('');
   const [custSearch, setCustSearch] = useState('');
@@ -128,7 +129,7 @@ export default function AdminDashboardPage() {
     let active = true;
     (async () => {
       try {
-        const [p, i, pr, cl] = await Promise.all([
+        const [p, i, pr] = await Promise.all([
           supabase
             .from('purchases')
             .select('*')
@@ -141,20 +142,14 @@ export default function AdminDashboardPage() {
             .from('profiles')
             .select('*')
             .order('created_at', { ascending: false }),
-          supabase
-            .from('company_ledger')
-            .select('*')
-            .order('created_at', { ascending: false }),
         ]);
         if (!active) return;
         if (p.error) throw p.error;
         if (i.error) throw i.error;
         if (pr.error) throw pr.error;
-        if (cl.error) throw cl.error;
         setPurchases((p.data ?? []) as Purchase[]);
         setInquiries((i.data ?? []) as Inquiry[]);
         setProfiles((pr.data ?? []) as Profile[]);
-        setCompanyLedger((cl.data ?? []) as CompanyLedgerEntry[]);
       } catch (err) {
         push(err instanceof Error ? err.message : 'Failed to load admin data', 'error');
       } finally {
@@ -379,8 +374,6 @@ export default function AdminDashboardPage() {
             />
           ) : tab === 'brands' ? (
             <BrandManager />
-          ) : tab === 'ledger' ? (
-            <CompanyLedgerTab entries={companyLedger} />
           ) : (
             <CustomersTab
               customers={filteredCustomers}

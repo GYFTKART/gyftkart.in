@@ -20,6 +20,9 @@ import AdminLoginPage from '@/pages/AdminLoginPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import AdminUpiDirectPage from '@/pages/AdminUpiDirectPage';
 import AdminCustomerLedgerPage from '@/pages/AdminCustomerLedgerPage';
+import AdminB2bCustomersPage from '@/pages/AdminB2bCustomersPage';
+import AdminB2bLedgerPage from '@/pages/AdminB2bLedgerPage';
+import AdminCompanyLedgerPage from '@/pages/AdminCompanyLedgerPage';
 import ProfilePage from './pages/ProfilePage';
 import OrdersPage from '@/pages/OrdersPage';
 import ContactUs from '@/pages/ContactUs';
@@ -347,6 +350,46 @@ export default function App() {
                     <AdminAuthProvider>
                       <ProtectedAdminRoute>
                         <AdminCustomerLedgerPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route
+                  path="/admin/customer-ledger/:customerId"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminCustomerLedgerPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route
+                  path="/admin/b2b-customers"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminB2bCustomersPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route
+                  path="/admin/b2b-ledger"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminB2bLedgerPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route
+                  path="/admin/company-ledger"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminCompanyLedgerPage />
                       </ProtectedAdminRoute>
                     </AdminAuthProvider>
                   }
