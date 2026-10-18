@@ -632,7 +632,7 @@ export default function AdminPaymentsTab() {
     'rounded-lg border border-slate-200 py-2 px-3 text-xs outline-none focus:border-slate-400';
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6">
+    <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 max-w-full overflow-hidden">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -865,13 +865,14 @@ export default function AdminPaymentsTab() {
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
                   <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">UTR &amp; Proof</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400 min-w-[170px] w-[180px] text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((s, index) => {
                   const buyer = buyerOf(s.buyer);
                   const items = itemsOf(s);
+                  const displayIndex = filtered.length - ((currentPage - 1) * pageSize + index);
                   return (
                     <tr key={s.id} className={`border-t border-slate-100 align-top ${selectedIds.has(s.id) ? 'bg-emerald-50/40' : ''}`}>
                       <td className="px-3 py-3 whitespace-nowrap text-slate-500">
@@ -884,7 +885,7 @@ export default function AdminPaymentsTab() {
                             aria-label={`Select session ${s.order_id}`}
                           />
                           <span className="font-mono text-xs text-slate-600">
-                            {(currentPage - 1) * pageSize + index + 1}
+                            {displayIndex}
                           </span>
                         </div>
                       </td>
@@ -981,20 +982,20 @@ export default function AdminPaymentsTab() {
                           <p className="mt-1 text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
                         )}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 min-w-[170px] w-[180px] text-right">
                         {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
-                          <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5 shrink-0 whitespace-nowrap">
                             <button
                               onClick={() => setConfirmTarget(s)}
                               disabled={confirmingId === s.id || !s.customer_utr}
-                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" />
                               Confirm
                             </button>
                             <button
                               onClick={() => openReject(s)}
-                              className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-rose-700"
                             >
                               <XCircle className="h-3.5 w-3.5" />
                               Reject
