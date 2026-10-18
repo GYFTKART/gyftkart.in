@@ -124,68 +124,27 @@ export default function AdminPaymentsTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    // RLS-carrying read: upi_payment_sessions' ONLY select policy matches
-    // auth.uid() against the admins table, and the shared singleton runs
-    // persistSession:false (auth.uid() null → zero rows → the blank-table
-    // symptom) — so the admin bearer MUST ride the request. Convert SSR
-    // postgrest syntax to the query-string equivalent.
-    let fallbackNeeded = false;
-    let res: { ok: boolean; json: Record<string, unknown> | null; status: number } | null = null;
     try {
-      res = await fnGet(
-        'upi_payment_sessions',
-        '?select=*,items' +
-          '&or=(customer_utr.not.is.null,proof_path.not.is.null)' +
-          '&order=created_at.desc' +
-          `&limit=${FETCH_CAP}`
-      );
-      if (!res.ok || res.status === 0) {
-        fallbackNeeded = true;
-      }
-    } catch {
-      fallbackNeeded = true;
-    }
-
-    if (fallbackNeeded) {
       const { data, error } = await supabase
         .from('upi_payment_sessions')
         .select('*')
         .order('created_at', { ascending: false });
-
-      if (error) {
-        setMessage({
-          kind: 'err',
-          text: `Load failed: ${error.message || 'HTTP transport'}`,
-        });
-        setSessions([]);
-      } else {
-        setSessions((data as UpSession[]) ?? []);
+      if (!error && data) {
+        setSessions(data as UpSession[]);
         setMessage(null);
+      } else if (error) {
+        setMessage({ kind: 'err', text: `Load failed: ${error.message}` });
       }
+    } catch (err) {
+      console.error('Fetch failed', err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const json = res?.json ?? {};
-    if (json && typeof json.message === 'string' && json.message) {
-      setMessage({
-        kind: 'err',
-        text: `Load failed: ${json.message}`,
-      });
-    } else {
-      setMessage(null);
-    }
-    setSessions(Array.isArray(res?.json) ? (res.json as UpSession[]) : []);
-    setLoading(false);
-    // fnGet intentionally excluded: it's stable-by-refs (tokens read via
-    // authRef.current inside resolveAdminBearer), so this loader must not
-    // rebind to per-render helper identities.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     void load();
-  }, [load, authSession?.token, authSession?.refreshToken]);
+  }, [load]);
 
   // JWT expiry check (local, no network): decode the payload's `exp`.
   // A 30s clock-skew margin guards against sending a token that expires
@@ -280,35 +239,6 @@ export default function AdminPaymentsTab() {
     });
     const json = await res.json().catch(() => null);
     return { ok: res.ok, json, status: res.status };
-  };
-
-  // GET straight to /rest/v1 — the table reads MUST carry the admin
-  // bearer because upi_payment_sessions' only select policy matches
-  // auth.uid() against the admins table (a header-less singleton read
-  // renders auth.uid() null and RLS zeroes the result set).
-  const fnGet = async (
-    path: string,
-    qs: string
-  ): Promise<{ ok: boolean; json: Record<string, unknown> | null; status: number }> => {
-    const bearer = await resolveAdminBearer();
-    if (!bearer) {
-      return { ok: false, json: { error: 'Admin session expired — please sign in again and retry.' }, status: 0 };
-    }
-    adminFnDebug(`rest:${path}`, bearer);
-    try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${path}${qs}`, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${bearer.token}`,
-        },
-      });
-      const json = await res.json().catch(() => null);
-      return { ok: res.ok, json, status: res.status };
-    } catch {
-      return { ok: false, json: null, status: 0 };
-    }
   };
 
   const confirm = async (s: UpSession) => {
