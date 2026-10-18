@@ -22,7 +22,7 @@ type WalletRow = {
 type LedgerRow = {
   id: string;
   type: 'CREDIT' | 'DEBIT';
-  category: 'TOPUP' | 'VOUCHER_PURCHASE' | 'REFUND';
+  category: 'TOPUP' | 'VOUCHER_PURCHASE' | 'REFUND' | 'ADJUSTMENT' | 'ROLLBACK';
   amount: number | string;
   balance_after: number | string;
   reference_id: string | null;
@@ -51,6 +51,8 @@ const categoryLabel: Record<LedgerRow['category'], string> = {
   TOPUP: 'Top-up',
   VOUCHER_PURCHASE: 'Purchase',
   REFUND: 'Refund',
+  ADJUSTMENT: 'Adjustment',
+  ROLLBACK: 'Reversal',
 };
 
 const currentMonthStart = () => {
@@ -192,8 +194,9 @@ export default function WalletLedgerPanel() {
   // CANCELLED→Cancelled; ACTIVE+UTR→Pending verification (UTR shown);
   // ACTIVE no UTR→Awaiting your payment; anything else → raw status.
   const topupStatus = (t: TopupRow): { label: string; cls: string } => {
-    if (t.status === 'CONFIRMED') return { label: 'Confirmed', cls: 'bg-emerald-100 text-emerald-700' };
+    if (t.status === 'CONFIRMED' || t.status === 'SUCCESS') return { label: 'Confirmed', cls: 'bg-emerald-100 text-emerald-700' };
     if (t.status === 'REJECTED') return { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' };
+    if (t.status === 'REVERTED') return { label: 'Reverted', cls: 'bg-orange-100 text-orange-700' };
     if (t.status === 'CANCELLED') return { label: 'Cancelled', cls: 'bg-slate-100 text-slate-500' };
     if (t.status === 'ACTIVE') {
       return t.customer_utr

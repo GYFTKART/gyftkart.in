@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Eye,
+  Loader2,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Smartphone,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { inr, formatDateTime } from '@/lib/format';
 import { useAdminAuth } from '@/context/AdminAuthContext';
+import { useToast } from '@/components/Toast';
 
 type UpSession = {
   id: string;
@@ -31,9 +46,16 @@ const statusStyle: Record<string, string> = {
   FAILED: 'bg-rose-100 text-rose-700',
   CANCELLED: 'bg-rose-100 text-rose-700',
   REJECTED: 'bg-rose-100 text-rose-700',
+  REVERTED: 'bg-orange-100 text-orange-800 border border-orange-200',
 };
 
 const REJECT_REASONS = ['Invalid UTR', 'Amount mismatch', 'Screenshot unreadable'];
+const REVERT_REASONS = [
+  'Approved in error / payment not credited',
+  'Customer requested cancellation',
+  'UTR verification mismatch',
+  'Duplicate credit / chargeback',
+];
 const PAGE_SIZES = [10, 20, 30, 40, 50];
 const FETCH_CAP = 500;
 
@@ -93,13 +115,14 @@ function itemsOf(s: UpSession): ItemView[] {
 const shortOrderId = (id: string) => (id.length > 13 ? `${id.slice(0, 13)}…` : id);
 
 type DateMode = 'all' | 'today' | 'yesterday' | 'week' | 'custom';
-type StatusFilter = 'all' | 'pending' | 'success' | 'rejected';
+type StatusFilter = 'all' | 'pending' | 'success' | 'rejected' | 'reverted';
 
 export default function AdminPaymentsTab() {
   // Admin tokens come from the ISOLATED admin session cache (separate
   // storage key) — a customer sign-in on this tab can never swap the
   // bearer under the confirm/reject calls again (403 'Admins only').
   const { admin: authSession } = useAdminAuth();
+  const { push } = useToast();
   // Latest admin tokens via ref — lets stable useCallback helpers resolve
   // the CURRENT bearer at call time even after a late context hydration.
   const authRef = useRef(authSession);
@@ -120,6 +143,11 @@ export default function AdminPaymentsTab() {
   const [rejectRemark, setRejectRemark] = useState('');
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState(false);
+  const [revertTarget, setRevertTarget] = useState<UpSession | null>(null);
+  const [revertReason, setRevertReason] = useState('');
+  const [revertError, setRevertError] = useState<string | null>(null);
+  const [reverting, setReverting] = useState(false);
+  const [revertingId, setRevertingId] = useState<string | null>(null);
   const [proofPreview, setProofPreview] = useState<{ url: string; path: string } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -323,6 +351,164 @@ export default function AdminPaymentsTab() {
     void load();
   };
 
+  const openRevert = (s: UpSession) => {
+    setRevertTarget(s);
+    setRevertReason('');
+    setRevertError(null);
+  };
+
+  const submitRevert = async () => {
+    if (!revertTarget) return;
+    const s = revertTarget;
+    const rawReason = revertReason.trim();
+    const effectiveReason = rawReason || 'Approved in error / payment not credited';
+
+    if (effectiveReason.length < 3) {
+      setRevertError('Reason for reversion is required (min 3 chars).');
+      return;
+    }
+    if (effectiveReason.length > 500) {
+      setRevertError('Reason too long (max 500 chars).');
+      return;
+    }
+
+    setReverting(true);
+    setRevertingId(s.id);
+    setRevertError(null);
+
+    try {
+      // 1. Dedicated Edge Function upi-revert-payment
+      const edgeRes = await fnPost('upi-revert-payment', {
+        payment_id: s.id,
+        order_id: s.order_id,
+        reason: effectiveReason,
+      });
+
+      if (edgeRes.ok) {
+        setRevertTarget(null);
+        push('Session reverted and wallet balance adjusted successfully', 'success');
+        setMessage({
+          kind: 'ok',
+          text: `Session ${displayRef(s)} reverted and wallet balance adjusted successfully.`,
+        });
+        void load();
+        return;
+      }
+
+      // If Edge Function returned a specific functional error (not 404/transport)
+      if (edgeRes.status !== 404 && edgeRes.status !== 0 && edgeRes.json && typeof edgeRes.json.error === 'string') {
+        setRevertError(edgeRes.json.error);
+        return;
+      }
+
+      // 2. Direct atomic execution fallback: RPC admin_revert_payment_session
+      const { data: rpcData, error: rpcError } = await supabase.rpc('admin_revert_payment_session', {
+        p_payment_id: s.id,
+        p_reason: effectiveReason,
+      });
+
+      if (!rpcError && rpcData?.ok) {
+        setRevertTarget(null);
+        push('Session reverted and wallet balance adjusted successfully', 'success');
+        setMessage({
+          kind: 'ok',
+          text: `Session ${displayRef(s)} reverted and wallet balance adjusted successfully.`,
+        });
+        void load();
+        return;
+      }
+
+      // 3. Fallback: For TOPUP sessions, call existing wallet_debit RPC directly
+      if (s.category === 'TOPUP') {
+        const amountPaise = Number(s.amount_paise);
+        const { data: balanceAfter, error: debitError } = await supabase.rpc('wallet_debit', {
+          p_user: s.user_id,
+          p_amount: amountPaise,
+          p_category: 'REFUND',
+          p_order: s.order_id,
+          p_reference: `Reversal of top-up session ${s.order_id}`,
+        });
+
+        if (debitError) {
+          setRevertError(debitError.message || 'Failed to deduct customer wallet balance.');
+          return;
+        }
+
+        const remarkNote = `Reverted by Admin: ${effectiveReason}`;
+        const newRemark = s.admin_remark ? `${s.admin_remark} | ${remarkNote}` : remarkNote;
+
+        // Update session status: try REVERTED, then REJECTED if check constraint limits
+        let updResult = await supabase
+          .from('upi_payment_sessions')
+          .update({
+            status: 'REVERTED',
+            admin_remark: newRemark,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', s.id);
+
+        if (updResult.error) {
+          updResult = await supabase
+            .from('upi_payment_sessions')
+            .update({
+              status: 'REJECTED',
+              admin_remark: newRemark,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', s.id);
+        }
+
+        setRevertTarget(null);
+        push('Session reverted and wallet balance adjusted successfully', 'success');
+        setMessage({
+          kind: 'ok',
+          text: `Session ${displayRef(s)} reverted. Customer balance updated to ₹${(Number(balanceAfter) / 100).toFixed(2)}.`,
+        });
+        void load();
+        return;
+      }
+
+      // For non-topup (voucher) sessions:
+      const remarkNote = `Reverted by Admin: ${effectiveReason}`;
+      const newRemark = s.admin_remark ? `${s.admin_remark} | ${remarkNote}` : remarkNote;
+      let updResult = await supabase
+        .from('upi_payment_sessions')
+        .update({
+          status: 'REVERTED',
+          admin_remark: newRemark,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', s.id);
+
+      if (updResult.error) {
+        updResult = await supabase
+          .from('upi_payment_sessions')
+          .update({
+            status: 'REJECTED',
+            admin_remark: newRemark,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', s.id);
+      }
+
+      if (updResult.error) {
+        setRevertError(`Session update failed: ${updResult.error.message}`);
+        return;
+      }
+
+      setRevertTarget(null);
+      push('Session reverted and wallet balance adjusted successfully', 'success');
+      setMessage({ kind: 'ok', text: `Session ${displayRef(s)} marked as reverted.` });
+      void load();
+    } catch (err) {
+      console.error('Revert exception:', err);
+      setRevertError(err instanceof Error ? err.message : 'Reversion failed unexpectedly.');
+    } finally {
+      setReverting(false);
+      setRevertingId(null);
+    }
+  };
+
   const openProofPreview = async (s: UpSession) => {
     if (!s.proof_path) return;
     setPreviewLoading(true);
@@ -368,8 +554,9 @@ export default function AdminPaymentsTab() {
     (status: string) => {
       if (statusFilter === 'all') return true;
       if (statusFilter === 'pending') return status === 'INITIATED' || status === 'ACTIVE';
-      if (statusFilter === 'success') return status === 'SUCCESS';
+      if (statusFilter === 'success') return status === 'SUCCESS' || status === 'CONFIRMED';
       if (statusFilter === 'rejected') return status === 'REJECTED';
+      if (statusFilter === 'reverted') return status === 'REVERTED';
       return true;
     },
     [statusFilter]
@@ -397,20 +584,26 @@ export default function AdminPaymentsTab() {
     let confirmedPaise = 0;
     let pending = 0;
     let rejected = 0;
+    let reverted = 0;
     let created = 0;
     let topups = 0;
     let topupsConfirmedPaise = 0;
     for (const s of sessions) {
       if (isLocalToday(s.created_at)) created += 1;
-      if (s.status === 'SUCCESS' && isLocalToday(s.completed_at)) confirmedPaise += Number(s.amount_paise);
+      if ((s.status === 'SUCCESS' || s.status === 'CONFIRMED') && isLocalToday(s.completed_at)) {
+        confirmedPaise += Number(s.amount_paise);
+      }
       if ((s.status === 'INITIATED' || s.status === 'ACTIVE') && isLocalToday(s.created_at)) pending += 1;
       if (s.status === 'REJECTED' && isLocalToday(s.completed_at)) rejected += 1;
+      if (s.status === 'REVERTED' && isLocalToday(s.completed_at)) reverted += 1;
       if (s.category === 'TOPUP') {
         if (isLocalToday(s.created_at)) topups += 1;
-        if (s.status === 'SUCCESS' && isLocalToday(s.completed_at)) topupsConfirmedPaise += Number(s.amount_paise);
+        if ((s.status === 'SUCCESS' || s.status === 'CONFIRMED') && isLocalToday(s.completed_at)) {
+          topupsConfirmedPaise += Number(s.amount_paise);
+        }
       }
     }
-    return { created, confirmedPaise, pending, rejected, topups, topupsConfirmedPaise };
+    return { created, confirmedPaise, pending, rejected, reverted, topups, topupsConfirmedPaise };
   }, [sessions]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -668,6 +861,10 @@ export default function AdminPaymentsTab() {
           <p className="text-[10px] font-bold uppercase tracking-wide text-rose-500">Rejected today</p>
           <p className="text-sm font-bold text-rose-700">{stats.rejected}</p>
         </div>
+        <div className="rounded-xl border border-orange-100 bg-orange-50 px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-orange-500">Reverted today</p>
+          <p className="text-sm font-bold text-orange-700">{stats.reverted}</p>
+        </div>
         <div className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2">
           <p className="text-[10px] font-bold uppercase tracking-wide text-sky-500">Top-ups today</p>
           <p className="text-sm font-bold text-sky-700">{stats.topups}</p>
@@ -711,6 +908,7 @@ export default function AdminPaymentsTab() {
             <option value="pending">Pending Verification</option>
             <option value="success">Confirmed / Success</option>
             <option value="rejected">Rejected</option>
+            <option value="reverted">Reverted</option>
           </select>
           <select
             value={dateMode}
@@ -1005,6 +1203,28 @@ export default function AdminPaymentsTab() {
                               Reject
                             </button>
                           </div>
+                        ) : (s.status === 'SUCCESS' || s.status === 'CONFIRMED') ? (
+                          <div className="flex items-center justify-end md:justify-center pr-2 shrink-0 whitespace-nowrap">
+                            <button
+                              onClick={() => openRevert(s)}
+                              disabled={revertingId === s.id}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs whitespace-nowrap font-medium text-amber-800 hover:bg-amber-100 hover:border-amber-400 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              title="Revert / Rollback confirmed payment session"
+                            >
+                              {revertingId === s.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                              ) : (
+                                <RotateCcw className="h-3.5 w-3.5 text-amber-600" />
+                              )}
+                              Revert
+                            </button>
+                          </div>
+                        ) : s.status === 'REVERTED' ? (
+                          <div className="flex items-center justify-end md:justify-center pr-2">
+                            <span className="inline-block rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800">
+                              Reverted
+                            </span>
+                          </div>
                         ) : (
                           <div className="flex items-center justify-end md:justify-center pr-2">
                             <span className="whitespace-nowrap text-[11px] text-slate-400">No action</span>
@@ -1283,6 +1503,141 @@ export default function AdminPaymentsTab() {
               >
                 {batchBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
                 Reject {selectedPendingCount} Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revert / Rollback modal */}
+      {revertTarget && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4"
+          onClick={() => !reverting && setRevertTarget(null)}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-100 text-amber-700">
+                  <RotateCcw className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Revert Payment Session</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Rollback confirmed transaction &amp; adjust ledger
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => !reverting && setRevertTarget(null)}
+                disabled={reverting}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Session ID:</span>
+                <span className="font-mono font-semibold text-slate-900">{displayRef(revertTarget)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Amount:</span>
+                <span className="font-bold text-slate-900">{inr(Number(revertTarget.amount_paise) / 100)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Category:</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  revertTarget.category === 'TOPUP' ? 'bg-sky-100 text-sky-700' : 'bg-purple-100 text-purple-700'
+                }`}>
+                  {revertTarget.category === 'TOPUP' ? 'Wallet Top-up' : 'Voucher Purchase'}
+                </span>
+              </div>
+              {buyerOf(revertTarget.buyer).email && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Customer:</span>
+                  <span className="font-medium text-slate-700 truncate max-w-[200px]">
+                    {buyerOf(revertTarget.buyer).email}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 p-2.5 text-[11px] text-amber-900 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+              <span>
+                {revertTarget.category === 'TOPUP'
+                  ? `Reverting this top-up will immediately deduct ${inr(Number(revertTarget.amount_paise) / 100)} from the customer's wallet balance and record a compensating debit in the ledger.`
+                  : `Reverting this confirmed session will mark it as REVERTED with the audit remark below.`}
+              </span>
+            </div>
+
+            <div className="mt-3">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Reason for Reversion
+              </label>
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {REVERT_REASONS.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => {
+                      setRevertReason(r);
+                      setRevertError(null);
+                    }}
+                    disabled={reverting}
+                    className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 transition-colors"
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={revertReason}
+                onChange={(e) => {
+                  setRevertReason(e.target.value);
+                  setRevertError(null);
+                }}
+                rows={3}
+                maxLength={500}
+                placeholder="Approved in error / payment not credited"
+                disabled={reverting}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-slate-400"
+              />
+            </div>
+
+            {revertError && (
+              <p className="mt-2 text-[11px] font-semibold text-rose-600">{revertError}</p>
+            )}
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRevertTarget(null)}
+                disabled={reverting}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitRevert()}
+                disabled={reverting}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition-colors disabled:opacity-60"
+              >
+                {reverting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Reverting...
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Confirm Revert
+                  </>
+                )}
               </button>
             </div>
           </div>
