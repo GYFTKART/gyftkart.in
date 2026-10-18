@@ -44,16 +44,64 @@ serve(async (req) => {
     if (userError || !user) return jsonResponse({ error: 'Invalid or expired session' }, 401);
 
     const body = await req.json();
-    const amountPaise = rupeesToPaise(body.amount);
-    if (!amountPaise) return jsonResponse({ error: 'Invalid amount' }, 400);
-    if (!Array.isArray(body.items) || body.items.length === 0) {
-      return jsonResponse({ error: 'Missing cart items' }, 400);
+
+    // VOUCHER (default) keeps the original flow: server-priced in rupees,
+    // items mandatory. TOPUP carries the paisa amount from the client
+    // (validated 1..10000000 here) and needs no items.
+    const category = body.category === 'TOPUP' ? 'TOPUP' : 'VOUCHER';
+    let amountPaise: number | null = null;
+    if (category === 'TOPUP') {
+      const n = Number(body.amount);
+      amountPaise =
+        Number.isInteger(n) && n >= 1 && n <= 10000000 ? n : null;
+      if (!amountPaise) return jsonResponse({ error: 'Invalid amount' }, 400);
+    } else {
+      amountPaise = rupeesToPaise(body.amount);
+      if (!amountPaise) return jsonResponse({ error: 'Invalid amount' }, 400);
+      if (!Array.isArray(body.items) || body.items.length === 0) {
+        return jsonResponse({ error: 'Missing cart items' }, 400);
+      }
     }
 
     const admin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
+
+    // Intent-time quota check: the SECURITY DEFINER wallet RPC must not
+    // see a top-up slip past the ₹10,000/month cap at confirm time.
+    let wallet: { monthly_added_amount: number; last_reset_month: string } | null = null;
+    if (category === 'TOPUP') {
+      const { data: ensured, error: walletErr } = await admin
+        .rpc('ensure_wallet', { p_user: user.id })
+        .single();
+      if (walletErr || !ensured) {
+        console.error('ensure_wallet failed:', walletErr);
+        return jsonResponse(
+          { error: walletErr?.message ?? 'Could not resolve wallet' },
+          500
+        );
+      }
+      wallet = ensured as unknown as {
+        monthly_added_amount: number;
+        last_reset_month: string;
+      };
+      const currentMonth = new Date().toISOString().slice(0, 8) + '01';
+      const monthlyUsed =
+        wallet.last_reset_month === currentMonth
+          ? Number(wallet.monthly_added_amount)
+          : 0;
+      const remaining = 10000000 - monthlyUsed;
+      if (Number(amountPaise) > remaining) {
+        return jsonResponse(
+          {
+            error: 'Top-up limit for this month exceeded',
+            remaining,
+          },
+          400
+        );
+      }
+    }
 
     const { data: config, error: configErr } = await admin
       .from('upi_gateway_config')
@@ -76,10 +124,11 @@ serve(async (req) => {
         user_id: user.id,
         order_id: orderId,
         amount_paise: Number(amountPaise),
-        items: body.items,
+        items: category === 'TOPUP' ? null : body.items,
         buyer: body.buyer ?? null,
         status: 'ACTIVE',
         expires_at: expiresAt,
+        category,
       })
       .select('id, order_id, amount_paise')
       .single();

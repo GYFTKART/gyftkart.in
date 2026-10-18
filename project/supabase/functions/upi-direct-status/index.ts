@@ -58,7 +58,7 @@ serve(async (req) => {
 
     const { data: session } = await admin
       .from('upi_payment_sessions')
-      .select('id, order_id, user_id, amount_paise, currency, status, expires_at, bank_ref')
+      .select('id, order_id, user_id, amount_paise, currency, status, expires_at, bank_ref, category')
       .eq('id', payment_id)
       .maybeSingle();
 

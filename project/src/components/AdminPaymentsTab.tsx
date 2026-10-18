@@ -15,6 +15,7 @@ type UpSession = {
   verification_level: string | null;
   buyer: { name?: string; email?: string } | null;
   items: unknown[] | null;
+  category: string;
   customer_utr: string | null;
   proof_path: string | null;
   admin_remark: string | null;
@@ -329,13 +330,19 @@ export default function AdminPaymentsTab() {
     let pending = 0;
     let rejected = 0;
     let created = 0;
+    let topups = 0;
+    let topupsConfirmedPaise = 0;
     for (const s of sessions) {
       if (isLocalToday(s.created_at)) created += 1;
       if (s.status === 'SUCCESS' && isLocalToday(s.completed_at)) confirmedPaise += Number(s.amount_paise);
       if ((s.status === 'INITIATED' || s.status === 'ACTIVE') && isLocalToday(s.created_at)) pending += 1;
       if (s.status === 'REJECTED' && isLocalToday(s.completed_at)) rejected += 1;
+      if (s.category === 'TOPUP') {
+        if (isLocalToday(s.created_at)) topups += 1;
+        if (s.status === 'SUCCESS' && isLocalToday(s.completed_at)) topupsConfirmedPaise += Number(s.amount_paise);
+      }
     }
-    return { created, confirmedPaise, pending, rejected };
+    return { created, confirmedPaise, pending, rejected, topups, topupsConfirmedPaise };
   }, [sessions]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -363,7 +370,7 @@ export default function AdminPaymentsTab() {
   }, [currentPage, pageCount]);
 
   const exportCsv = () => {
-    const header = ['created_at', 'order_id', 'payment_session_id', 'status', 'amount_rupees', 'buyer_name', 'buyer_email', 'user_id', 'customer_utr', 'verified_utr', 'admin_remark', 'completed_at'];
+    const header = ['created_at', 'order_id', 'payment_session_id', 'status', 'category', 'amount_rupees', 'buyer_name', 'buyer_email', 'user_id', 'customer_utr', 'verified_utr', 'admin_remark', 'completed_at'];
     const rows = filtered.map((s) => {
       const buyer = buyerOf(s.buyer);
       return [
@@ -371,6 +378,7 @@ export default function AdminPaymentsTab() {
         s.order_id,
         s.id,
         s.status,
+        s.category,
         (Number(s.amount_paise) / 100).toFixed(2),
         buyer.name,
         buyer.email,
@@ -414,7 +422,7 @@ export default function AdminPaymentsTab() {
       </div>
 
       {/* Daily stats bar (all proof-bearing sessions of today — day stats, not table stats) */}
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-7">
         <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Created today</p>
           <p className="text-sm font-bold text-slate-900">{stats.created}</p>
@@ -430,6 +438,14 @@ export default function AdminPaymentsTab() {
         <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2">
           <p className="text-[10px] font-bold uppercase tracking-wide text-rose-500">Rejected today</p>
           <p className="text-sm font-bold text-rose-700">{stats.rejected}</p>
+        </div>
+        <div className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-sky-500">Top-ups today</p>
+          <p className="text-sm font-bold text-sky-700">{stats.topups}</p>
+        </div>
+        <div className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-sky-500">Top-up amount (confirmed)</p>
+          <p className="text-sm font-bold text-sky-700">{inr(stats.topupsConfirmedPaise / 100)}</p>
         </div>
         <button
           onClick={exportCsv}
@@ -557,7 +573,7 @@ export default function AdminPaymentsTab() {
                       </td>
                       <td className="px-3 py-3">
                         <p className="whitespace-nowrap font-bold text-slate-900">{s.order_id}</p>
-                        <p className="mt-0.5">
+                        <p className="mt-0.5 flex flex-wrap items-center gap-1">
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                               s.status === 'INITIATED' || s.status === 'ACTIVE'
@@ -567,6 +583,15 @@ export default function AdminPaymentsTab() {
                           >
                             {s.status === 'INITIATED' || s.status === 'ACTIVE' ? 'PENDING VERIFICATION' : s.status}
                             {s.verification_level === 'MANUAL' ? ' · manual' : s.verification_level === 'GMAIL' ? ' · observer' : ''}
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              s.category === 'TOPUP'
+                                ? 'bg-sky-100 text-sky-700'
+                                : 'bg-purple-100 text-purple-700'
+                            }`}
+                          >
+                            {s.category === 'TOPUP' ? 'TOPUP' : 'VOUCHER'}
                           </span>
                         </p>
                       </td>

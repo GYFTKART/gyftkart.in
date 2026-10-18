@@ -134,6 +134,90 @@ serve(async (req) => {
     if (decision.action !== 'pending' && decision.action !== 'confirm') {
       return jsonResponse({ error: decision.reason ?? 'Not confirmable' }, 400);
     }
+
+    // ============ TOPUP path: credit the wallet, NO voucher issuance ====
+    // No orders/gift_cards rows exist or get created for top-ups; the
+    // ledger row is the money trail. Response mirrors the voucher
+    // variants ({ order } for vouchers, { credited } for top-ups).
+    const isTopup = session?.category === 'TOPUP';
+    if (isTopup) {
+      if (decision.action === 'confirm' && session.bank_ref) {
+        // Idempotent replay guard for already-credited top-ups.
+        const { data: existingTx } = await admin
+          .from('wallet_transactions')
+          .select('balance_after, amount')
+          .eq('order_id', session.order_id)
+          .eq('type', 'CREDIT')
+          .eq('category', 'TOPUP')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existingTx) {
+          return jsonResponse(
+            {
+              credited: {
+                order_id: session.order_id,
+                amount_paise: session.amount_paise,
+                balance_after: existingTx.balance_after,
+              },
+              note: 'already credited',
+            },
+            200
+          );
+        }
+      }
+
+      if (decision.action === 'pending') {
+        const upd = await admin
+          .from('upi_payment_sessions')
+          .update({
+            status: 'SUCCESS',
+            bank_ref,
+            verification_level: 'MANUAL',
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', session!.id)
+          .select('id, order_id, user_id, amount_paise, category')
+          .single();
+        if (upd.error) {
+          // most likely bank_ref replay (unique index) — surface cleanly
+          return jsonResponse(
+            { error: `Confirmation rejected: ${upd.error.message}` },
+            409
+          );
+        }
+        session = upd.data;
+      }
+
+      const { data: balanceAfter, error: creditError } = await admin.rpc(
+        'wallet_credit',
+        {
+          p_user: session!.user_id,
+          p_amount: session!.amount_paise,
+          p_reference: session!.order_id,
+          p_order: session!.order_id,
+        }
+      );
+      if (creditError || balanceAfter === null || balanceAfter === undefined) {
+        return jsonResponse(
+          { error: creditError?.message ?? 'Wallet credit failed' },
+          500
+        );
+      }
+
+      return jsonResponse(
+        {
+          credited: {
+            order_id: session!.order_id,
+            amount_paise: session!.amount_paise,
+            balance_after: Number(balanceAfter),
+          },
+        },
+        200
+      );
+    }
+
+    // ================= VOUCHER path: exactly today's behavior ============
     if (decision.action === 'confirm' && session.bank_ref) {
       const { data: existingOrder } = await admin
         .from('orders')
