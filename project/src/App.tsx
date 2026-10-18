@@ -47,6 +47,7 @@ const AdminCustomersPage = lazy(() => import('@/pages/AdminCustomersPage'));
 const AdminSettingsPage = lazy(() => import('@/pages/AdminSettingsPage'));
 const AdminGeneralInquiriesPage = lazy(() => import('@/pages/AdminGeneralInquiriesPage'));
 const AdminWalletManagementPage = lazy(() => import('@/pages/AdminWalletManagementPage'));
+const AdminSubHubPage = lazy(() => import('@/pages/AdminSubHubPage'));
 
 
 // We take over scroll restoration entirely ourselves (see ScrollManager
@@ -506,6 +507,66 @@ export default function App() {
                     }
                   />
                   <Route path="/admin/payments" element={<Navigate to="/admin/upi-direct" replace />} />
+                  <Route
+                    path="/admin/customers-hub"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminSubHubPage hubKey="customers" />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/accounting-hub"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminSubHubPage hubKey="accounting" />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/orders-hub"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminSubHubPage hubKey="orders" />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/inquiries-hub"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminSubHubPage hubKey="inquiries" />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/payments-hub"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminSubHubPage hubKey="payments" />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
+                  <Route
+                    path="/admin/brands-hub"
+                    element={
+                      <AdminAuthProvider>
+                        <ProtectedAdminRoute>
+                          <AdminSubHubPage hubKey="brands" />
+                        </ProtectedAdminRoute>
+                      </AdminAuthProvider>
+                    }
+                  />
 
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>

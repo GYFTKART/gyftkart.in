@@ -7,13 +7,11 @@ import {
   Building2,
   ShoppingBag,
   Tag,
-  Banknote,
   Scale,
   Wallet,
   ArrowRight,
   RefreshCw,
   HelpCircle,
-  CreditCard,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
@@ -123,141 +121,70 @@ export default function AdminDashboardPage() {
 
   if (!admin) return null;
 
-  // 6 Primary Module Hubs according to specification
-  const primaryModuleHubs = [
+  // 6 Primary Category Hubs for the 2-step Drill-Down architecture
+  const primaryCategories = [
     {
       id: 'customers',
       title: 'Customers',
-      desc: 'Manage retail B2C users, corporate B2B clients, verification, and access controls.',
+      desc: 'Manage retail B2C users, corporate B2B clients, account status, and verification credentials.',
       icon: Users,
       accent: 'from-blue-600 to-indigo-700',
       badge: `${stats.customerCount} Accounts`,
-      subModules: [
-        {
-          name: 'B2C Customers',
-          desc: 'Retail accounts, block/unblock, password reset',
-          to: '/admin/customers',
-          icon: Users,
-        },
-        {
-          name: 'B2B Customers',
-          desc: 'Corporate accounts, manual onboarding, GSTIN/PAN records',
-          to: '/admin/b2b-customers',
-          icon: Building2,
-        },
-      ],
+      to: '/admin/customers-hub',
+      subModuleCount: 2,
     },
     {
       id: 'brands',
       title: 'Brands',
-      desc: 'Brand catalogue management, margins, denominations, and availability.',
+      desc: 'Brand catalogue management, commission margins, gift card denominations, and availability controls.',
       icon: Tag,
       accent: 'from-brand-600 to-brand-800',
       badge: 'Brand Catalog',
-      subModules: [
-        {
-          name: 'Manage Brands',
-          desc: 'Catalogue management, margin tiers, denominations & availability',
-          to: '/admin/brands',
-          icon: Tag,
-        },
-      ],
+      to: '/admin/brands-hub',
+      subModuleCount: 1,
     },
     {
       id: 'accounting',
       title: 'Accounting & Ledgers',
-      desc: 'Double-entry books, customer statement reconciliation, and financial audit logs.',
+      desc: 'Double-entry books, customer statement reconciliation, corporate tax ledgers, and platform P&L.',
       icon: Scale,
       accent: 'from-emerald-600 to-teal-700',
       badge: 'Ledger Suites',
-      subModules: [
-        {
-          name: 'Customer Ledger',
-          desc: 'B2C user ledger statements & wallet audit',
-          to: '/admin/customer-ledger',
-          icon: Banknote,
-        },
-        {
-          name: 'B2B Ledger',
-          desc: 'Corporate client accounts & GST statements',
-          to: '/admin/b2b-ledger',
-          icon: Building2,
-        },
-        {
-          name: 'Company Ledger',
-          desc: 'Platform P&L, sales revenue, and payouts',
-          to: '/admin/company-ledger',
-          icon: Scale,
-        },
-      ],
+      to: '/admin/accounting-hub',
+      subModuleCount: 3,
     },
     {
       id: 'orders',
       title: 'Orders',
-      desc: 'Gift card issuance records, delivery status, voucher codes, and invoices.',
+      desc: 'Gift card issuance records, delivery status, voucher codes, tracking IDs, and customer tax invoices.',
       icon: ShoppingBag,
       accent: 'from-fuchsia-600 to-purple-700',
       badge: `${stats.orderCount} Orders`,
-      subModules: [
-        {
-          name: 'Gift Card Sales',
-          desc: 'Gift card issuance records, delivery status, voucher codes, and invoices',
-          to: '/admin/gift-card-sales',
-          icon: ShoppingBag,
-        },
-      ],
+      to: '/admin/orders-hub',
+      subModuleCount: 1,
     },
     {
       id: 'inquiries',
       title: 'Inquiries',
-      desc: 'Customer communications, corporate bulk quote requests, and support tickets.',
+      desc: 'Corporate bulk quote inquiries, customer helpdesk communications, and general support tickets.',
       icon: HelpCircle,
       accent: 'from-amber-500 to-amber-700',
       badge: `${stats.pendingInquiries} New Leads`,
-      subModules: [
-        {
-          name: 'Corporate Inquiries',
-          desc: 'Corporate communications, corporate bulk quote requests',
-          to: '/admin/corporate-inquiries',
-          icon: Building2,
-        },
-        {
-          name: 'General Enquiries',
-          desc: 'Customer communications, support desk & ticket resolution',
-          to: '/admin/general-inquiries',
-          icon: HelpCircle,
-        },
-      ],
+      to: '/admin/inquiries-hub',
+      subModuleCount: 2,
     },
     {
       id: 'payments',
       title: 'Payments & Gateways',
-      desc: 'Manage gateway integrations, direct UPI verification, and wallet balances.',
+      desc: 'Direct UPI verification, digital wallet reserve management, and third-party payment gateway settings.',
       icon: Wallet,
       accent: 'from-violet-600 to-purple-800',
       badge: 'Gateways & Balances',
-      subModules: [
-        {
-          name: 'UPI Direct',
-          desc: 'Direct QR / UTR verification flow & payment approvals',
-          to: '/admin/upi-direct',
-          icon: Wallet,
-        },
-        {
-          name: 'GyftKart Wallet',
-          desc: 'Wallet management, aggregate liabilities & balance compliance',
-          to: '/admin/wallet-management',
-          icon: Banknote,
-        },
-        {
-          name: 'Razorpay',
-          desc: 'Card, Netbanking, webhook credentials & gateway status',
-          to: '/admin/payment-settings?gateway=razorpay',
-          icon: CreditCard,
-        },
-      ],
+      to: '/admin/payments-hub',
+      subModuleCount: 3,
     },
   ];
+
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -342,71 +269,48 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {primaryModuleHubs.map((hub) => {
-              const HubIcon = hub.icon;
+            {primaryCategories.map((cat) => {
+              const CatIcon = cat.icon;
               return (
-                <div
-                  key={hub.id}
-                  className="flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-6 shadow-soft hover:shadow-card transition-all"
+                <Link
+                  key={cat.id}
+                  to={cat.to}
+                  className="group flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-6 shadow-soft hover:shadow-card hover:border-brand-300 transition-all cursor-pointer"
                 >
                   <div>
-                    {/* Hub Top Bar */}
+                    {/* Top Bar: Icon + Badge */}
                     <div className="flex items-center justify-between gap-3 mb-4">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`grid place-items-center h-11 w-11 rounded-2xl bg-gradient-to-br ${hub.accent} text-white shadow-sm shrink-0`}
-                        >
-                          <HubIcon className="h-5 w-5" />
-                        </span>
-                        <div>
-                          <h3 className="font-display text-base font-bold text-slate-900 tracking-tight">
-                            {hub.title}
-                          </h3>
-                          <span className="text-[11px] font-semibold text-slate-400">
-                            {hub.subModules.length} {hub.subModules.length === 1 ? 'Sub-module' : 'Sub-modules'}
-                          </span>
-                        </div>
-                      </div>
+                      <span
+                        className={`grid place-items-center h-12 w-12 rounded-2xl bg-gradient-to-br ${cat.accent} text-white shadow-sm shrink-0 group-hover:scale-105 transition-transform`}
+                      >
+                        <CatIcon className="h-6 w-6" />
+                      </span>
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
-                        {hub.badge}
+                        {cat.badge}
                       </span>
                     </div>
 
-                    {/* Hub Description */}
-                    <p className="text-xs text-slate-500 leading-relaxed mb-5">
-                      {hub.desc}
-                    </p>
+                    {/* Title */}
+                    <h3 className="font-display text-lg font-bold text-slate-900 group-hover:text-brand-700 transition-colors">
+                      {cat.title}
+                    </h3>
 
-                    {/* Sub-cards Container */}
-                    <div className="space-y-2.5">
-                      {hub.subModules.map((sub) => {
-                        const SubIcon = sub.icon;
-                        return (
-                          <Link
-                            key={sub.to}
-                            to={sub.to}
-                            className="group flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-white hover:border-brand-300 hover:shadow-sm px-3.5 py-3 transition-all"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className="grid place-items-center h-8 w-8 rounded-xl bg-white border border-slate-200/60 text-slate-600 group-hover:text-brand-600 group-hover:border-brand-200 transition-colors shrink-0">
-                                <SubIcon className="h-4 w-4" />
-                              </span>
-                              <div className="min-w-0">
-                                <p className="text-xs font-bold text-slate-800 group-hover:text-brand-700 transition-colors truncate">
-                                  {sub.name}
-                                </p>
-                                <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                                  {sub.desc}
-                                </p>
-                              </div>
-                            </div>
-                            <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-brand-600 group-hover:translate-x-1 transition-all shrink-0" />
-                          </Link>
-                        );
-                      })}
-                    </div>
+                    {/* Description */}
+                    <p className="text-xs text-slate-500 leading-relaxed mt-2">
+                      {cat.desc}
+                    </p>
                   </div>
-                </div>
+
+                  {/* Bottom Action */}
+                  <div className="pt-5 border-t border-slate-100 mt-6 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-400 group-hover:text-slate-600 transition-colors">
+                      {cat.subModuleCount} {cat.subModuleCount === 1 ? 'Sub-module' : 'Sub-modules'}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 group-hover:text-brand-700 group-hover:translate-x-1 transition-all">
+                      Open Hub <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                </Link>
               );
             })}
           </div>
