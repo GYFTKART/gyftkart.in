@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Download, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { inr, formatDateTime } from '@/lib/format';
 
@@ -30,12 +30,21 @@ const statusStyle: Record<string, string> = {
 };
 
 const REJECT_REASONS = ['Invalid UTR', 'Amount mismatch', 'Screenshot unreadable'];
+const PAGE_SIZES = [10, 20, 30, 40, 50];
+const FETCH_CAP = 500;
 
 const isLocalToday = (iso: string | null) => {
   if (!iso) return false;
   const d = new Date(iso);
   const now = new Date();
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+};
+
+// Local calendar-day index (midnight-based) for created_at comparisons.
+const localDay = (iso: string | null) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 };
 
 // CSV cells must stay single-line: the multiline-JSON trap chokes the
@@ -49,6 +58,8 @@ function buyerOf(b: UpSession['buyer']) {
   return { name: b?.name ?? '', email: b?.email ?? '' };
 }
 
+type DateMode = 'all' | 'today' | 'yesterday' | 'week' | 'custom';
+
 export default function AdminPaymentsTab() {
   const [sessions, setSessions] = useState<UpSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +67,11 @@ export default function AdminPaymentsTab() {
   const [utrDrafts, setUtrDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [search, setSearch] = useState('');
+  const [dateMode, setDateMode] = useState<DateMode>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [rejectTarget, setRejectTarget] = useState<UpSession | null>(null);
   const [rejectRemark, setRejectRemark] = useState('');
   const [rejectError, setRejectError] = useState<string | null>(null);
@@ -68,7 +84,7 @@ export default function AdminPaymentsTab() {
       .select('*')
       .or('customer_utr.not.is.null,proof_path.not.is.null')
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(FETCH_CAP);
     if (error) {
       setMessage({ kind: 'err', text: `Load failed: ${error.message}` });
     }
@@ -145,10 +161,36 @@ export default function AdminPaymentsTab() {
     void load();
   };
 
+  const inDateRange = useCallback(
+    (iso: string | null) => {
+      if (dateMode === 'all') return true;
+      const day = localDay(iso);
+      if (day === null) return false;
+      if (dateMode === 'today' || dateMode === 'yesterday') {
+        const now = new Date();
+        const offset = dateMode === 'today' ? 0 : 1;
+        const target = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset).getTime();
+        return day === target;
+      }
+      if (dateMode === 'week') {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).getTime();
+        return day >= start && day <= new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      }
+      const from = customFrom ? new Date(customFrom + 'T00:00:00').getTime() : null;
+      const to = customTo ? new Date(customTo + 'T00:00:00').getTime() : null;
+      if (from !== null && day < from) return false;
+      if (to !== null && day > to) return false;
+      return from !== null || to !== null;
+    },
+    [dateMode, customFrom, customTo]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return sessions;
     return sessions.filter((s) => {
+      if (!inDateRange(s.created_at)) return false;
+      if (!q) return true;
       const buyer = buyerOf(s.buyer);
       return (
         s.order_id.toLowerCase().includes(q) ||
@@ -159,7 +201,7 @@ export default function AdminPaymentsTab() {
         buyer.email.toLowerCase().includes(q)
       );
     });
-  }, [sessions, search]);
+  }, [sessions, search, inDateRange]);
 
   const stats = useMemo(() => {
     let confirmedPaise = 0;
@@ -174,6 +216,30 @@ export default function AdminPaymentsTab() {
     }
     return { created, confirmedPaise, pending, rejected };
   }, [sessions]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visible = useMemo(
+    () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [filtered, currentPage, pageSize]
+  );
+  const showingFrom = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const showingTo = Math.min(currentPage * pageSize, filtered.length);
+
+  const pageButtons: (number | 'gap')[] = useMemo(() => {
+    const nums = new Set(
+      [1, currentPage - 1, currentPage, currentPage + 1, pageCount].filter((n) => n >= 1 && n <= pageCount)
+    );
+    const sorted = [...nums].sort((a, b) => a - b);
+    const out: (number | 'gap')[] = [];
+    let prev = 0;
+    for (const n of sorted) {
+      if (n - prev > 1) out.push('gap');
+      out.push(n);
+      prev = n;
+    }
+    return out;
+  }, [currentPage, pageCount]);
 
   const exportCsv = () => {
     const header = ['created_at', 'order_id', 'payment_session_id', 'status', 'amount_rupees', 'buyer_name', 'buyer_email', 'user_id', 'customer_utr', 'verified_utr', 'admin_remark', 'completed_at'];
@@ -204,6 +270,9 @@ export default function AdminPaymentsTab() {
     URL.revokeObjectURL(url);
   };
 
+  const dateFilterClass =
+    'rounded-lg border border-slate-200 py-2 px-3 text-xs outline-none focus:border-slate-400';
+
   return (
     <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -223,7 +292,7 @@ export default function AdminPaymentsTab() {
         </button>
       </div>
 
-      {/* Daily stats bar */}
+      {/* Daily stats bar (all proof-bearing sessions of today — day stats, not table stats) */}
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Created today</p>
@@ -249,15 +318,60 @@ export default function AdminPaymentsTab() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative mt-4">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search order id, UTR, customer name/email, user id…"
-          className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-slate-400"
-        />
+      {/* Search + date filter (combined AND) */}
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1 min-w-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search order id, UTR, customer name/email, user id…"
+            className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-slate-400"
+          />
+        </div>
+        <div className="flex flex-nowrap items-center gap-2">
+          <select
+            value={dateMode}
+            onChange={(e) => {
+              setDateMode(e.target.value as DateMode);
+              setPage(1);
+            }}
+            className={`${dateFilterClass} shrink-0`}
+          >
+            <option value="all">All Dates</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="week">Last 7 Days</option>
+            <option value="custom">Custom</option>
+          </select>
+          {dateMode === 'custom' && (
+            <input
+              type="date"
+              value={customFrom}
+              max={customTo || undefined}
+              onChange={(e) => {
+                setCustomFrom(e.target.value);
+                setPage(1);
+              }}
+              className={`${dateFilterClass} w-36`}
+            />
+          )}
+          {dateMode === 'custom' && (
+            <input
+              type="date"
+              value={customTo}
+              min={customFrom || undefined}
+              onChange={(e) => {
+                setCustomTo(e.target.value);
+                setPage(1);
+              }}
+              className={`${dateFilterClass} w-36 shrink-0`}
+            />
+          )}
+        </div>
       </div>
 
       {message && (
@@ -279,111 +393,170 @@ export default function AdminPaymentsTab() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <p className="mt-4 text-xs text-slate-500">{sessions.length === 0 ? 'No direct-UP sessions yet.' : 'No sessions match this search.'}</p>
+        <p className="mt-4 text-xs text-slate-500">{sessions.length === 0 ? 'No proof-bearing sessions yet.' : 'No sessions match these filters.'}</p>
       ) : (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-[880px] text-left text-xs">
-            <thead>
-              <tr className="bg-slate-50">
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">User / Customer</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((s) => {
-                const buyer = buyerOf(s.buyer);
-                return (
-                  <tr key={s.id} className="border-t border-slate-100 align-top">
-                    <td className="px-3 py-3">
-                      <p className="font-semibold text-slate-600">{buyer.name || buyer.email || 'Customer'}</p>
-                      <p className="break-all text-[11px] text-slate-500">{buyer.email}</p>
-                      <p className="mt-0.5 text-[11px] text-slate-400 break-all">
-                        user <span className="font-mono">{s.user_id}</span>
-                      </p>
-                    </td>
-                    <td className="px-3 py-3">
-                      <p className="whitespace-nowrap font-bold text-slate-900">{s.order_id}</p>
-                      <p className="mt-0.5">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            s.status === 'INITIATED' || s.status === 'ACTIVE'
-                              ? 'bg-amber-100 text-amber-800'
-                              : (statusStyle[s.status] ?? 'bg-slate-100 text-slate-600')
-                          }`}
-                        >
-                          {s.status === 'INITIATED' || s.status === 'ACTIVE' ? 'PENDING VERIFICATION' : s.status}
-                          {s.verification_level === 'MANUAL' ? ' · manual' : s.verification_level === 'GMAIL' ? ' · observer' : ''}
-                        </span>
-                      </p>
-                      {s.customer_utr ? (
-                        <p className="mt-0.5 break-all text-[11px] text-slate-500">customer UTR {s.customer_utr}</p>
-                      ) : null}
-                      {s.bank_ref ? (
-                        <p className="mt-0.5 break-all text-[11px] text-emerald-700">verified UTR {s.bank_ref}</p>
-                      ) : null}
-                      <p className="mt-0.5 text-[11px] text-slate-500">
-                        {inr(Number(s.amount_paise) / 100)}
-                      </p>
-                      {s.admin_remark && (
-                        <p className="mt-0.5 text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
-                      )}
-                    </td>
-                    <td className="px-3 py-3">
-                      <p className="text-[11px] text-slate-500">
-                        <span className="font-semibold text-slate-600">Created</span>{' '}
-                        <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.created_at)}</span>
-                      </p>
-                      {s.completed_at && (
-                        <p className="text-[11px] text-slate-500">
-                          <span className="font-semibold text-slate-600">Completed</span>{' '}
-                          <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.completed_at)}</span>
+        <>
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full min-w-[880px] text-left text-xs">
+              <thead>
+                <tr className="bg-slate-50">
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">User / Customer</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((s) => {
+                  const buyer = buyerOf(s.buyer);
+                  return (
+                    <tr key={s.id} className="border-t border-slate-100 align-top">
+                      <td className="px-3 py-3">
+                        <p className="font-semibold text-slate-600">{buyer.name || buyer.email || 'Customer'}</p>
+                        <p className="break-all text-[11px] text-slate-500">{buyer.email}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-400 break-all">
+                          user <span className="font-mono">{s.user_id}</span>
                         </p>
-                      )}
-                    </td>
-                    <td className="px-3 py-3">
-                      {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
-                        <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-                          <input
-                            value={utrDrafts[s.id] ?? ''}
-                            onChange={(e) =>
-                              setUtrDrafts((d) => ({ ...d, [s.id]: e.target.value }))
-                            }
-                            placeholder="Bank ref / UTR"
-                            className="w-36 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
-                          />
-                          <button
-                            onClick={() => void confirm(s)}
-                            disabled={confirmingId === s.id}
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      </td>
+                      <td className="px-3 py-3">
+                        <p className="whitespace-nowrap font-bold text-slate-900">{s.order_id}</p>
+                        <p className="mt-0.5">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              s.status === 'INITIATED' || s.status === 'ACTIVE'
+                                ? 'bg-amber-100 text-amber-800'
+                                : (statusStyle[s.status] ?? 'bg-slate-100 text-slate-600')
+                            }`}
                           >
-                            {confirmingId === s.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                            )}
-                            Confirm
-                          </button>
-                          <button
-                            onClick={() => openReject(s)}
-                            className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
-                          >
-                            <XCircle className="h-3.5 w-3.5" />
-                            Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="whitespace-nowrap text-[11px] text-slate-400">No action</p>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                            {s.status === 'INITIATED' || s.status === 'ACTIVE' ? 'PENDING VERIFICATION' : s.status}
+                            {s.verification_level === 'MANUAL' ? ' · manual' : s.verification_level === 'GMAIL' ? ' · observer' : ''}
+                          </span>
+                        </p>
+                        {s.customer_utr ? (
+                          <p className="mt-0.5 break-all text-[11px] text-slate-500">customer UTR {s.customer_utr}</p>
+                        ) : null}
+                        {s.bank_ref ? (
+                          <p className="mt-0.5 break-all text-[11px] text-emerald-700">verified UTR {s.bank_ref}</p>
+                        ) : null}
+                        <p className="mt-0.5 text-[11px] text-slate-500">
+                          {inr(Number(s.amount_paise) / 100)}
+                        </p>
+                        {s.admin_remark && (
+                          <p className="mt-0.5 text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <p className="text-[11px] text-slate-500">
+                          <span className="font-semibold text-slate-600">Created</span>{' '}
+                          <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.created_at)}</span>
+                        </p>
+                        {s.completed_at && (
+                          <p className="text-[11px] text-slate-500">
+                            <span className="font-semibold text-slate-600">Completed</span>{' '}
+                            <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.completed_at)}</span>
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
+                          <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+                            <input
+                              value={utrDrafts[s.id] ?? ''}
+                              onChange={(e) =>
+                                setUtrDrafts((d) => ({ ...d, [s.id]: e.target.value }))
+                              }
+                              placeholder="Bank ref / UTR"
+                              className="w-36 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
+                            />
+                            <button
+                              onClick={() => void confirm(s)}
+                              disabled={confirmingId === s.id}
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                              {confirmingId === s.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              )}
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => openReject(s)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="whitespace-nowrap text-[11px] text-slate-400">No action</p>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination footer */}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+            <p>
+              Showing {showingFrom}–{showingTo} of {filtered.length} results
+              {sessions.length >= FETCH_CAP ? ' (showing latest 500)' : ''}
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <label className="flex items-center gap-1.5">
+                Rows per page
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className={`${dateFilterClass} py-1`}
+                >
+                  {PAGE_SIZES.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                onClick={() => setPage(currentPage - 1)}
+                disabled={currentPage <= 1}
+                className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 px-2 py-1 font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Previous
+              </button>
+              {pageButtons.map((p, i) =>
+                p === 'gap' ? (
+                  <span key={`gap-${i}`} className="px-0.5">…</span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`min-w-[1.75rem] rounded-lg px-1.5 py-1 font-bold ${
+                      p === currentPage
+                        ? 'bg-emerald-600 text-white'
+                        : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+              <button
+                onClick={() => setPage(currentPage + 1)}
+                disabled={currentPage >= pageCount}
+                className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 px-2 py-1 font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </>
       )}
+
       {/* Reject modal */}
       {rejectTarget && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4" onClick={() => !rejecting && setRejectTarget(null)}>
