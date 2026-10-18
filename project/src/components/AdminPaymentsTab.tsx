@@ -3,7 +3,7 @@ import { FunctionsHttpError } from '@supabase/supabase-js';
 import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, ImageOff, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { inr, formatDateTime } from '@/lib/format';
-import { useAuth } from '@/context/CustomerAuthContext';
+import { useAdminAuth } from '@/context/AdminAuthContext';
 
 type UpSession = {
   id: string;
@@ -91,7 +91,10 @@ const shortOrderId = (id: string) => (id.length > 13 ? `${id.slice(0, 13)}…` :
 type DateMode = 'all' | 'today' | 'yesterday' | 'week' | 'custom';
 
 export default function AdminPaymentsTab() {
-  const { session: authSession } = useAuth();
+  // Admin tokens come from the ISOLATED admin session cache (separate
+  // storage key) — a customer sign-in on this tab can never swap the
+  // bearer under the confirm/reject calls again (403 'Admins only').
+  const { admin: authSession } = useAdminAuth();
   const [sessions, setSessions] = useState<UpSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
