@@ -79,13 +79,14 @@ export function AdminTopBar() {
           <span className="grid place-items-center h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glow-sm">
             <LayoutDashboard className="h-5 w-5" />
           </span>
-          <p className="font-display text-lg font-extrabold text-slate-900 leading-none hidden sm:block">
-            GyftKart <span className="text-gradient">Admin</span>
-          </p>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-gray-900 tracking-tight">GyftKart Admin</span>
+            <span className="text-[11px] text-gray-400 font-normal">Signed in as {admin.email || 'gyftkart@gmail.com'}</span>
+          </div>
         </Link>
 
         {/* Top Navbar Links */}
-        <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+        <nav className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -105,14 +106,8 @@ export function AdminTopBar() {
           })}
         </nav>
 
-        {/* Right Section: Identity & Sign Out */}
+        {/* Right Section: Sign Out */}
         <div className="flex items-center gap-2 shrink-0">
-          <span
-            className="hidden xl:inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-medium text-slate-500"
-            title="Currently signed-in admin identity"
-          >
-            Signed in: <span className="font-mono text-slate-700 ml-1">{admin.email || '—'}</span>
-          </span>
           <button
             onClick={handleLogout}
             className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 transition-colors"
