@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, Loader2, Smartphone, Wallet } from 'lucide-react';
+import { Copy, FileImage, Loader2, Smartphone, Wallet, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/CustomerAuthContext';
 import type { OrderRow } from '@/components/RazorpayCheckoutButton';
 
 interface UpiDirectProps {
@@ -30,6 +32,9 @@ interface CreateUpiResponse {
 
 const POLL_INTERVAL_MS = 15_000;
 const STALL_AFTER_ATTEMPTS = 3;
+const UTR_RX = /^\d{12}$/;
+const PROOF_MAX_BYTES = 3 * 1024 * 1024;
+const PROOF_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
 export default function UpiDirectCheckoutButton({
   amount,
@@ -43,11 +48,20 @@ export default function UpiDirectCheckoutButton({
   label,
   className,
 }: UpiDirectProps) {
+  const { session: authSession } = useAuth();
   const [phase, setPhase] = useState<'idle' | 'creating' | 'awaiting' | 'stalled' | 'expired' | 'verifying'>('idle');
   const [session, setSession] = useState<CreateUpiResponse | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(0);
   const pollRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [utr, setUtr] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPickError, setProofPickError] = useState<string | null>(null);
+  const [submittingProof, setSubmittingProof] = useState(false);
+  const [proofOk, setProofOk] = useState(false);
+  const [proofError, setProofError] = useState<string | null>(null);
+  const [backendMissing, setBackendMissing] = useState(false);
 
   // UPI deep links (upi://) only resolve where a UPI app intent handler
   // is registered — Android/iOS. On desktop (macOS included) the scheme
@@ -124,6 +138,7 @@ export default function UpiDirectCheckoutButton({
   const handleClick = async () => {
     setPhase('creating');
     setAttempts(0);
+    resetProofState();
     try {
       const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
         'create-upi-intent-payment',
@@ -153,6 +168,7 @@ export default function UpiDirectCheckoutButton({
     setSession(null);
     setPhase('idle');
     setAttempts(0);
+    resetProofState();
     onCancel?.();
   };
 
@@ -160,6 +176,114 @@ export default function UpiDirectCheckoutButton({
     if (!session) return;
     if (pollRef.current) window.clearTimeout(pollRef.current);
     void drivePolling(session, false);
+  };
+
+  const resetProofState = () => {
+    setUtr('');
+    setProofFile(null);
+    setProofPickError(null);
+    setSubmittingProof(false);
+    setProofOk(false);
+    setProofError(null);
+    setBackendMissing(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const pickProofFile = (file: File | null) => {
+    setProofPickError(null);
+    setProofError(null);
+    if (!file) {
+      setProofFile(null);
+      return;
+    }
+    if (!PROOF_TYPES.includes(file.type)) {
+      setProofPickError('Screenshot must be a PNG, JPEG or WebP image.');
+      setProofFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (file.size > PROOF_MAX_BYTES) {
+      setProofPickError('Screenshot must be 3MB or smaller.');
+      setProofFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setProofFile(file);
+  };
+
+  const submitProof = async () => {
+    if (!authSession || !session) return;
+    if (!UTR_RX.test(utr)) {
+      setProofError('UTR must be exactly 12 digits.');
+      return;
+    }
+    setSubmittingProof(true);
+    setProofError(null);
+    setProofOk(false);
+    setBackendMissing(false);
+    let proofPath: string | undefined;
+    try {
+      if (proofFile) {
+        const safeName = proofFile.name.replace(/[^\w.-]+/g, '_').slice(-64);
+        const path = `user-${authSession.id}/${Date.now()}-${safeName}`;
+        const { error: uploadError } = await supabase.storage
+          .from('upi-payment-proofs')
+          .upload(path, proofFile, { contentType: proofFile.type, upsert: false });
+        if (uploadError) {
+          throw new Error(`Screenshot upload failed: ${uploadError.message}`);
+        }
+        proofPath = path;
+      }
+      const { error } = await supabase.functions.invoke('upi-report-payment', {
+        body: { payment_id: session.paymentId, utr, proof_path: proofPath },
+        headers: authSession.token ? { Authorization: `Bearer ${authSession.token}` } : undefined,
+      });
+      if (error) {
+        if (error instanceof FunctionsHttpError) {
+          let bodyError: string | undefined;
+          let nonJson = false;
+          try {
+            const payload: unknown = await (error.context as Response).json();
+            if (payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string') {
+              bodyError = (payload as { error: string }).error;
+            } else if (typeof payload === 'string' && payload.trim()) {
+              bodyError = payload;
+            }
+          } catch {
+            nonJson = true;
+          }
+          if (nonJson || (bodyError && bodyError.toLowerCase().includes('function not found'))) {
+            // Edge Function not deployed yet: upload still succeeded, report to god.
+            setBackendMissing(true);
+            setProofError(
+              proofPath
+                ? 'Your screenshot was uploaded and saved, but the payment-reporting service is not deployed yet. Our team has been notified — no need to pay again or resubmit.'
+                : 'The payment-reporting service is not deployed yet, so your UTR could not be recorded. Our team has been notified — please try again a little later.'
+            );
+            return;
+          }
+          setProofError(
+            bodyError === 'A different UTR is already reported for this session'
+              ? 'A different UTR is already reported for this payment.'
+              : bodyError === 'This UTR is already reported on another payment'
+              ? 'This UTR is already reported on another payment.'
+              : (bodyError ?? error.message ?? 'Payment proof could not be recorded.')
+          );
+          return;
+        }
+        setProofError(error.message || 'Payment proof could not be recorded.');
+        return;
+      }
+      setProofOk(true);
+      setProofFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err) {
+      setProofError(
+        err instanceof Error ? err.message : 'Payment proof could not be recorded. Please try again.'
+      );
+    } finally {
+      setSubmittingProof(false);
+    }
   };
 
   return (
@@ -183,8 +307,8 @@ export default function UpiDirectCheckoutButton({
       )}
 
       {session && phase !== 'idle' && (
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:p-5">
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+        <div className="w-full max-w-full min-w-0 overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:p-5">
+          <div className="flex flex-col items-center gap-4 md:flex-row md:items-start">
             {isMobile ? (
               <a
                 href={session.upiUri}
@@ -197,8 +321,8 @@ export default function UpiDirectCheckoutButton({
                 <Wallet className="h-4 w-4" /> Open UPI app
               </a>
             ) : (
-              <div className="shrink-0 rounded-xl border border-emerald-100 bg-white p-2">
-                <QRCodeSVG value={session.upiUri} size={120} />
+              <div className="flex w-full max-w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border border-emerald-100 bg-white p-2 sm:w-auto sm:max-w-[160px] [&>svg]:h-auto [&>svg]:max-w-full">
+                <QRCodeSVG value={session.upiUri} size={144} />
               </div>
             )}
             <div className="min-w-0 w-full space-y-1.5">
@@ -235,6 +359,93 @@ export default function UpiDirectCheckoutButton({
               </p>
             </div>
           </div>
+
+          {phase !== 'expired' && (
+            <div className="mt-4 w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-emerald-100 bg-white p-4">
+              {proofOk ? (
+                <div className="flex items-start gap-2 text-xs text-emerald-700">
+                  <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <p>
+                    <span className="font-bold">Proof received — pending verification.</span> It only records your
+                    evidence; a human/bank check confirms the payment next. Keep your UPI app receipt until then. You can
+                    still check the status below or resubmit if you spot a mistake.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs font-bold text-slate-700">Already paid? Speed up confirmation</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                    Paste the 12-digit UPI reference number (UTR) from your UPI/bank app receipt and, optionally, attach
+                    the payment screenshot. This is evidence for review only — gift cards are issued once the payment is
+                    verified, not before.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <input
+                      type="text"
+                      value={utr}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      maxLength={12}
+                      placeholder="12-digit UTR"
+                      onChange={(e) => {
+                        setUtr(e.target.value.replace(/\D/g, '').slice(0, 12));
+                        setProofError(null);
+                        setProofOk(false);
+                      }}
+                      className="w-full min-w-0 rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm tracking-wider text-slate-900 outline-none transition-colors placeholder:font-sans placeholder:tracking-normal focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 sm:w-44"
+                    />
+                    <label className="w-full min-w-0 cursor-pointer truncate rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 hover:border-emerald-300 hover:bg-emerald-50/50 sm:w-auto sm:max-w-full">
+                      <span className="inline-flex max-w-full items-center gap-1.5">
+                        <FileImage className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{proofFile ? proofFile.name : 'Attach screenshot (optional)'}</span>
+                      </span>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(e) => pickProofFile(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    <button
+                      onClick={() => void submitProof()}
+                      disabled={submittingProof || utr.length !== 12 || !!proofPickError}
+                      className="w-full shrink-0 inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed sm:w-auto"
+                    >
+                      {submittingProof ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Submitting…
+                        </>
+                      ) : (
+                        <>
+                          <FileImage className="h-3.5 w-3.5" /> Submit Payment Proof
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {proofFile && (
+                    <p className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-slate-500">
+                      {proofFile.name} ({(proofFile.size / 1024).toFixed(0)} KB)
+                      <button
+                        onClick={() => pickProofFile(null)}
+                        className="rounded p-0.5 hover:bg-slate-100"
+                        title="Remove screenshot"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </p>
+                  )}
+                  {proofPickError && <p className="mt-1.5 text-[11px] font-semibold text-rose-600">{proofPickError}</p>}
+                  {proofError && <p className="mt-1.5 text-[11px] font-semibold text-rose-600">{proofError}</p>}
+                  {backendMissing && (
+                    <p className="mt-1 text-[11px] text-amber-700">
+                      Reference: proof reporting backend not deployed yet — the team has been informed automatically.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           <div
             className={`mt-4 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${
@@ -278,9 +489,10 @@ export default function UpiDirectCheckoutButton({
                 Cancel
               </button>
              )}
-           </div>
-         </div>
-       )}
-     </div>
-   );
- }
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
