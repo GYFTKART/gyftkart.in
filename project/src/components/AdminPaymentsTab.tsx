@@ -540,6 +540,7 @@ export default function AdminPaymentsTab() {
     setReopenNote('');
     setReopenError(null);
   };
+  const handleOpenReopenModal = openReopen;
 
   const submitReopen = async () => {
     if (!reopenTarget) return;
@@ -1443,17 +1444,11 @@ export default function AdminPaymentsTab() {
                         ) : s.status === 'REJECTED' ? (
                           <div className="flex items-center justify-end md:justify-center pr-2 shrink-0 whitespace-nowrap">
                             <button
-                              onClick={() => openReopen(s)}
+                              onClick={() => handleOpenReopenModal(s)}
                               disabled={reopeningId === s.id}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs whitespace-nowrap font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                              title="Approve previously rejected request"
+                              className="px-2.5 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-md transition disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                              {reopeningId === s.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
-                              ) : (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                              )}
-                              Approve
+                              Revert
                             </button>
                           </div>
                         ) : s.status === 'REVERTED' ? (
