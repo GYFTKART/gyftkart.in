@@ -62,6 +62,8 @@ export default function WalletLedgerPanel() {
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [topups, setTopups] = useState<TopupRow[] | null>(null);
   const [topupsLoading, setTopupsLoading] = useState(false);
+  // Dual-tab toggle: which of the two wallet tables renders.
+  const [walletTab, setWalletTab] = useState<'topups' | 'ledger'>('topups');
 
   // Remaining monthly top-up quota in paise (the RPC applies rollover at
   // credit time; mirror the same arithmetic for the display).
@@ -158,7 +160,7 @@ export default function WalletLedgerPanel() {
     Number.isFinite(rupees) && rupees > 0 && toUpPaise >= 1 && toUpPaise <= quotaLeft && toUpPaise <= MONTHLY_TOPUP_CAP_PAISE;
 
   return (
-    <div className="space-y-6">
+    <div id="wallet" className="scroll-mt-24 space-y-6">
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Balance card */}
         <div className="rounded-3xl border border-slate-100 bg-gradient-to-br from-emerald-600 to-teal-700 p-6 text-white shadow-glow-sm">
@@ -251,24 +253,52 @@ export default function WalletLedgerPanel() {
         </div>
       </div>
 
-      {/* Top-up requests (upi_payment_sessions / owner-RLS) */}
+      {/* Wallet tables — dual-tab toggle (Top-up requests | Wallet
+          Transaction History); only the active tab renders. */}
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-display text-lg font-bold text-slate-900">Top-up requests</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1 rounded-full bg-slate-100 p-1">
+            <button
+              onClick={() => setWalletTab('topups')}
+              className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+                walletTab === 'topups'
+                  ? 'bg-white text-brand-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Top-up requests
+            </button>
+            <button
+              onClick={() => setWalletTab('ledger')}
+              className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+                walletTab === 'ledger'
+                  ? 'bg-white text-brand-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Wallet Transaction History
+            </button>
+          </div>
           <button
-            onClick={() => void loadTopups()}
+            onClick={() => void (walletTab === 'topups' ? loadTopups() : loadLedger())}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
           >
-            {topupsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {(walletTab === 'topups' ? topupsLoading : ledgerLoading) ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
             Refresh
           </button>
         </div>
 
-        {topups !== null && topups.length === 0 ? (
-          <p className="mt-6 text-sm text-slate-500">
-            No top-up requests yet — Add Balance to start.
-          </p>
-        ) : (
+        {walletTab === 'topups' ? (
+          <>
+            {topups !== null && topups.length === 0 ? (
+              <p className="mt-6 text-sm text-slate-500">
+                No top-up requests yet — Add Balance to start.
+              </p>
+            ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-xs">
               <thead>
@@ -311,23 +341,11 @@ export default function WalletLedgerPanel() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
-
-      {/* Wallet transaction history (ledger) */}
-      <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-display text-lg font-bold text-slate-900">Wallet Transaction History</h3>
-          <button
-            onClick={() => void loadLedger()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            {ledgerLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Refresh
-          </button>
-        </div>
-
-        {ledger !== null && ledger.length === 0 ? (
+            )}
+          </>
+        ) : (
+          <>
+            {ledger !== null && ledger.length === 0 ? (
           <p className="mt-6 text-sm text-slate-500">
             No wallet activity yet — add balance to get started.
           </p>
@@ -385,6 +403,8 @@ export default function WalletLedgerPanel() {
               </tbody>
             </table>
           </div>
+        )}
+          </>
         )}
       </div>
 

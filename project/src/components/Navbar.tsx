@@ -23,9 +23,12 @@ import {
   LogOut,
   UserCircle,
   Package,
+  Wallet,
 } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/CustomerAuthContext';
+import { supabase } from '@/lib/supabase';
+import { inr } from '@/lib/format';
 
 const navLinks = [
   { to: '/brands', label: 'Brands' },
@@ -46,6 +49,34 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+
+  // Live wallet balance for the navbar pill — ensure_wallet via the
+  // customer's own session (same RPC the dashboard wallet panel uses).
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  useEffect(() => {
+    if (!session?.token) {
+      setWalletBalance(null);
+      return;
+    }
+    void (async () => {
+      const { data, error } = await supabase.rpc('ensure_wallet');
+      if (!error && data) setWalletBalance(Number((data as { balance: number | string }).balance));
+    })();
+  }, [session?.token]);
+
+  // Jump to the wallet section on /dashboard — in-page scroll if already
+  // there, otherwise navigate first and scroll after the view mounts.
+  const goToWallet = () => {
+    setMobileOpen(false);
+    const scrollToWallet = () =>
+      document.getElementById('wallet')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (window.location.pathname === '/dashboard') {
+      scrollToWallet();
+    } else {
+      navigate('/dashboard');
+      setTimeout(scrollToWallet, 80);
+    }
+  };
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -368,6 +399,20 @@ export default function Navbar() {
             ))}
           </div>
 
+          {/* Wallet pill — between Corporate and the account pill. Shows
+              the live balance; clicking scrolls to the wallet section on
+              /dashboard. Desktop only (the mobile menu mirrors it). */}
+          {session && (
+            <button
+              onClick={goToWallet}
+              className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors"
+              aria-label="Go to wallet section"
+            >
+              <Wallet className="h-4 w-4 text-brand-600" />
+              {walletBalance !== null ? `${inr(walletBalance / 100)}` : 'Wallet'}
+            </button>
+          )}
+
           {/* Right actions */}
           <div className="flex items-center gap-1.5">
             {session ? (
@@ -551,13 +596,20 @@ export default function Navbar() {
                   <p className="text-xs text-slate-500 truncate">{session.email}</p>
                 </div>
               </div>
-              <button
-                onClick={goToDashboard}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                Dashboard
-              </button>
+            <button
+              onClick={goToWallet}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Wallet className="h-4 w-4 text-brand-600" />
+              Wallet{walletBalance !== null ? ` · ${inr(walletBalance / 100)}` : ''}
+            </button>
+            <button
+              onClick={goToDashboard}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboard
+            </button>
               <button
                 onClick={goToProfile}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
