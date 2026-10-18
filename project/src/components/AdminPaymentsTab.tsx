@@ -280,81 +280,113 @@ export default function AdminPaymentsTab() {
       ) : filtered.length === 0 ? (
         <p className="mt-4 text-xs text-slate-500">{sessions.length === 0 ? 'No direct-UP sessions yet.' : 'No sessions match this search.'}</p>
       ) : (
-        <div className="mt-4 divide-y divide-slate-100">
-          {filtered.map((s) => {
-            const buyer = buyerOf(s.buyer);
-            return (
-              <div key={s.id} className="py-3 flex flex-wrap items-center gap-2 sm:gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-slate-900 truncate">
-                    {s.order_id}
-                    <span
-                      className={`ml-2 align-middle rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        statusStyle[s.status] ?? 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {s.status}
-                      {s.verification_level === 'MANUAL' ? ' · manual' : s.verification_level === 'GMAIL' ? ' · observer' : ''}
-                    </span>
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    {inr(Number(s.amount_paise) / 100)} · {formatDateTime(s.created_at)}
-                    {s.bank_ref ? ` · UTR ${s.bank_ref}` : ''}
-                    {s.status === 'ACTIVE' ? ` · expires ${formatDateTime(s.expires_at)}` : ''}
-                  </p>
-                  {(buyer.name || buyer.email || s.user_id) && (
-                    <p className="mt-0.5 text-[11px] text-slate-500 min-w-0">
-                      <span className="font-semibold text-slate-600">
-                        {buyer.name || buyer.email || 'Customer'}
-                      </span>
-                      {' · '}
-                      <span className="break-all">{buyer.email}</span>
-                      {' · user '}
-                      <span className="font-mono">{shortUserId(s.user_id)}</span>
-                    </p>
-                  )}
-                  {s.admin_remark && (
-                    <p className="mt-0.5 text-[11px] font-semibold text-rose-600">
-                      Remark: {s.admin_remark}
-                    </p>
-                  )}
-                </div>
-                {(s.status === 'ACTIVE' || s.status === 'INITIATED') && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={utrDrafts[s.id] ?? ''}
-                      onChange={(e) =>
-                        setUtrDrafts((d) => ({ ...d, [s.id]: e.target.value }))
-                      }
-                      placeholder="Bank ref / UTR"
-                      className="w-36 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
-                    />
-                    <button
-                      onClick={() => void confirm(s)}
-                      disabled={confirmingId === s.id}
-                      className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
-                    >
-                      {confirmingId === s.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5" />
+        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full min-w-[880px] text-left text-xs">
+            <thead>
+              <tr className="bg-slate-50">
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">User / Customer</th>
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Reference</th>
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Date &amp; Time</th>
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s) => {
+                const buyer = buyerOf(s.buyer);
+                return (
+                  <tr key={s.id} className="border-t border-slate-100 align-top">
+                    <td className="px-3 py-3">
+                      <p className="font-semibold text-slate-600">{buyer.name || buyer.email || 'Customer'}</p>
+                      <p className="break-all text-[11px] text-slate-500">{buyer.email}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        user <span className="font-mono">{shortUserId(s.user_id)}</span>
+                      </p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <p className="whitespace-nowrap font-bold text-slate-900">{s.order_id}</p>
+                      <p className="mt-0.5">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            statusStyle[s.status] ?? 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {s.status}
+                          {s.verification_level === 'MANUAL' ? ' · manual' : s.verification_level === 'GMAIL' ? ' · observer' : ''}
+                        </span>
+                      </p>
+                      {s.customer_utr ? (
+                        <p className="mt-0.5 break-all text-[11px] text-slate-500">customer UTR {s.customer_utr}</p>
+                      ) : null}
+                      {s.bank_ref ? (
+                        <p className="mt-0.5 break-all text-[11px] text-emerald-700">verified UTR {s.bank_ref}</p>
+                      ) : null}
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {inr(Number(s.amount_paise) / 100)}
+                      </p>
+                      {s.admin_remark && (
+                        <p className="mt-0.5 text-[11px] font-semibold text-rose-600">Remark: {s.admin_remark}</p>
                       )}
-                      Confirm
-                    </button>
-                    <button
-                      onClick={() => openReject(s)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
-                    >
-                      <XCircle className="h-3.5 w-3.5" /> Reject
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                    </td>
+                    <td className="px-3 py-3">
+                      <p className="text-[11px] text-slate-500">
+                        <span className="font-semibold text-slate-600">Created</span>{' '}
+                        <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.created_at)}</span>
+                      </p>
+                      {s.status === 'ACTIVE' && (
+                        <p className="text-[11px] text-slate-500">
+                          <span className="font-semibold text-slate-600">Expires</span>{' '}
+                          <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.expires_at)}</span>
+                        </p>
+                      )}
+                      {s.completed_at && (
+                        <p className="text-[11px] text-slate-500">
+                          <span className="font-semibold text-slate-600">Completed</span>{' '}
+                          <span className="whitespace-nowrap text-slate-900">{formatDateTime(s.completed_at)}</span>
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
+                        <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+                          <input
+                            value={utrDrafts[s.id] ?? ''}
+                            onChange={(e) =>
+                              setUtrDrafts((d) => ({ ...d, [s.id]: e.target.value }))
+                            }
+                            placeholder="Bank ref / UTR"
+                            className="w-36 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
+                          />
+                          <button
+                            onClick={() => void confirm(s)}
+                            disabled={confirmingId === s.id}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                          >
+                            {confirmingId === s.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            )}
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => openReject(s)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            Reject
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="whitespace-nowrap text-[11px] text-slate-400">No action</p>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
-
       {/* Reject modal */}
       {rejectTarget && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4" onClick={() => !rejecting && setRejectTarget(null)}>
