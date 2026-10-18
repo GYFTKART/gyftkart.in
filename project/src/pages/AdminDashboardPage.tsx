@@ -12,7 +12,6 @@ import {
   Wallet,
   ArrowRight,
   RefreshCw,
-  LayoutDashboard,
   HelpCircle,
   CreditCard,
 } from 'lucide-react';
@@ -266,20 +265,15 @@ export default function AdminDashboardPage() {
 
       <div className="mx-auto max-w-7xl 2xl:max-w-[1440px] px-4 sm:px-6 lg:px-8 py-8">
         {/* Header Title & Refresh */}
-        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="font-display text-2xl font-extrabold text-slate-900 flex items-center gap-2.5">
-              <span className="grid place-items-center h-9 w-9 rounded-xl bg-brand-50 text-brand-700 border border-brand-100 shadow-sm">
-                <LayoutDashboard className="h-5 w-5" />
-              </span>
-              Executive Overview
-            </h1>
-          </div>
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h1 className="font-display text-lg font-bold text-slate-900">
+            Executive Overview
+          </h1>
 
           <button
             onClick={() => loadKpis(true)}
             disabled={refreshing}
-            className="inline-flex items-center gap-1.5 self-start md:self-auto rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 text-brand-600 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh Data
