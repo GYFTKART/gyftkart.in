@@ -274,9 +274,6 @@ export default function AdminDashboardPage() {
               </span>
               Executive Overview
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              High-level real-time KPI overview and direct access to dedicated management modules.
-            </p>
           </div>
 
           <button
@@ -346,13 +343,8 @@ export default function AdminDashboardPage() {
 
         {/* 6 Category Hubs (Admin Modules) */}
         <div>
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="font-display text-lg font-bold text-slate-900">Admin Modules</h2>
-              <p className="text-xs text-slate-500">
-                Organized 2-level administration suites for customer management, accounting ledgers, and transactions.
-              </p>
-            </div>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-display text-lg font-bold text-slate-900">Admin Modules</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
