@@ -28,6 +28,7 @@ import { SEO } from '@/components/SEO';
 type OrderRow = {
   id: string;
   total_amount: number | string;
+  amount?: number | string;
   status: string;
   items: unknown;
   created_at: string;
@@ -36,6 +37,9 @@ type OrderRow = {
   upi_order_id?: string | null;
   upi_payment_id?: string | null;
   upi_utr?: string | null;
+  utr?: string | null;
+  session_id?: string | null;
+  brand_name?: string | null;
 };
 
 type PurchaseRow = {
@@ -63,6 +67,7 @@ type PendingUpiRow = {
   created_at: string;
   completed_at?: string | null;
   customer_utr?: string | null;
+  utr?: string | null;
   bank_ref?: string | null;
 };
 
@@ -70,20 +75,25 @@ type PendingUpiRow = {
 const orderRef = (o: OrderRow) => `GK-${o.id.slice(0, 8).toUpperCase()}`;
 
 // items[] → readable summary ("2× Amazon · 1× Flipkart"); on any parse
-// failure fall back to a plain item-list label.
-const itemsSummary = (items: unknown): string => {
-  if (!Array.isArray(items) || items.length === 0) return 'Items: N/A';
+// failure fall back to brand_name or plain item-list label.
+const itemsSummary = (items: unknown, brandName?: string | null): string => {
+  if (!Array.isArray(items) || items.length === 0) {
+    return brandName ? `1× ${brandName}` : 'Items: N/A';
+  }
   try {
     return items
       .map((it) => {
-        const line = it as { brand_slug?: string; quantity?: number };
+        const line = it as { brand_name?: string; brand_slug?: string; quantity?: number };
+        if (typeof line.brand_name === 'string' && line.brand_name.trim()) {
+          return `${line.quantity ?? 1}× ${line.brand_name.trim()}`;
+        }
         const slug = typeof line.brand_slug === 'string' ? line.brand_slug.replace(/-/g, ' ') : 'item';
         const label = slug.charAt(0).toUpperCase() + slug.slice(1);
         return `${line.quantity ?? 1}× ${label}`;
       })
       .join(' · ');
   } catch {
-    return 'Items: N/A';
+    return brandName ? `1× ${brandName}` : 'Items: N/A';
   }
 };
 
@@ -268,8 +278,10 @@ export default function OrdersPage() {
     const [ordersRes, purchasesRes, upiRes] = await Promise.all([
       supabase
         .from('orders')
-        .select('id, user_id, total_amount, status, items, created_at, razorpay_order_id, razorpay_payment_id')
+        .select('id, user_id, total_amount, amount, status, items, created_at, razorpay_order_id, razorpay_payment_id, upi_order_id, upi_payment_id, upi_utr, utr, session_id, brand_name')
         .eq('user_id', session.id)
+        .neq('status', 'AWAITING_PAYMENT')
+        .neq('status', 'QR_GENERATED')
         .order('created_at', { ascending: false })
         .limit(50),
       supabase
@@ -285,9 +297,11 @@ export default function OrdersPage() {
       // TOPUP category rows belong to the Wallet page, not here.
       supabase
         .from('upi_payment_sessions')
-        .select('id, order_id, amount_paise, status, items, admin_remark, created_at, completed_at, customer_utr, bank_ref')
+        .select('id, order_id, amount_paise, status, items, admin_remark, created_at, completed_at, customer_utr, bank_ref, utr')
         .eq('user_id', session.id)
         .or('category.neq.TOPUP,category.is.null')
+        .neq('status', 'AWAITING_PAYMENT')
+        .neq('status', 'QR_GENERATED')
         .in('status', ['INITIATED', 'ACTIVE', 'SUCCESS', 'PENDING_VERIFICATION', 'CONFIRMED', 'DELIVERED', 'REJECTED', 'REVERTED'])
         .order('created_at', { ascending: false })
         .limit(50),
@@ -302,18 +316,38 @@ export default function OrdersPage() {
     }
     const rawUpi = (upiRes.data ?? []) as PendingUpiRow[];
     // Filter out abandoned / unsubmitted QR sessions (no UTR, or AWAITING_PAYMENT / QR_GENERATED)
+    // Customers should NEVER see an order if they just generated a QR code and abandoned without submitting a UTR.
     const validUpiSessions = rawUpi.filter((s) => {
       const st = (s.status || '').toUpperCase();
       if (st === 'AWAITING_PAYMENT' || st === 'QR_GENERATED') {
         return false;
       }
-      const hasUtr = Boolean((s.customer_utr || s.bank_ref || '').trim());
-      if ((st === 'PENDING_VERIFICATION' || st === 'INITIATED' || st === 'ACTIVE') && !hasUtr) {
+      const submittedUtr = String(s.customer_utr || s.utr || s.bank_ref || '').trim();
+      if (!submittedUtr || submittedUtr.length < 10) {
         return false;
       }
       return true;
     });
-    setOrders((ordersRes.data ?? []) as OrderRow[]);
+
+    const rawOrders = (ordersRes.data ?? []) as OrderRow[];
+    // Strictly filter out any abandoned / unsubmitted orders (status === 'AWAITING_PAYMENT' or no UTR for UPI orders)
+    const validOrders = rawOrders.filter((order) => {
+      const st = (order.status || '').toUpperCase();
+      if (st === 'AWAITING_PAYMENT' || st === 'QR_GENERATED') {
+        return false;
+      }
+      const isUpi = Boolean(order.upi_payment_id || order.upi_order_id || order.session_id);
+      const utrVal = String(order.utr || order.upi_utr || '').trim();
+      // If it's a UPI order or pending verification, it MUST have a valid non-empty UTR submitted
+      if (st === 'PENDING_VERIFICATION' || isUpi) {
+        if (!utrVal || utrVal.length < 10) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    setOrders(validOrders);
     setPurchases((purchasesRes.data ?? []) as PurchaseRow[]);
     setPendingUpi(validUpiSessions);
     setLoading(false);
@@ -458,7 +492,17 @@ export default function OrdersPage() {
                                     </td>
                                     <td className="px-3.5 py-3 text-xs">
                                       <p className="font-bold text-slate-900">{itemsSummary(s.items)}</p>
-                                      <p className="mt-0.5 font-mono text-[11px] text-slate-500">Order #{s.order_id}</p>
+                                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-slate-500">
+                                        <span>Order #{s.order_id}</span>
+                                        {(s.customer_utr || s.utr || s.bank_ref) && (
+                                          <>
+                                            <span>•</span>
+                                            <span className="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded text-[10px] font-semibold">
+                                              UTR: {s.customer_utr || s.utr || s.bank_ref}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
                                     </td>
                                     <td className="whitespace-nowrap px-3.5 py-3 font-semibold text-slate-900 text-xs">
                                       {inr(Number(s.amount_paise) / 100)}
@@ -596,9 +640,17 @@ export default function OrdersPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-bold text-slate-900">{itemsSummary(order.items)}</p>
+                        <p className="text-sm font-bold text-slate-900">{itemsSummary(order.items, order.brand_name)}</p>
                         <span className="text-xs text-slate-400">•</span>
                         <p className="text-xs font-medium text-slate-500">Order #{orderRef(order)}</p>
+                        {(order.utr || order.upi_utr) && (
+                          <>
+                            <span className="text-xs text-slate-400">•</span>
+                            <span className="text-[11px] font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                              UTR: {order.utr || order.upi_utr}
+                            </span>
+                          </>
+                        )}
                       </div>
                       <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
                         <Mail className="h-3.5 w-3.5" />
@@ -608,7 +660,7 @@ export default function OrdersPage() {
                     </div>
 
                     <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 sm:gap-2 shrink-0">
-                      <p className="text-base font-extrabold text-slate-900">{inr(Number(order.total_amount))}</p>
+                      <p className="text-base font-extrabold text-slate-900">{inr(Number(order.total_amount ?? order.amount ?? 0))}</p>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={order.status} />
                         {order.status === 'successful' && (

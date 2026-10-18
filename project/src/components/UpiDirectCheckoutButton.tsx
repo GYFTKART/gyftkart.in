@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/CustomerAuthContext';
+import { useToast } from '@/components/Toast';
 import type { OrderRow } from '@/components/RazorpayCheckoutButton';
 import { sanitizeUtr, checkRateLimit } from '@/lib/security';
 
@@ -61,6 +62,7 @@ export default function UpiDirectCheckoutButton({
 }: UpiDirectProps) {
   const topUp = category === 'TOPUP';
   const { session: authSession } = useAuth();
+  const { push: toast } = useToast();
   const navigate = useNavigate();
   const [phase, setPhase] = useState<'idle' | 'creating' | 'awaiting' | 'stalled' | 'expired' | 'verifying' | 'topupDone'>('idle');
   const [session, setSession] = useState<CreateUpiResponse | null>(null);
@@ -274,19 +276,23 @@ export default function UpiDirectCheckoutButton({
     setProofFile(file);
   };
 
-  const submitProof = async () => {
+  const handleUtrSubmit = async () => {
     if (!authSession || !session) return;
 
     // Rate-limiting: max 5 UTR submission attempts per minute per customer
     const rateCheck = checkRateLimit(`upi:proof:${authSession.id}`, 5, 60);
     if (!rateCheck.allowed) {
-      setProofError(`Too many submission attempts. Please wait ${rateCheck.retryAfterSeconds} seconds before trying again.`);
+      const rateMsg = `Too many submission attempts. Please wait ${rateCheck.retryAfterSeconds} seconds before trying again.`;
+      toast(rateMsg, 'error');
+      setProofError(rateMsg);
       return;
     }
 
+    // 1. Validate UTR (must be 12 numeric digits)
     const { isValid, cleanUtr, error: utrErr } = sanitizeUtr(utr);
-    if (!isValid) {
-      setProofError(utrErr || 'UTR must be exactly 12 digits.');
+    if (!isValid || !cleanUtr || cleanUtr.length !== 12) {
+      toast('Please enter a valid 12-digit UTR number', 'error');
+      setProofError(utrErr || 'Please enter a valid 12-digit UTR number');
       return;
     }
 
@@ -295,6 +301,7 @@ export default function UpiDirectCheckoutButton({
     setProofOk(false);
     setBackendMissing(false);
     let proofPath: string | undefined;
+
     try {
       if (proofFile) {
         const safeName = proofFile.name.replace(/[^\w.-]+/g, '_').slice(-64);
@@ -307,10 +314,74 @@ export default function UpiDirectCheckoutButton({
         }
         proofPath = path;
       }
+
+      // 2. ONLY NOW insert the order into public.orders (for voucher orders)
+      if (!topUp) {
+        const firstItem = Array.isArray(items) && items.length > 0 ? (items[0] as Record<string, unknown>) : null;
+        const brandName = (firstItem?.brand_name as string) || (firstItem?.name as string) || 'Gift Card';
+
+        // Check if order already exists for this payment session to maintain idempotency
+        const { data: existingOrder } = await supabase
+          .from('orders')
+          .select('id')
+          .or(`upi_payment_id.eq.${session.paymentId},session_id.eq.${session.paymentId}`)
+          .maybeSingle();
+
+        if (existingOrder) {
+          await supabase
+            .from('orders')
+            .update({
+              status: 'PENDING_VERIFICATION',
+              amount,
+              total_amount: amount,
+              utr: cleanUtr,
+              upi_utr: cleanUtr,
+            })
+            .eq('id', existingOrder.id);
+        } else {
+          const { error: orderError } = await supabase
+            .from('orders')
+            .insert({
+              user_id: authSession.id,
+              amount,
+              total_amount: amount,
+              status: 'PENDING_VERIFICATION',
+              utr: cleanUtr,
+              upi_utr: cleanUtr,
+              session_id: session.paymentId,
+              upi_payment_id: session.paymentId,
+              upi_order_id: session.orderId,
+              brand_name: brandName,
+              items: items ?? [],
+              created_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (orderError) {
+            console.warn('Orders direct insert notice:', orderError.message);
+          }
+        }
+      }
+
+      // 3. Update upi_payment_sessions status to PENDING_VERIFICATION
+      await supabase
+        .from('upi_payment_sessions')
+        .update({
+          utr: cleanUtr,
+          customer_utr: cleanUtr,
+          status: 'PENDING_VERIFICATION',
+          submitted_at: new Date().toISOString(),
+          proof_path: proofPath ?? null,
+        })
+        .eq('id', session.paymentId);
+
+      // Invoke backend Edge Function for webhook notifications & audit trails
       const { error } = await supabase.functions.invoke('upi-report-payment', {
         body: { payment_id: session.paymentId, utr: cleanUtr, proof_path: proofPath },
         headers: authSession.token ? { Authorization: `Bearer ${authSession.token}` } : undefined,
       });
+
       if (error) {
         if (error instanceof FunctionsHttpError) {
           let bodyError: string | undefined;
@@ -335,6 +406,7 @@ export default function UpiDirectCheckoutButton({
             if (!rpcError && (rpcData as { ok?: boolean })?.ok) {
               setProofOk(true);
               setProofFile(null);
+              toast('Payment submitted for verification!', 'success');
               if (fileInputRef.current) fileInputRef.current.value = '';
               return;
             }
@@ -372,6 +444,7 @@ export default function UpiDirectCheckoutButton({
         if (!rpcError && (rpcData as { ok?: boolean })?.ok) {
           setProofOk(true);
           setProofFile(null);
+          toast('Payment submitted for verification!', 'success');
           if (fileInputRef.current) fileInputRef.current.value = '';
           return;
         }
@@ -380,6 +453,7 @@ export default function UpiDirectCheckoutButton({
       }
       setProofOk(true);
       setProofFile(null);
+      toast('Payment submitted for verification!', 'success');
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
       setProofError(
@@ -389,6 +463,8 @@ export default function UpiDirectCheckoutButton({
       setSubmittingProof(false);
     }
   };
+
+  const submitProof = handleUtrSubmit;
 
   return (
     <div className={className ? 'grid gap-3 ' + className : 'grid gap-3'}>

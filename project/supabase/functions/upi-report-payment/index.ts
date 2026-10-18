@@ -90,8 +90,10 @@ serve(async (req) => {
       .from('upi_payment_sessions')
       .update({
         customer_utr: utr.trim(),
+        utr: utr.trim(),
         proof_path: proof_path ?? null,
         status: 'PENDING_VERIFICATION',
+        submitted_at: new Date().toISOString(),
       })
       .eq('id', payment_id)
       .select('id')
@@ -106,8 +108,12 @@ serve(async (req) => {
       const { data: existingOrder } = await admin
         .from('orders')
         .select('id')
-        .eq('upi_payment_id', payment_id)
+        .or(`upi_payment_id.eq.${payment_id},session_id.eq.${payment_id}`)
         .maybeSingle();
+
+      const orderAmount = Number(session.amount_paise) / 100;
+      const firstItem = Array.isArray(session.items) && session.items.length > 0 ? (session.items[0] as Record<string, unknown>) : null;
+      const brandName = (firstItem?.brand_name as string) || (firstItem?.name as string) || 'Gift Card';
 
       if (existingOrder) {
         await admin
@@ -115,6 +121,9 @@ serve(async (req) => {
           .update({
             status: 'PENDING_VERIFICATION',
             upi_utr: utr.trim(),
+            utr: utr.trim(),
+            amount: orderAmount,
+            total_amount: orderAmount,
           })
           .eq('id', existingOrder.id);
       } else {
@@ -122,12 +131,17 @@ serve(async (req) => {
           .from('orders')
           .insert({
             user_id: session.user_id,
-            total_amount: Number(session.amount_paise) / 100,
+            total_amount: orderAmount,
+            amount: orderAmount,
             status: 'PENDING_VERIFICATION',
             upi_order_id: session.order_id,
             upi_payment_id: payment_id,
+            session_id: payment_id,
             upi_utr: utr.trim(),
+            utr: utr.trim(),
+            brand_name: brandName,
             items: session.items,
+            created_at: new Date().toISOString(),
           });
       }
     }
