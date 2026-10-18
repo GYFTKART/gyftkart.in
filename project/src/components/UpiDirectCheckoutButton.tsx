@@ -308,7 +308,7 @@ export default function UpiDirectCheckoutButton({
 
       {session && phase !== 'idle' && (
         <div className="w-full max-w-full min-w-0 overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:p-5">
-          <div className="flex flex-col items-center gap-4 md:flex-row md:items-start">
+          <div className="flex flex-col items-center gap-4">
             {isMobile ? (
               <a
                 href={session.upiUri}
@@ -321,8 +321,8 @@ export default function UpiDirectCheckoutButton({
                 <Wallet className="h-4 w-4" /> Open UPI app
               </a>
             ) : (
-              <div className="flex w-full max-w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border border-emerald-100 bg-white p-2 sm:w-auto sm:max-w-[160px] [&>svg]:h-auto [&>svg]:max-w-full">
-                <QRCodeSVG value={session.upiUri} size={144} />
+              <div className="flex w-full max-w-full items-center justify-center overflow-hidden rounded-xl border border-emerald-100 bg-white p-2 sm:max-w-[220px] [&>svg]:h-auto [&>svg]:max-w-full">
+                <QRCodeSVG value={session.upiUri} size={220} />
               </div>
             )}
             <div className="min-w-0 w-full space-y-1.5">
@@ -332,9 +332,13 @@ export default function UpiDirectCheckoutButton({
                 ['Amount', `₹${session.amount}`, 'font-mono', 'amount', 'Copy exact amount'],
                 ['Reference', session.orderId, 'font-mono', 'ref', 'Copy payment reference'],
               ].map(([lbl, val, mono, key, title]) => (
-                <div key={lbl as string} className="flex items-center gap-2 text-xs">
-                  <span className="w-20 shrink-0 text-slate-500">{lbl}</span>
-                  <span className={`min-w-0 truncate text-slate-900 ${mono}`}>{val}</span>
+                <div key={lbl as string} className="flex w-full items-start gap-2 text-xs">
+                  <span className="w-20 shrink-0 pt-0.5 text-slate-500">{lbl}</span>
+                  <span
+                    className={`min-w-0 flex-1 break-words text-slate-900 ${mono} ${mono ? 'break-all' : ''}`}
+                  >
+                    {val}
+                  </span>
                   {key && (
                     <button
                       onClick={() => copy(String(val), String(key))}
