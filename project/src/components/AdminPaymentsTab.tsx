@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, ImageOff, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { inr, formatDateTime } from '@/lib/format';
@@ -94,6 +94,10 @@ export default function AdminPaymentsTab() {
   // storage key) — a customer sign-in on this tab can never swap the
   // bearer under the confirm/reject calls again (403 'Admins only').
   const { admin: authSession } = useAdminAuth();
+  // Latest admin tokens via ref — lets stable useCallback helpers resolve
+  // the CURRENT bearer at call time even after a late context hydration.
+  const authRef = useRef(authSession);
+  authRef.current = authSession;
   const [sessions, setSessions] = useState<UpSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -115,22 +119,36 @@ export default function AdminPaymentsTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('upi_payment_sessions')
-      .select('*, items')
-      .or('customer_utr.not.is.null,proof_path.not.is.null')
-      .order('created_at', { ascending: false })
-      .limit(FETCH_CAP);
-    if (error) {
-      setMessage({ kind: 'err', text: `Load failed: ${error.message}` });
+    // RLS-carrying read: upi_payment_sessions' ONLY select policy matches
+    // auth.uid() against the admins table, and the shared singleton runs
+    // persistSession:false (auth.uid() null → zero rows → the blank-table
+    // symptom) — so the admin bearer MUST ride the request. Convert SSR
+    // postgrest syntax to the query-string equivalent.
+    const res = await fnGet(
+      'upi_payment_sessions',
+      '?select=*,items' +
+        '&or=(customer_utr.not.is.null,proof_path.not.is.null)' +
+        '&order=created_at.desc' +
+        `&limit=${FETCH_CAP}`
+    );
+    const json = res.json ?? {};
+    if (!res.ok || (json && typeof json.message === 'string' && json.message)) {
+      setMessage({
+        kind: 'err',
+        text: `Load failed: ${typeof json.message === 'string' && json.message ? json.message : `HTTP ${res.status || 'transport'}`}`,
+      });
     }
-    setSessions((data ?? []) as UpSession[]);
+    setSessions(Array.isArray(res.json) ? (res.json as UpSession[]) : []);
     setLoading(false);
+    // fnGet intentionally excluded: it's stable-by-refs (tokens read via
+    // authRef.current inside resolveAdminBearer), so this loader must not
+    // rebind to per-render helper identities.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, authSession?.token, authSession?.refreshToken]);
 
   // The Supabase singleton has persistSession:false and
   // autoRefreshToken:false, and the auth context refreshes only on mount;
@@ -141,7 +159,8 @@ export default function AdminPaymentsTab() {
   // on the singleton is NEVER used as the admin's bearer (that silently
   // mailed a non-admin identity → 403 'Admins only' with a valid Bearer).
   const resolveAdminBearer = async (): Promise<{ token: string; via: 'refresh' | 'cache' } | null> => {
-    const refreshToken = authSession?.refreshToken;
+    const current = authRef.current;
+    const refreshToken = current?.refreshToken;
     if (refreshToken) {
       try {
         const { data } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
@@ -151,7 +170,7 @@ export default function AdminPaymentsTab() {
         /* refresh rejections fall through to the cached admin token */
       }
     }
-    const cached = authSession?.token;
+    const cached = current?.token;
     return cached ? { token: cached, via: 'cache' } : null;
   };
 
@@ -185,6 +204,31 @@ export default function AdminPaymentsTab() {
         Authorization: `Bearer ${bearer.token}`,
       },
       body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => null);
+    return { ok: res.ok, json, status: res.status };
+  };
+
+  // GET straight to /rest/v1 — the table reads MUST carry the admin
+  // bearer because upi_payment_sessions' only select policy matches
+  // auth.uid() against the admins table (a header-less singleton read
+  // renders auth.uid() null and RLS zeroes the result set).
+  const fnGet = async (
+    path: string,
+    qs: string
+  ): Promise<{ ok: boolean; json: Record<string, unknown> | null; status: number }> => {
+    const bearer = await resolveAdminBearer();
+    if (!bearer) {
+      return { ok: false, json: { error: 'Admin session expired — please sign in again and retry.' }, status: 0 };
+    }
+    adminFnDebug(`rest:${path}`, bearer);
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${path}${qs}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${bearer.token}`,
+      },
     });
     const json = await res.json().catch(() => null);
     return { ok: res.ok, json, status: res.status };
