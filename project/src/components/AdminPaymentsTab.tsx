@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, ImageOff, Loader2, RefreshCw, Search, Smartphone, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { inr, formatDateTime } from '@/lib/format';
+import { useAuth } from '@/context/CustomerAuthContext';
 
 type UpSession = {
   id: string;
@@ -88,9 +90,11 @@ const shortOrderId = (id: string) => (id.length > 13 ? `${id.slice(0, 13)}…` :
 type DateMode = 'all' | 'today' | 'yesterday' | 'week' | 'custom';
 
 export default function AdminPaymentsTab() {
+  const { session: authSession } = useAuth();
   const [sessions, setSessions] = useState<UpSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<UpSession | null>(null);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [search, setSearch] = useState('');
   const [dateMode, setDateMode] = useState<DateMode>('all');
@@ -125,6 +129,30 @@ export default function AdminPaymentsTab() {
     void load();
   }, [load]);
 
+  // The Supabase singleton has persistSession:false — bare functions.invoke
+  // attaches no Authorization header and the platform 401s before the fn
+  // runs, so the current admin token must be passed explicitly (same
+  // pattern as the checkout proof form).
+  const bearerHeaders = authSession?.token
+    ? { Authorization: `Bearer ${authSession.token}` }
+    : undefined;
+
+  // SDK quirk: FunctionsHttpError has no .json() — parse the Response body
+  // off .context and surface the fn-level {error} message.
+  const fnBodyError = async (error: unknown): Promise<string | null> => {
+    if (!(error instanceof FunctionsHttpError)) return null;
+    try {
+      const payload: unknown = await (error.context as Response).json();
+      if (payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string') {
+        return (payload as { error: string }).error;
+      }
+      if (typeof payload === 'string' && payload.trim()) return payload;
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
   const confirm = async (s: UpSession) => {
     const bankRef = (s.customer_utr ?? '').trim();
     if (!bankRef) {
@@ -133,17 +161,22 @@ export default function AdminPaymentsTab() {
     }
     setConfirmingId(s.id);
     setMessage(null);
-    const { data, error } = await supabase.functions.invoke('upi-manual-confirm', {
-      body: {
-        payment_id: s.id,
-        order_id: s.order_id,
-        bank_ref: bankRef,
-        amount_rupees: Number(s.amount_paise) / 100,
-      },
-    });
+    const { data, error } = await supabase.functions.invoke(
+      'upi-manual-confirm',
+      {
+        body: {
+          payment_id: s.id,
+          order_id: s.order_id,
+          bank_ref: bankRef,
+          amount_rupees: Number(s.amount_paise) / 100,
+        },
+        headers: bearerHeaders,
+      }
+    );
     setConfirmingId(null);
     if (error) {
-      setMessage({ kind: 'err', text: error.message });
+      const bodyError = await fnBodyError(error);
+      setMessage({ kind: 'err', text: bodyError ?? error.message });
       return;
     }
     if (data?.error) {
@@ -151,6 +184,7 @@ export default function AdminPaymentsTab() {
       return;
     }
     setMessage({ kind: 'ok', text: `Confirmed ${s.order_id} against UTR ${bankRef}. Order recorded.` });
+    setConfirmTarget(null);
     void load();
   };
 
@@ -173,12 +207,17 @@ export default function AdminPaymentsTab() {
     }
     setRejecting(true);
     setRejectError(null);
-    const { data, error } = await supabase.functions.invoke('upi-reject-payment', {
-      body: { payment_id: rejectTarget.id, remark },
-    });
+    const { data, error } = await supabase.functions.invoke(
+      'upi-reject-payment',
+      {
+        body: { payment_id: rejectTarget.id, remark },
+        headers: bearerHeaders,
+      }
+    );
     setRejecting(false);
     if (error) {
-      setRejectError(error.message);
+      const bodyError = await fnBodyError(error);
+      setRejectError(bodyError ?? error.message);
       return;
     }
     if (data?.error) {
@@ -564,15 +603,11 @@ export default function AdminPaymentsTab() {
                         {(s.status === 'ACTIVE' || s.status === 'INITIATED') ? (
                           <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
                             <button
-                              onClick={() => void confirm(s)}
+                              onClick={() => setConfirmTarget(s)}
                               disabled={confirmingId === s.id || !s.customer_utr}
                               className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                              {confirmingId === s.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                              )}
+                              <CheckCircle2 className="h-3.5 w-3.5" />
                               Confirm
                             </button>
                             <button
@@ -686,6 +721,61 @@ export default function AdminPaymentsTab() {
                 </p>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm modal (keyed to the session row, safe across search/filters) */}
+      {confirmTarget && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4" onClick={() => !confirmingId && setConfirmTarget(null)}>
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-bold text-slate-900">Confirm Payment Verification</h3>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              I've checked my bank statement / app and verified the customer's credit against the UTR they reported.
+            </p>
+            <div className="mt-3 space-y-1 rounded-xl bg-slate-50 p-3 text-xs">
+              <p className="flex justify-between gap-3">
+                <span className="font-semibold text-slate-500">Customer name</span>
+                <span className="text-right text-slate-900">{buyerOf(confirmTarget.buyer).name || '—'}</span>
+              </p>
+              <p className="flex justify-between gap-3">
+                <span className="font-semibold text-slate-500">UTR number</span>
+                <span className="text-right font-mono text-slate-900">{confirmTarget.customer_utr ?? '—'}</span>
+              </p>
+              <p className="flex justify-between gap-3">
+                <span className="font-semibold text-slate-500">Amount</span>
+                <span className="text-right font-semibold text-emerald-700">{inr(Number(confirmTarget.amount_paise) / 100)}</span>
+              </p>
+            </div>
+            <p className="mt-3 text-[11px] font-semibold text-amber-700">
+              Are you sure you want to approve this UPI payment? This will mark the order as paid and deliver the gift card.
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setConfirmTarget(null)}
+                disabled={confirmingId === confirmTarget.id}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void confirm(confirmTarget)}
+                disabled={confirmingId === confirmTarget.id}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {confirmingId === confirmTarget.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+                Yes, Confirm Payment
+              </button>
+            </div>
           </div>
         </div>
       )}
