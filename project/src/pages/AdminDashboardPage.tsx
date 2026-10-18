@@ -101,11 +101,7 @@ export default function AdminDashboardPage() {
   }, [searchParams, navigate]);
 
   const handleTabChange = (newTab: AdminTabId) => {
-    if (newTab === 'payments') {
-      navigate('/admin/upi-direct');
-      return;
-    }
-    setTab(newTab as Tab);
+    setTab(newTab);
     if (newTab === 'overview') {
       setSearchParams({}, { replace: true });
     } else {
