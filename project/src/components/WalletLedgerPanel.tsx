@@ -27,7 +27,9 @@ type LedgerRow = {
   balance_after: number | string;
   reference_id: string | null;
   order_id: string | null;
+  remark?: string | null;
   created_at: string;
+  completed_at?: string | null;
 };
 
 type TopupRow = {
@@ -37,6 +39,7 @@ type TopupRow = {
   customer_utr: string | null;
   admin_remark: string | null;
   created_at: string;
+  completed_at?: string | null;
 };
 
 // ₹10,000/month in paise — kept in LOCKSTEP with the wallet_credit RPC
@@ -55,18 +58,42 @@ const categoryLabel: Record<LedgerRow['category'], string> = {
   ROLLBACK: 'Return',
 };
 
+function transactionRemark(tl: LedgerRow): string {
+  if (tl.remark && tl.remark.trim()) {
+    return tl.remark.trim().replace(/^(Remark|Reason):\s*/i, '');
+  }
+  const ref = (tl.reference_id ?? '').trim();
+  const ord = (tl.order_id ?? '').trim();
+  if (ref && ref !== ord) {
+    return ref.replace(/^(Remark|Reason):\s*/i, '');
+  }
+  if (tl.category === 'ROLLBACK' || tl.category === 'ADJUSTMENT') {
+    return 'Reversal of top-up session';
+  }
+  if (tl.category === 'REFUND') {
+    return 'Manual return / refund';
+  }
+  if (tl.category === 'TOPUP') {
+    return 'Wallet top-up';
+  }
+  if (tl.category === 'VOUCHER_PURCHASE') {
+    return 'Voucher purchase';
+  }
+  return ref || '—';
+}
+
 const currentMonthStart = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
 // Status mapping for the top-up request block:
-// CONFIRMED→Confirmed; REJECTED→Rejected (+admin_remark reason);
+// CONFIRMED / SUCCESS → Approve; REJECTED→Rejected (+admin_remark reason);
 // REVERTED→Reverted; CANCELLED→Cancelled; ACTIVE+UTR→Pending verification (UTR shown);
 // ACTIVE no UTR→Awaiting your payment; anything else → raw status.
 const topupStatus = (t: TopupRow): { label: string; cls: string } => {
   if (t.status === 'REVERTED') return { label: 'Reverted', cls: 'bg-slate-100 text-slate-600 border border-slate-200' };
-  if (t.status === 'CONFIRMED' || t.status === 'SUCCESS') return { label: 'Confirmed', cls: 'bg-emerald-100 text-emerald-700' };
+  if (t.status === 'CONFIRMED' || t.status === 'SUCCESS') return { label: 'Approve', cls: 'bg-emerald-100 text-emerald-700' };
   if (t.status === 'REJECTED') return { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' };
   if (t.status === 'CANCELLED') return { label: 'Cancelled', cls: 'bg-slate-100 text-slate-500' };
   if (t.status === 'ACTIVE') {
@@ -108,16 +135,25 @@ export default function WalletLedgerPanel() {
   const matchesSearch = (t: TopupRow | LedgerRow) => {
     if (!q) return true;
     if ('customer_utr' in t) {
-      return topupRef(t).toLowerCase().includes(q) || (t.customer_utr ?? '').toLowerCase().includes(q);
+      return (
+        topupRef(t).toLowerCase().includes(q) ||
+        (t.customer_utr ?? '').toLowerCase().includes(q) ||
+        (t.admin_remark ?? '').toLowerCase().includes(q)
+      );
     }
-    return (t.order_id ?? t.reference_id ?? '').toLowerCase().includes(q);
+    const tl = t as LedgerRow;
+    return (
+      (tl.order_id ?? '').toLowerCase().includes(q) ||
+      (tl.reference_id ?? '').toLowerCase().includes(q) ||
+      transactionRemark(tl).toLowerCase().includes(q)
+    );
   };
 
   const matchesStatus = (t: TopupRow | LedgerRow) => {
     if (statusFilter === 'all') return true;
     if ('customer_utr' in t) {
       const label = topupStatus(t).label;
-      if (statusFilter === 'confirmed') return label === 'Confirmed';
+      if (statusFilter === 'confirmed') return label === 'Confirmed' || label === 'Approve';
       if (statusFilter === 'rejected') return label === 'Rejected' || label === 'Reverted';
       return label === 'Pending Verification' || label === 'Awaiting your payment';
     }
@@ -193,10 +229,10 @@ export default function WalletLedgerPanel() {
     setTopupsLoading(true);
     const { data, error: err } = await supabase
       .from('upi_payment_sessions')
-      .select('id, amount_paise, status, customer_utr, admin_remark, created_at')
+      .select('id, amount_paise, status, customer_utr, admin_remark, created_at, completed_at')
       .eq('category', 'TOPUP')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(100);
     if (err) {
       setError(err.message || 'Could not load top-up requests.');
     } else {
@@ -431,8 +467,8 @@ export default function WalletLedgerPanel() {
                   <p className="mt-6 text-sm text-slate-500">No matching results</p>
                 ) : (
                   <>
-                    <div className="mt-4 overflow-x-auto">
-                      <table className="w-full min-w-[640px] text-left text-xs">
+                    <div className="mt-4 overflow-x-auto rounded-xl border border-slate-100">
+                      <table className="w-full min-w-[700px] text-left text-xs">
                         <thead>
                           <tr className="bg-slate-50">
                             <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
@@ -459,6 +495,7 @@ export default function WalletLedgerPanel() {
                           {paginated.map((t, i) => {
                             const tr = t as TopupRow;
                             const st = topupStatus(tr);
+                            const cleanRemark = (tr.admin_remark ?? '').replace(/^(Reason|Remark):\s*/i, '');
                             return (
                               <tr key={tr.id} className="border-t border-slate-100">
                                 <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
@@ -470,19 +507,35 @@ export default function WalletLedgerPanel() {
                                 <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900">
                                   {inr(Number(tr.amount_paise) / 100)}
                                 </td>
-                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">
-                                  {formatDateTime(tr.created_at)}
+                                <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-600">
+                                  <p className="text-[11px] text-slate-500">
+                                    <span className="font-semibold text-slate-600">Created:</span>{' '}
+                                    <span className="text-slate-900">{formatDateTime(tr.created_at)}</span>
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] text-slate-500">
+                                    <span className="font-semibold text-slate-600">Completed:</span>{' '}
+                                    {tr.completed_at ? (
+                                      <span className="text-slate-900">{formatDateTime(tr.completed_at)}</span>
+                                    ) : (
+                                      <span className="text-slate-400">-</span>
+                                    )}
+                                  </p>
                                 </td>
                                 <td className="break-all px-3 py-2.5 font-mono text-[11px] text-slate-600">
                                   {tr.customer_utr ?? '—'}
                                 </td>
                                 <td className="px-3 py-2.5">
-                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${st.cls}`}>
+                                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold ${st.cls}`}>
                                     {st.label}
                                   </span>
-                                  {(tr.status === 'REJECTED' || tr.status === 'REVERTED') && tr.admin_remark && (
-                                    <p className={`mt-0.5 text-[10px] font-semibold ${tr.status === 'REJECTED' ? 'text-rose-600' : 'text-slate-500'}`}>
-                                      {tr.admin_remark.startsWith('Reverted by') ? tr.admin_remark : `Reason: ${tr.admin_remark}`}
+                                  {tr.status === 'REJECTED' && cleanRemark && (
+                                    <p className="mt-1 text-[11px] font-semibold text-rose-600">
+                                      {cleanRemark}
+                                    </p>
+                                  )}
+                                  {tr.status === 'REVERTED' && cleanRemark && (
+                                    <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                                      {cleanRemark}
                                     </p>
                                   )}
                                 </td>
@@ -545,7 +598,7 @@ export default function WalletLedgerPanel() {
                 ) : (
                   <>
                     <div className="mt-4 overflow-x-auto rounded-xl border border-slate-100">
-                      <table className="w-full min-w-[680px] text-left text-xs">
+                      <table className="w-full min-w-[780px] text-left text-xs">
                         <thead>
                           <tr className="bg-slate-50">
                             <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
@@ -567,6 +620,9 @@ export default function WalletLedgerPanel() {
                               Order ID / Reference
                             </th>
                             <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Remark
+                            </th>
+                            <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
                               Balance
                             </th>
                           </tr>
@@ -576,15 +632,23 @@ export default function WalletLedgerPanel() {
                             const tl = t as LedgerRow;
                             const amountRs = Number(tl.amount) / 100;
                             const credit = tl.type === 'CREDIT';
+                            const remarkText = transactionRemark(tl);
                             return (
                               <tr key={tl.id} className="border-t border-slate-100">
                                 <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
                                   {pageStart + i + 1}
                                 </td>
-                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">
-                                  {formatDateTime(tl.created_at)}
+                                <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-600">
+                                  <p className="text-[11px] text-slate-500">
+                                    <span className="font-semibold text-slate-600">Created:</span>{' '}
+                                    <span className="text-slate-900">{formatDateTime(tl.created_at)}</span>
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] text-slate-500">
+                                    <span className="font-semibold text-slate-600">Completed:</span>{' '}
+                                    <span className="text-slate-900">{formatDateTime(tl.completed_at || tl.created_at)}</span>
+                                  </p>
                                 </td>
-                                <td className="px-3 py-2.5">
+                                <td className="px-3 py-2.5 whitespace-nowrap">
                                   <span
                                     className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                                       credit ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
@@ -594,9 +658,11 @@ export default function WalletLedgerPanel() {
                                     {tl.type}
                                   </span>
                                 </td>
-                                <td className="flex items-center gap-1 whitespace-nowrap px-3 py-2.5 text-slate-600">
-                                  <ArrowLeftRight className="h-3 w-3 text-slate-300" />
-                                  {categoryLabel[tl.category] ?? tl.category}
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-600 text-xs">
+                                  <div className="flex items-center gap-1">
+                                    <ArrowLeftRight className="h-3 w-3 text-slate-300" />
+                                    {categoryLabel[tl.category] ?? tl.category}
+                                  </div>
                                 </td>
                                 <td
                                   className={`whitespace-nowrap px-3 py-2.5 font-semibold ${
@@ -605,8 +671,13 @@ export default function WalletLedgerPanel() {
                                 >
                                   {credit ? '+' : '−'}{inr(amountRs)}
                                 </td>
-                                <td className="break-all px-3 py-2.5 font-mono text-[11px] text-slate-500">
-                                  {tl.order_id ?? tl.reference_id ?? '—'}
+                                <td className="break-all px-3 py-2.5 font-mono text-[11px] text-slate-600">
+                                  {tl.order_id || (tl.reference_id && tl.reference_id.startsWith('GK-') ? tl.reference_id : '—')}
+                                </td>
+                                <td className="px-3 py-2.5 text-xs text-slate-700">
+                                  <span className="text-[11px] font-medium" title={remarkText}>
+                                    {remarkText}
+                                  </span>
                                 </td>
                                 <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900">
                                   {inr(Number(tl.balance_after) / 100)}
