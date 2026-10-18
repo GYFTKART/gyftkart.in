@@ -159,6 +159,10 @@ export default function AdminPaymentsTab() {
       setMessage({ kind: 'err', text: 'This session has no customer UTR to confirm against.' });
       return;
     }
+    if (!authSession?.token) {
+      setMessage({ kind: 'err', text: 'Admin session expired — please sign in again and retry.' });
+      return;
+    }
     setConfirmingId(s.id);
     setMessage(null);
     const { data, error } = await supabase.functions.invoke(
@@ -203,6 +207,10 @@ export default function AdminPaymentsTab() {
     }
     if (remark.length > 500) {
       setRejectError('Rejection remark too long (max 500 chars).');
+      return;
+    }
+    if (!authSession?.token) {
+      setRejectError('Admin session expired — please sign in again and retry.');
       return;
     }
     setRejecting(true);
