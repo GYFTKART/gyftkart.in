@@ -15,6 +15,16 @@ export interface Session {
   phone: string;
   token: string;
   refreshToken: string;
+  customer_type?: 'B2C' | 'B2B';
+  company_name?: string;
+  brand_trade_name?: string;
+  gstin?: string;
+  pan?: string;
+  billing_address?: string;
+  billing_state?: string;
+  billing_city?: string;
+  billing_pincode?: string;
+  credit_limit?: number;
 }
 
 interface LoginResult {
@@ -205,8 +215,36 @@ async function performRestore(): Promise<Session | null> {
   // Tokens rotate on every refresh — keep the cache in sync so the
   // next hard refresh (or the next tab to grab the lock) uses the
   // current pair, not the one from however many refreshes ago.
+  let freshProfileFields: Partial<Session> = {};
+  try {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.session.user.id)
+      .maybeSingle();
+    if (prof) {
+      freshProfileFields = {
+        name: prof.full_name || cached.name,
+        phone: prof.phone || cached.phone,
+        customer_type: prof.customer_type || cached.customer_type || 'B2C',
+        company_name: prof.company_name ?? cached.company_name,
+        brand_trade_name: prof.brand_trade_name ?? cached.brand_trade_name,
+        gstin: prof.gstin ?? cached.gstin,
+        pan: prof.pan ?? cached.pan,
+        billing_address: prof.billing_address ?? cached.billing_address,
+        billing_state: prof.billing_state ?? cached.billing_state,
+        billing_city: prof.billing_city ?? cached.billing_city,
+        billing_pincode: prof.billing_pincode ?? cached.billing_pincode,
+        credit_limit: prof.credit_limit ?? cached.credit_limit,
+      };
+    }
+  } catch {
+    // Keep cached if network or query fails
+  }
+
   const refreshed: Session = {
     ...cached,
+    ...freshProfileFields,
     token: data.session.access_token,
     refreshToken: data.session.refresh_token,
   };
@@ -299,14 +337,66 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: error?.message ?? 'Incorrect email or password.' };
     }
 
-    const meta = data.user.user_metadata as { name?: string; phone?: string } | null;
+    const meta = data.user.user_metadata as {
+      name?: string;
+      phone?: string;
+      customer_type?: 'B2C' | 'B2B';
+      company_name?: string;
+      brand_trade_name?: string;
+      gstin?: string;
+      pan?: string;
+      billing_address?: string;
+      billing_state?: string;
+      billing_city?: string;
+      billing_pincode?: string;
+      credit_limit?: number;
+    } | null;
+
+    let profileData: {
+      customer_type?: 'B2C' | 'B2B';
+      company_name?: string;
+      brand_trade_name?: string;
+      gstin?: string;
+      pan?: string;
+      billing_address?: string;
+      billing_state?: string;
+      billing_city?: string;
+      billing_pincode?: string;
+      credit_limit?: number;
+      full_name?: string;
+      phone?: string;
+    } | null = null;
+
+    try {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .maybeSingle();
+      if (prof) {
+        profileData = prof;
+      }
+    } catch {
+      // fallback to metadata
+    }
+
     const newSession: Session = {
       id: data.user.id,
-      name: meta?.name ?? '',
+      name: profileData?.full_name ?? meta?.name ?? '',
       email: data.user.email ?? trimmedEmail,
-      phone: meta?.phone ?? '',
+      phone: profileData?.phone ?? meta?.phone ?? '',
       token: data.session?.access_token ?? '',
       refreshToken: data.session?.refresh_token ?? '',
+      customer_type: profileData?.customer_type ?? meta?.customer_type ?? 'B2C',
+      company_name: profileData?.company_name ?? meta?.company_name,
+      brand_trade_name: profileData?.brand_trade_name ?? meta?.brand_trade_name,
+      gstin: profileData?.gstin ?? meta?.gstin,
+      pan: profileData?.pan ?? meta?.pan,
+      billing_address: profileData?.billing_address ?? meta?.billing_address,
+      billing_state: profileData?.billing_state ?? meta?.billing_state,
+      billing_city: profileData?.billing_city ?? meta?.billing_city,
+      billing_pincode: profileData?.billing_pincode ?? meta?.billing_pincode,
+      credit_limit: profileData?.credit_limit ?? meta?.credit_limit,
     };
 
     cacheSession(newSession);

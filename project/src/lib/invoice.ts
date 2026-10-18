@@ -2,9 +2,12 @@ export interface InvoiceItem {
   id?: string;
   name: string;
   brand?: string;
-  denomination: number;
+  brandName?: string;
+  denomination?: number;
+  unitPrice?: number;
   quantity: number;
-  total: number;
+  total?: number;
+  totalPrice?: number;
   code?: string;
   recipientEmail?: string;
 }
@@ -15,6 +18,15 @@ export interface InvoiceCustomer {
   phone?: string;
   userId?: string;
   address?: string;
+  customerType?: 'B2C' | 'B2B';
+  companyName?: string;
+  brandTradeName?: string;
+  gstin?: string;
+  pan?: string;
+  billingAddress?: string;
+  billingState?: string;
+  billingCity?: string;
+  billingPincode?: string;
 }
 
 export interface InvoiceData {

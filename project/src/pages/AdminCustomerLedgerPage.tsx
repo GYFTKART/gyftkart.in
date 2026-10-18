@@ -35,6 +35,15 @@ export type CustomerProfile = {
   phone: string;
   created_at: string;
   wallet_balance?: number; // rupees
+  customer_type?: 'B2C' | 'B2B';
+  company_name?: string | null;
+  brand_trade_name?: string | null;
+  gstin?: string | null;
+  pan?: string | null;
+  billing_address?: string | null;
+  billing_state?: string | null;
+  billing_city?: string | null;
+  billing_pincode?: string | null;
 };
 
 export type LedgerTransaction = {
@@ -162,6 +171,15 @@ export default function AdminCustomerLedgerPage() {
         email: selectedCustomer.email || '',
         phone: selectedCustomer.phone || '',
         userId: selectedCustomer.id,
+        customerType: selectedCustomer.customer_type,
+        companyName: selectedCustomer.company_name ?? undefined,
+        brandTradeName: selectedCustomer.brand_trade_name ?? undefined,
+        gstin: selectedCustomer.gstin ?? undefined,
+        pan: selectedCustomer.pan ?? undefined,
+        billingAddress: selectedCustomer.billing_address ?? undefined,
+        billingState: selectedCustomer.billing_state ?? undefined,
+        billingCity: selectedCustomer.billing_city ?? undefined,
+        billingPincode: selectedCustomer.billing_pincode ?? undefined,
       },
       items: invItems,
       subtotal: amountRs,
@@ -178,7 +196,10 @@ export default function AdminCustomerLedgerPage() {
     setCustomersLoading(true);
     try {
       const [profilesRes, walletsRes] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, phone, created_at').order('created_at', { ascending: false }),
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, phone, created_at, customer_type, company_name, brand_trade_name, gstin, pan, billing_address, billing_state, billing_city, billing_pincode')
+          .order('created_at', { ascending: false }),
         supabase.from('wallets').select('id, user_id, balance'),
       ]);
 
@@ -196,6 +217,15 @@ export default function AdminCustomerLedgerPage() {
         phone: p.phone || '',
         created_at: p.created_at,
         wallet_balance: walletMap.get(p.id) ?? 0,
+        customer_type: p.customer_type,
+        company_name: p.company_name,
+        brand_trade_name: p.brand_trade_name,
+        gstin: p.gstin,
+        pan: p.pan,
+        billing_address: p.billing_address,
+        billing_state: p.billing_state,
+        billing_city: p.billing_city,
+        billing_pincode: p.billing_pincode,
       }));
 
       setCustomers(list);

@@ -23,6 +23,9 @@ import AdminCustomerLedgerPage from '@/pages/AdminCustomerLedgerPage';
 import AdminB2bCustomersPage from '@/pages/AdminB2bCustomersPage';
 import AdminB2bLedgerPage from '@/pages/AdminB2bLedgerPage';
 import AdminCompanyLedgerPage from '@/pages/AdminCompanyLedgerPage';
+import AdminGiftCardSalesPage from '@/pages/AdminGiftCardSalesPage';
+import AdminCorporateInquiriesPage from '@/pages/AdminCorporateInquiriesPage';
+import AdminBrandsPage from '@/pages/AdminBrandsPage';
 import ProfilePage from './pages/ProfilePage';
 import OrdersPage from '@/pages/OrdersPage';
 import ContactUs from '@/pages/ContactUs';
@@ -340,6 +343,36 @@ export default function App() {
                     <AdminAuthProvider>
                       <ProtectedAdminRoute>
                         <AdminDashboardPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route
+                  path="/admin/gift-card-sales"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminGiftCardSalesPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route
+                  path="/admin/corporate-inquiries"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminCorporateInquiriesPage />
+                      </ProtectedAdminRoute>
+                    </AdminAuthProvider>
+                  }
+                />
+                <Route
+                  path="/admin/brands"
+                  element={
+                    <AdminAuthProvider>
+                      <ProtectedAdminRoute>
+                        <AdminBrandsPage />
                       </ProtectedAdminRoute>
                     </AdminAuthProvider>
                   }

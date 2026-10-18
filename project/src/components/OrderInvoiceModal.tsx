@@ -63,6 +63,8 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
     invoice.status.toUpperCase() === 'CONFIRMED' ||
     invoice.status.toUpperCase() === 'DELIVERED';
 
+  const isB2B = invoice.customer.customerType === 'B2B' || Boolean(invoice.customer.gstin || invoice.customer.companyName);
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm p-3 sm:p-6 print:p-0 print:m-0 print:static print:bg-transparent print:overflow-visible">
       {/* Backdrop click dismiss */}
@@ -142,7 +144,9 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
                 <span className="text-[11px] font-black uppercase tracking-wider text-brand-900">
                   TAX INVOICE / RECEIPT
                 </span>
-                <p className="text-[9px] font-semibold text-brand-700">Original for Recipient (B2C)</p>
+                <p className="text-[9px] font-semibold text-brand-700">
+                  {isB2B ? 'Original for Recipient (B2B Tax Invoice)' : 'Original for Recipient (B2C)'}
+                </p>
               </div>
 
               <div className="mt-3 space-y-1 font-mono text-[11px]">
@@ -156,7 +160,9 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
                 </p>
                 <p>
                   <span className="text-slate-500 font-sans">Place of Supply:</span>{' '}
-                  <span className="text-slate-900 font-semibold">Uttar Pradesh (09)</span>
+                  <span className="text-slate-900 font-semibold">
+                    {invoice.customer.billingState || 'Uttar Pradesh (09)'}
+                  </span>
                 </p>
                 <p>
                   <span className="text-slate-500 font-sans">Reverse Charge:</span>{' '}
@@ -171,12 +177,48 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
             {/* Bill To */}
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1">
-                <Building2 className="h-3 w-3 text-slate-400" /> Billed To (Customer Details)
+                <Building2 className="h-3 w-3 text-slate-400" /> Billed To ({isB2B ? 'Corporate Client' : 'Customer Details'})
               </p>
-              <p className="text-sm font-extrabold text-slate-900">{invoice.customer.name || 'Valued Customer'}</p>
+              {isB2B && invoice.customer.companyName ? (
+                <>
+                  <p className="text-sm font-extrabold text-slate-900">M/s {invoice.customer.companyName}</p>
+                  {invoice.customer.brandTradeName && (
+                    <p className="text-[11px] font-medium text-slate-600">T/A {invoice.customer.brandTradeName}</p>
+                  )}
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {invoice.customer.gstin && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-brand-50 border border-brand-200 text-[10px] font-mono font-bold text-brand-800">
+                        GSTIN: {invoice.customer.gstin}
+                      </span>
+                    )}
+                    {invoice.customer.pan && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-mono font-medium text-slate-700">
+                        PAN: {invoice.customer.pan}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-slate-600 text-[11px] mt-1.5">
+                    <span className="text-slate-400">Attn:</span> {invoice.customer.name}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm font-extrabold text-slate-900">{invoice.customer.name || 'Valued Customer'}</p>
+              )}
               <p className="text-slate-600 text-[11px] mt-0.5">{invoice.customer.email || '—'}</p>
               {invoice.customer.phone && (
                 <p className="text-slate-600 text-[11px]">{invoice.customer.phone}</p>
+              )}
+              {(invoice.customer.billingAddress || invoice.customer.address) && (
+                <p className="text-slate-600 text-[11px] mt-1">
+                  {[
+                    invoice.customer.billingAddress || invoice.customer.address,
+                    invoice.customer.billingCity,
+                    invoice.customer.billingState,
+                    invoice.customer.billingPincode,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')}
+                </p>
               )}
               {invoice.customer.userId && (
                 <p className="text-[10px] font-mono text-slate-400 mt-1">
@@ -254,13 +296,13 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
                       {item.quantity}
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-slate-700">
-                      {inrDecimal(item.denomination)}
+                      {inrDecimal(item.denomination ?? item.unitPrice ?? 0)}
                     </td>
                     <td className="px-3 py-3 text-center text-[10px] font-semibold text-slate-500">
                       0.00%
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-bold text-slate-900">
-                      {inrDecimal(item.total)}
+                      {inrDecimal(item.total ?? item.totalPrice ?? 0)}
                     </td>
                   </tr>
                 ))}

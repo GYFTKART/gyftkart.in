@@ -9,11 +9,12 @@ import {
   Banknote,
   Wallet,
   Scale,
+  Users,
 } from 'lucide-react';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/components/Toast';
 
-export type AdminTabId = 'overview' | 'sales' | 'inquiries' | 'brands' | 'customers' | 'ledger' | 'upi';
+export type AdminTabId = 'overview' | 'sales' | 'inquiries' | 'brands' | 'customers';
 
 export function AdminTopBar() {
   const { admin, logout } = useAdminAuth();
@@ -126,12 +127,10 @@ export function AdminTopBar() {
 
 const ADMIN_TABS: { id: AdminTabId; label: string; icon: React.ComponentType<{ className?: string }>; path: string }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard, path: '/admin/dashboard' },
-  { id: 'sales', label: 'Gift Card Sales', icon: ShoppingBag, path: '/admin/gift-card-sales' },
-  { id: 'brands', label: 'Manage Brands', icon: Tag, path: '/admin/brands' },
-  { id: 'inquiries', label: 'Corporate Inquiries', icon: Building2, path: '/admin/corporate-inquiries' },
-  { id: 'customers', label: 'Customer Ledger', icon: Banknote, path: '/admin/customer-ledger' },
-  { id: 'ledger', label: 'Company Ledger', icon: Scale, path: '/admin/company-ledger' },
-  { id: 'upi', label: 'UPI Direct', icon: Wallet, path: '/admin/upi-direct' },
+  { id: 'sales', label: 'Gift Card Sales', icon: ShoppingBag, path: '/admin/dashboard?tab=sales' },
+  { id: 'inquiries', label: 'Corporate Inquiries', icon: Building2, path: '/admin/dashboard?tab=inquiries' },
+  { id: 'brands', label: 'Manage Brands', icon: Tag, path: '/admin/dashboard?tab=brands' },
+  { id: 'customers', label: 'Customers', icon: Users, path: '/admin/dashboard?tab=customers' },
 ];
 
 export function AdminNavTabs({

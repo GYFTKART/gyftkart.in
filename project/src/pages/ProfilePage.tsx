@@ -13,8 +13,10 @@ import {
   Info,
   ArrowLeft,
   Save,
+  Building2,
 } from 'lucide-react';
 import { useAuth } from '@/context/CustomerAuthContext';
+import { inr } from '@/lib/format';
 
 export default function ProfilePage() {
   const { session, updateProfile } = useAuth();
@@ -161,6 +163,71 @@ export default function ProfilePage() {
 
           {/* Form */}
           <form onSubmit={handleUpdate} className="p-6 sm:p-8 grid gap-5">
+            {session.customer_type === 'B2B' && (
+              <div className="rounded-2xl bg-gradient-to-br from-brand-50 to-slate-50 border border-brand-200/80 p-5">
+                <div className="flex items-center justify-between pb-3 border-b border-brand-200/60 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="grid place-items-center h-8 w-8 rounded-lg bg-brand-600 text-white">
+                      <Building2 className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-brand-800">
+                        Verified Corporate Account
+                      </span>
+                      <h3 className="text-base font-extrabold text-slate-900">
+                        {session.company_name || 'B2B Enterprise Client'}
+                      </h3>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-xs font-semibold">
+                    B2B Active
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  {session.brand_trade_name && (
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">Trade Name:</span>
+                      <strong className="text-slate-800">{session.brand_trade_name}</strong>
+                    </div>
+                  )}
+                  {session.gstin && (
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">GSTIN:</span>
+                      <strong className="text-brand-900 font-mono">{session.gstin}</strong>
+                    </div>
+                  )}
+                  {session.pan && (
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">PAN:</span>
+                      <strong className="text-slate-800 font-mono">{session.pan}</strong>
+                    </div>
+                  )}
+                  {session.credit_limit !== undefined && session.credit_limit > 0 && (
+                    <div>
+                      <span className="text-slate-500 text-[11px] block">Approved Credit Line:</span>
+                      <strong className="text-emerald-700">{inr(session.credit_limit)}</strong>
+                    </div>
+                  )}
+                  {(session.billing_address || session.billing_city) && (
+                    <div className="sm:col-span-2">
+                      <span className="text-slate-500 text-[11px] block">Registered Billing Address:</span>
+                      <span className="text-slate-700">
+                        {[
+                          session.billing_address,
+                          session.billing_city,
+                          session.billing_state,
+                          session.billing_pincode,
+                        ]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {successMsg && (
               <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-700 animate-pop">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />

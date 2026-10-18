@@ -130,6 +130,15 @@ export default function OrdersPage() {
         email: session?.email || '',
         phone: session?.phone || '',
         userId: session?.id,
+        customerType: session?.customer_type,
+        companyName: session?.company_name,
+        brandTradeName: session?.brand_trade_name,
+        gstin: session?.gstin,
+        pan: session?.pan,
+        billingAddress: session?.billing_address,
+        billingState: session?.billing_state,
+        billingCity: session?.billing_city,
+        billingPincode: session?.billing_pincode,
       },
       items: invItems,
       subtotal: amountRs,
@@ -163,6 +172,15 @@ export default function OrdersPage() {
         email: session?.email || '',
         phone: session?.phone || '',
         userId: session?.id,
+        customerType: session?.customer_type,
+        companyName: session?.company_name,
+        brandTradeName: session?.brand_trade_name,
+        gstin: session?.gstin,
+        pan: session?.pan,
+        billingAddress: session?.billing_address,
+        billingState: session?.billing_state,
+        billingCity: session?.billing_city,
+        billingPincode: session?.billing_pincode,
       },
       items: invItems,
       subtotal: amountRs,
@@ -349,11 +367,12 @@ export default function OrdersPage() {
                                 const isRejected = s.status === 'REJECTED' || isReverted;
                                 const isSuccess = s.status === 'SUCCESS' || s.status === 'CONFIRMED' || s.status === 'DELIVERED';
                                 const cleanRemark = (s.admin_remark ?? '').replace(/^(Rejection Reason|Reason|Remark):\s*/i, '');
-                                const sNo = (currentPage - 1) * itemsPerPage + index + 1;
+                                const totalCount = filteredUpi.length;
+                                const serialNo = totalCount - ((currentPage - 1) * itemsPerPage + index);
                                 return (
                                   <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
                                     <td className="whitespace-nowrap px-3.5 py-3 text-xs font-mono text-slate-500">
-                                      {sNo}
+                                      {serialNo}
                                     </td>
                                     <td className="px-3.5 py-3 text-xs">
                                       <p className="font-bold text-slate-900">{itemsSummary(s.items)}</p>
