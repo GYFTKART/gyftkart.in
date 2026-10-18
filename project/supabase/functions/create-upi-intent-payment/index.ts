@@ -42,6 +42,15 @@ serve(async (req) => {
     );
     const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
     if (userError || !user) return jsonResponse({ error: 'Invalid or expired session' }, 401);
+    // Server-side buyer fallback (metadata.name > full_name > email prefix)
+    const derivedBuyer = {
+      name:
+        (user.user_metadata?.name as string | undefined) ??
+        (user.user_metadata?.full_name as string | undefined) ??
+        user.email?.split('@')[0] ??
+        'User',
+      email: user.email ?? '',
+    };
 
     const body = await req.json();
 
@@ -125,7 +134,10 @@ serve(async (req) => {
         order_id: orderId,
         amount_paise: Number(amountPaise),
         items: category === 'TOPUP' ? [] : body.items,
-        buyer: body.buyer ?? null,
+        buyer:
+          body.buyer && typeof body.buyer === 'object'
+            ? body.buyer
+            : derivedBuyer,
         status: 'ACTIVE',
         expires_at: expiresAt,
         category,
