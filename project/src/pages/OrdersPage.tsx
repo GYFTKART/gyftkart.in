@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Gift, CheckCircle2, Clock, Mail, Loader2 } from 'lucide-react';
+import { ArrowLeft, Gift, CheckCircle2, Clock, Mail, Loader2, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/CustomerAuthContext';
 import { inr, formatDateTime } from '@/lib/format';
@@ -29,16 +29,15 @@ type PurchaseRow = {
   created_at: string;
 };
 
-// Pending UPI Direct voucher checkouts (upi_payment_sessions, category
-// 'VOUCHER') — these rows exist BEFORE admin verification creates the
-// real order/purchases, so /orders shows them with a Pending badge
-// instead of blank "No orders yet".
+// UPI Direct voucher checkouts (upi_payment_sessions, category 'VOUCHER'
+// or non-TOPUP) across all lifecycle states (pending, delivered, rejected).
 type PendingUpiRow = {
   id: string;
   order_id: string;
   amount_paise: number | string;
   status: string;
   items: unknown;
+  admin_remark?: string | null;
   created_at: string;
 };
 
@@ -64,11 +63,20 @@ const itemsSummary = (items: unknown): string => {
 };
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === 'successful') {
+  const s = status.toLowerCase();
+  if (s === 'successful' || s === 'delivered' || s === 'confirmed') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
         <CheckCircle2 className="h-3.5 w-3.5" />
         Delivered
+      </span>
+    );
+  }
+  if (s === 'rejected' || s === 'reverted') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+        <XCircle className="h-3.5 w-3.5" />
+        Rejected
       </span>
     );
   }
@@ -81,7 +89,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function OrdersPage() {
-  const { session } = useAuth();
+  const { session, authReady } = useAuth();
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [purchases, setPurchases] = useState<PurchaseRow[] | null>(null);
   const [pendingUpi, setPendingUpi] = useState<PendingUpiRow[] | null>(null);
@@ -89,6 +97,7 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!authReady) return;
     if (!session?.id) {
       setOrders([]);
       setPurchases([]);
@@ -111,18 +120,17 @@ export default function OrdersPage() {
         .eq('user_id', session.id)
         .order('created_at', { ascending: false })
         .limit(100),
-      // Voucher checkouts pending or verified on the Admin panel:
+      // Voucher checkouts pending, verified, or rejected on the Admin panel:
       // INITIATED/ACTIVE == admin's PENDING_VERIFICATION, SUCCESS ==
-      // admin's CONFIRMED (the upi_payment_sessions status enum has no
-      // 'PENDING_VERIFICATION'/'CONFIRMED'/'DELIVERED' literals). Owner
-      // RLS + the explicit user_id match keep stale mock sessions out;
+      // admin's CONFIRMED, REJECTED == admin's REJECTED.
+      // Owner RLS + explicit user_id match keeps others' sessions out;
       // TOPUP category rows belong to the Wallet page, not here.
       supabase
         .from('upi_payment_sessions')
-        .select('id, order_id, amount_paise, status, items, created_at')
+        .select('id, order_id, amount_paise, status, items, admin_remark, created_at')
         .eq('user_id', session.id)
-        .eq('category', 'VOUCHER')
-        .in('status', ['INITIATED', 'ACTIVE', 'SUCCESS'])
+        .or('category.neq.TOPUP,category.is.null')
+        .in('status', ['INITIATED', 'ACTIVE', 'SUCCESS', 'PENDING_VERIFICATION', 'CONFIRMED', 'DELIVERED', 'REJECTED'])
         .order('created_at', { ascending: false })
         .limit(50),
     ]);
@@ -138,7 +146,7 @@ export default function OrdersPage() {
     setPurchases((purchasesRes.data ?? []) as PurchaseRow[]);
     setPendingUpi((upiRes.data ?? []) as PendingUpiRow[]);
     setLoading(false);
-  }, [session?.id]);
+  }, [authReady, session?.id]);
 
   useEffect(() => {
     void load();
@@ -192,44 +200,64 @@ export default function OrdersPage() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {/* ───────── Pending verification (UPI Direct vouchers) ───────── */}
+              {/* ───────── UPI Direct voucher orders ───────── */}
               {(pendingUpi ?? []).length > 0 && (
                 <div className="p-5 sm:p-6 pb-2">
-                  <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">Pending verification</h2>
+                  <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400">Recent Orders</h2>
                 </div>
               )}
               <ul className="divide-y divide-slate-100">
-                {(pendingUpi ?? []).map((s) => (
-                  <li
-                    key={s.id}
-                    className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 sm:p-6 hover:bg-slate-50/60 transition-colors"
-                  >
-                    <span className="grid place-items-center h-12 w-12 shrink-0 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-glow-sm">
-                      <Gift className="h-5 w-5" />
-                    </span>
+                {(pendingUpi ?? []).map((s) => {
+                  const isRejected = s.status === 'REJECTED';
+                  const isSuccess = s.status === 'SUCCESS' || s.status === 'CONFIRMED' || s.status === 'DELIVERED';
+                  return (
+                    <li
+                      key={s.id}
+                      className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 sm:p-6 hover:bg-slate-50/60 transition-colors"
+                    >
+                      <span
+                        className={`grid place-items-center h-12 w-12 shrink-0 rounded-2xl text-white shadow-glow-sm ${
+                          isRejected
+                            ? 'bg-gradient-to-br from-rose-500 to-rose-700'
+                            : isSuccess
+                            ? 'bg-gradient-to-br from-emerald-500 to-teal-700'
+                            : 'bg-gradient-to-br from-amber-400 to-amber-600'
+                        }`}
+                      >
+                        {isRejected ? <XCircle className="h-5 w-5" /> : <Gift className="h-5 w-5" />}
+                      </span>
 
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-900">{itemsSummary(s.items)}</p>
-                      <p className="mt-1.5 text-xs font-medium text-slate-500 font-mono">Order #{s.order_id}</p>
-                      <p className="mt-1 text-xs text-slate-400">{formatDateTime(s.created_at)}</p>
-                    </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900">{itemsSummary(s.items)}</p>
+                        <p className="mt-1.5 text-xs font-medium text-slate-500 font-mono">Order #{s.order_id}</p>
+                        {isRejected && s.admin_remark && (
+                          <p className="mt-1 text-xs font-semibold text-rose-600">Rejection Reason: {s.admin_remark}</p>
+                        )}
+                        <p className="mt-1 text-xs text-slate-400">{formatDateTime(s.created_at)}</p>
+                      </div>
 
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
-                      <p className="text-base font-extrabold text-slate-900">{inr(Number(s.amount_paise) / 100)}</p>
-                      {s.status === 'SUCCESS' ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Delivered
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                          <Clock className="h-3.5 w-3.5" />
-                          Pending Verification
-                        </span>
-                      )}
-                    </div>
-                  </li>
-                ))}
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
+                        <p className="text-base font-extrabold text-slate-900">{inr(Number(s.amount_paise) / 100)}</p>
+                        {isRejected ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                            <XCircle className="h-3.5 w-3.5" />
+                            Rejected
+                          </span>
+                        ) : isSuccess ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Delivered
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                            <Clock className="h-3.5 w-3.5" />
+                            Pending Verification
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
 
               {/* ─────────────── Your orders ─────────────── */}
