@@ -334,7 +334,7 @@ export default function CheckoutPage() {
                       </p>
                       <p className="mt-1.5 leading-relaxed">
                         Once you pay, gift card codes are generated instantly and emailed to each recipient.
-                        You'll see them all in your dashboard.
+                        You'll find them all on your /orders page.
                       </p>
                     </div>
                   </div>
@@ -466,7 +466,7 @@ export default function CheckoutPage() {
                             <span className="text-emerald-700">Balance {inrDecimal(walletBalance! / 100)}</span>
                           ) : (
                             <Link
-                              to="/dashboard"
+                              to="/wallet"
                               className="font-semibold text-amber-700 hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -514,7 +514,7 @@ export default function CheckoutPage() {
                             <p className="text-xs font-bold text-slate-700">Full-balance payment via your wallet</p>
                             <p className="text-[11px] text-slate-500">
                               Spends your entire balance on this order — the voucher codes will be generated and
-                              listed in your dashboard and /orders page on success.
+                              listed on your /orders page on success.
                             </p>
                             <button
                               onClick={() => void handleWalletPay()}
@@ -602,10 +602,10 @@ function SuccessView({
         </p>
         <div className="relative mt-6 flex flex-wrap items-center justify-center gap-3">
           <Link
-            to="/dashboard"
+            to="/orders"
             className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
           >
-            <Sparkles className="h-4 w-4" /> View in dashboard
+            <Sparkles className="h-4 w-4" /> View your orders
           </Link>
           <Link
             to="/brands"
@@ -619,7 +619,7 @@ function SuccessView({
       {/* codes */}
       <div className="mt-8 rounded-3xl border border-slate-100 bg-white p-6 shadow-card">
         <h3 className="font-display text-lg font-bold text-slate-900">Your gift card codes</h3>
-        <p className="text-sm text-slate-500 mt-0.5">Copy and share, or find them anytime in your dashboard.</p>
+        <p className="text-sm text-slate-500 mt-0.5">Copy and share, or find them anytime on your /orders page.</p>
         <div className="mt-5 space-y-3">
           {purchases.map((p) => (
             <div key={p.id} className="rounded-2xl border border-slate-100 p-4 flex items-center gap-4">

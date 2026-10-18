@@ -9,7 +9,7 @@ const faqs = [
   },
   {
     q: 'How will I receive my gift card?',
-    a: 'Digital gift cards are sent via email and/or SMS, usually within a few minutes of a successful payment. You can also view and manage all your purchased cards from your Dashboard.',
+    a: 'Digital gift cards are sent via email and/or SMS, usually within a few minutes of a successful payment. You can also view and manage all your purchased cards on your /orders page.',
   },
   {
     q: 'How do I redeem a gift card?',

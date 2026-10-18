@@ -155,14 +155,32 @@ export default function AdminPaymentsTab() {
     void load();
   }, [load, authSession?.token, authSession?.refreshToken]);
 
+  // JWT expiry check (local, no network): decode the payload's `exp`.
+  // A 30s clock-skew margin guards against sending a token that expires
+  // mid-request (the exact shape of the old 'Load failed: JWT expired'.
+  const tokenUsable = (token: string): boolean => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return typeof payload.exp !== 'number' || payload.exp > Date.now() / 1000 + 30;
+    } catch {
+      return true; // unparsable APR — let the server judge, don't fake-fail
+    }
+  };
+
   // The Supabase singleton has persistSession:false and
   // autoRefreshToken:false, and the auth context refreshes only on mount;
   // a tab left open past the ~1h token expiry holds an expired
-  // access_token, so tokens are resolved at CALL time. NO cross-identity
-  // fallback: if the ADMIN cache holds no tokens we resolve to null and
-  // the pre-flight guard stops the request — a shared/customer session
-  // on the singleton is NEVER used as the admin's bearer (that silently
-  // mailed a non-admin identity → 403 'Admins only' with a valid Bearer).
+  // access_token, so tokens are resolved at CALL time:
+  //   1. supabase.auth.refreshSession() with the cached admin refresh
+  //      token — an expired access token self-heals instead of hard-
+  //      failing the load with a red banner.
+  //   2. supabase.auth.getSession() — the SDK in-memory session, used
+  //      ONLY when it belongs to the same admin (a customer session on
+  //      the shared singleton is NEVER lifted onto the admin bearer —
+  //      that silently mailed a non-admin identity → 403).
+  //   3. the cached admin access token — refused when it has provably
+  //      expired (an expired bearer previously rode the request and
+  //      rendered 'Load failed: JWT expired').
   const resolveAdminBearer = async (): Promise<{ token: string; via: 'refresh' | 'cache' } | null> => {
     const current = authRef.current;
     const refreshToken = current?.refreshToken;
@@ -170,13 +188,27 @@ export default function AdminPaymentsTab() {
       try {
         const { data } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
         const fresh = data.session?.access_token;
-        if (fresh) return { token: fresh, via: 'refresh' };
+        if (fresh && tokenUsable(fresh)) return { token: fresh, via: 'refresh' };
       } catch {
-        /* refresh rejections fall through to the cached admin token */
+        /* refresh rejections fall through to the session/cached checks */
       }
     }
+    try {
+      const { data } = await supabase.auth.getSession();
+      const s = data.session;
+      if (
+        s?.user?.id &&
+        current?.userId &&
+        s.user.id === current.userId &&
+        tokenUsable(s.access_token)
+      ) {
+        return { token: s.access_token, via: 'cache' };
+      }
+    } catch {
+      /* session read rejections fall through to the cached token */
+    }
     const cached = current?.token;
-    return cached ? { token: cached, via: 'cache' } : null;
+    return cached && tokenUsable(cached) ? { token: cached, via: 'cache' } : null;
   };
 
   // Direct-transport debug (god-directed): makes the human's next console

@@ -111,16 +111,18 @@ export default function OrdersPage() {
         .eq('user_id', session.id)
         .order('created_at', { ascending: false })
         .limit(100),
-      // Voucher checkouts awaiting (or under) manual verification — the
-      // owner-select RLS policy allows reading own sessions; TOPUP
-      // category rows belong to the Wallet page, not here. SUCCESS
-      // sessions have already minted orders/purchases (avoid duplicates).
+      // Voucher checkouts pending or verified on the Admin panel:
+      // INITIATED/ACTIVE == admin's PENDING_VERIFICATION, SUCCESS ==
+      // admin's CONFIRMED (the upi_payment_sessions status enum has no
+      // 'PENDING_VERIFICATION'/'CONFIRMED'/'DELIVERED' literals). Owner
+      // RLS + the explicit user_id match keep stale mock sessions out;
+      // TOPUP category rows belong to the Wallet page, not here.
       supabase
         .from('upi_payment_sessions')
         .select('id, order_id, amount_paise, status, items, created_at')
         .eq('user_id', session.id)
         .eq('category', 'VOUCHER')
-        .in('status', ['INITIATED', 'ACTIVE'])
+        .in('status', ['INITIATED', 'ACTIVE', 'SUCCESS'])
         .order('created_at', { ascending: false })
         .limit(50),
     ]);
@@ -214,10 +216,17 @@ export default function OrdersPage() {
 
                     <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
                       <p className="text-base font-extrabold text-slate-900">{inr(Number(s.amount_paise) / 100)}</p>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                        <Clock className="h-3.5 w-3.5" />
-                        Pending Verification
-                      </span>
+                      {s.status === 'SUCCESS' ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Delivered
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                          <Clock className="h-3.5 w-3.5" />
+                          Pending Verification
+                        </span>
+                      )}
                     </div>
                   </li>
                 ))}

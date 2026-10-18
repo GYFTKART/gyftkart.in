@@ -8,7 +8,6 @@ import {
   X,
   Sparkles,
   Building2,
-  LayoutDashboard,
   User,
   Mail,
   Lock,
@@ -307,12 +306,6 @@ export default function Navbar() {
     setForgotSent(true);
   };
 
-  const goToDashboard = () => {
-    setUserMenuOpen(false);
-    setMobileOpen(false);
-    navigate('/dashboard');
-  };
-
   const goToProfile = () => {
     setUserMenuOpen(false);
     setMobileOpen(false);
@@ -434,13 +427,6 @@ export default function Navbar() {
 
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-card animate-pop">
-                    <button
-                      onClick={goToDashboard}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                      <LayoutDashboard className="h-4 w-4" />
-                      Dashboard
-                    </button>
                     <button
                       onClick={goToProfile}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
@@ -604,19 +590,12 @@ export default function Navbar() {
               Wallet{walletBalance !== null ? ` · ${inr(walletBalance / 100)}` : ''}
             </button>
             <button
-              onClick={goToDashboard}
+              onClick={goToProfile}
               className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
             >
-              <LayoutDashboard className="h-4 w-4" />
-              Dashboard
+              <UserCircle className="h-4 w-4" />
+              Profile
             </button>
-              <button
-                onClick={goToProfile}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <UserCircle className="h-4 w-4" />
-                Profile
-              </button>
               <button
                 onClick={goToOrders}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"

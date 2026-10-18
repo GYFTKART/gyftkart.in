@@ -12,7 +12,6 @@ import HomePage from '@/pages/HomePage';
 import BrandsPage from '@/pages/BrandsPage';
 import BrandProductPage from '@/pages/BrandProductPage';
 import CorporatePage from '@/pages/CorporatePage';
-import DashboardPage from '@/pages/DashboardPage';
 import WalletPage from '@/pages/WalletPage';
 import CheckoutPage from '@/pages/CheckoutPage';
 import CartPage from '@/pages/CartPage';
@@ -297,14 +296,7 @@ export default function App() {
                 <Route path="/brands" element={<BrandsPage />} />
                 <Route path="/brand/:slug" element={<BrandProductPage />} />
                 <Route path="/corporate" element={<CorporatePage />} />
-                <Route
-                  path="/dashboard"
-                  element={
-                    <ProtectedCustomerRoute>
-                      <DashboardPage />
-                    </ProtectedCustomerRoute>
-                  }
-                />
+                <Route path="/dashboard" element={<Navigate to="/orders" replace />} />
                 <Route
                   path="/wallet"
                   element={
