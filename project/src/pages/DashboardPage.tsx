@@ -21,12 +21,10 @@ import { getSessionId } from '@/lib/session';
 import type { Purchase } from '@/lib/types';
 import { inr, inrDecimal, formatDateTime } from '@/lib/format';
 import Reveal from '@/components/Reveal';
-import WalletLedgerPanel from '@/components/WalletLedgerPanel';
 
-type Tab = 'wallet' | 'cards' | 'history';
+type Tab = 'cards' | 'history';
 
 const tabs: { id: Tab; label: string; icon: typeof Wallet }[] = [
-  { id: 'wallet', label: 'Wallet', icon: Wallet },
   { id: 'cards', label: 'My Gift Cards', icon: Gift },
   { id: 'history', label: 'Purchase History', icon: Receipt },
 ];
@@ -34,7 +32,7 @@ const tabs: { id: Tab; label: string; icon: typeof Wallet }[] = [
 export default function DashboardPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>('wallet');
+  const [tab, setTab] = useState<Tab>('cards');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -162,16 +160,7 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : purchases.length === 0 ? (
-            tab === 'wallet' ? (
-              <WalletLedgerPanel />
-            ) : (
-              <EmptyState />
-            )
-          ) : tab === 'wallet' ? (
-            <div className="space-y-8">
-              <WalletLedgerPanel />
-              <WalletView purchases={purchases} totalBalance={totals.totalBalance} />
-            </div>
+            <EmptyState />
           ) : tab === 'cards' ? (
             <CardsView
               purchases={purchases}
@@ -216,71 +205,6 @@ function StatCard({
       <p className="font-display text-2xl font-extrabold text-slate-900 break-words">
         {value}
       </p>
-    </div>
-  );
-}
-
-function WalletView({ purchases, totalBalance }: { purchases: Purchase[]; totalBalance: number }) {
-  return (
-    <div className="grid lg:grid-cols-3 gap-6">
-      {/* big wallet card */}
-      <Reveal className="lg:col-span-1">
-        <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 p-7 text-white shadow-glow h-full">
-          <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-white/10 blur-3xl pointer-events-none" />
-          <div className="relative flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/15 rounded-full px-3 py-1">
-              <Wallet className="h-3.5 w-3.5" /> GyftKart Wallet
-            </span>
-            <Sparkles className="h-5 w-5 text-white/70" />
-          </div>
-          <p className="relative mt-8 text-white/70 text-xs">Available balance</p>
-          <p className="relative font-display text-4xl font-extrabold">{inrDecimal(totalBalance)}</p>
-          <div className="relative mt-8 flex items-center justify-between text-sm text-white/80">
-            <span className="font-mono tracking-widest">•••• GIFT</span>
-            <span className="font-semibold">{purchases.length} cards</span>
-          </div>
-        </div>
-      </Reveal>
-
-      {/* balance breakdown */}
-      <Reveal delay={100} className="lg:col-span-2">
-        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft h-full">
-          <h3 className="font-display text-lg font-bold text-slate-900">Balance breakdown</h3>
-          <p className="text-sm text-slate-500 mt-0.5">Remaining balance on each active gift card.</p>
-          <div className="mt-5 space-y-3">
-            {purchases.slice(0, 6).map((p) => {
-              const balance = Number(p.balance);
-              const original = Number(p.amount) * p.quantity;
-              const pct = original > 0 ? Math.min(100, Math.round((balance / original) * 100)) : 0;
-              return (
-                <div key={p.id} className="rounded-2xl border border-slate-100 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="h-9 w-9 rounded-xl flex items-center justify-center text-white font-display font-bold text-[10px]"
-                        style={{ background: `linear-gradient(135deg, ${p.brand_color}, ${p.brand_color2})` }}
-                      >
-                        {p.brand_name.slice(0, 2).toUpperCase()}
-                      </span>
-                      <div>
-                        <p className="font-semibold text-slate-900 text-sm">{p.brand_name}</p>
-                        <p className="text-[11px] text-slate-400">{formatDateTime(p.created_at)}</p>
-                      </div>
-                    </div>
-                    <p className="font-display font-bold text-slate-900">{inrDecimal(balance)}</p>
-                  </div>
-                  <div className="mt-3 h-2 rounded-full bg-slate-100 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-700 transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </Reveal>
     </div>
   );
 }

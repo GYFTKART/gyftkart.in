@@ -532,13 +532,13 @@ export default function CheckoutPage() {
                               )}
                             </button>
                             <p className="mt-2 text-[11px] font-semibold text-amber-700">
-                              Low Balance — Add Money from the Wallet tab on your dashboard.
+                              Low Balance — Add Money on the <Link to="/wallet" className="underline">Wallet page</Link>.
                             </p>
                           </div>
                         ) : (
                           <p className="flex items-center gap-2 text-xs font-semibold text-amber-700">
                             <WalletIcon className="h-3.5 w-3.5 shrink-0" />
-                            Low Balance — Add Money from the Wallet tab on your dashboard to pay with the wallet.
+                            Low Balance — Add Money on the Wallet page (/wallet) to pay with the wallet.
                           </p>
                         )}
                       </div>

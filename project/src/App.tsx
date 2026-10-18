@@ -13,6 +13,7 @@ import BrandsPage from '@/pages/BrandsPage';
 import BrandProductPage from '@/pages/BrandProductPage';
 import CorporatePage from '@/pages/CorporatePage';
 import DashboardPage from '@/pages/DashboardPage';
+import WalletPage from '@/pages/WalletPage';
 import CheckoutPage from '@/pages/CheckoutPage';
 import CartPage from '@/pages/CartPage';
 import NotFoundPage from '@/pages/NotFoundPage';
@@ -301,6 +302,14 @@ export default function App() {
                   element={
                     <ProtectedCustomerRoute>
                       <DashboardPage />
+                    </ProtectedCustomerRoute>
+                  }
+                />
+                <Route
+                  path="/wallet"
+                  element={
+                    <ProtectedCustomerRoute>
+                      <WalletPage />
                     </ProtectedCustomerRoute>
                   }
                 />

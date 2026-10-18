@@ -1,4 +1,4 @@
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Gift,
@@ -49,7 +49,8 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
-
+  const location = useLocation();
+  const walletActive = location.pathname === '/wallet';
   // Live wallet balance for the navbar pill — ensure_wallet via the
   // customer's own session (same RPC the dashboard wallet panel uses).
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -64,18 +65,10 @@ export default function Navbar() {
     })();
   }, [session?.token]);
 
-  // Jump to the wallet section on /dashboard — in-page scroll if already
-  // there, otherwise navigate first and scroll after the view mounts.
+  // Navigate straight to the dedicated /wallet page.
   const goToWallet = () => {
     setMobileOpen(false);
-    const scrollToWallet = () =>
-      document.getElementById('wallet')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (window.location.pathname === '/dashboard') {
-      scrollToWallet();
-    } else {
-      navigate('/dashboard');
-      setTimeout(scrollToWallet, 80);
-    }
+    navigate('/wallet');
   };
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -400,12 +393,17 @@ export default function Navbar() {
           </div>
 
           {/* Wallet pill — between Corporate and the account pill. Shows
-              the live balance; clicking scrolls to the wallet section on
-              /dashboard. Desktop only (the mobile menu mirrors it). */}
+              the live balance; clicking opens the dedicated /wallet page.
+              Desktop only (the mobile menu mirrors it). */}
           {session && (
             <button
               onClick={goToWallet}
-              className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors"
+              aria-current={walletActive ? 'page' : undefined}
+              className={`hidden lg:inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-semibold transition-colors ${
+                walletActive
+                  ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-sm'
+                  : 'border-slate-200 bg-white/80 text-slate-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50'
+              }`}
               aria-label="Go to wallet section"
             >
               <Wallet className="h-4 w-4 text-brand-600" />
@@ -598,7 +596,9 @@ export default function Navbar() {
               </div>
             <button
               onClick={goToWallet}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              className={`flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+                walletActive ? 'bg-brand-50 text-brand-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
             >
               <Wallet className="h-4 w-4 text-brand-600" />
               Wallet{walletBalance !== null ? ` · ${inr(walletBalance / 100)}` : ''}
