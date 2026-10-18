@@ -129,13 +129,30 @@ export default function AdminPaymentsTab() {
     void load();
   }, [load]);
 
-  // The Supabase singleton has persistSession:false — bare functions.invoke
-  // attaches no Authorization header and the platform 401s before the fn
-  // runs, so the current admin token must be passed explicitly (same
-  // pattern as the checkout proof form).
-  const bearerHeaders = authSession?.token
-    ? { Authorization: `Bearer ${authSession.token}` }
-    : undefined;
+  // The Supabase singleton has persistSession:false and
+  // autoRefreshToken:false, and the auth context refreshes only on mount;
+  // a tab left open past the ~1h token expiry holds an expired
+  // access_token, so tokens are resolved at CALL time — preferring a
+  // fresh refreshSession grant (safe single-shot, never touching the
+  // context's setSession-rotation code) and falling back to the cached
+  // token, then to whatever the SDK session holds.
+  const resolveBearerHeaders = async (): Promise<Record<string, string> | null> => {
+    let token: string | undefined = authSession?.refreshToken ? undefined : authSession?.token;
+    const refreshToken = authSession?.refreshToken;
+    if (refreshToken) {
+      try {
+        const { data } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+        const fresh = data.session?.access_token;
+        if (fresh) token = fresh;
+      } catch {
+        token = authSession?.token;
+      }
+    } else {
+      const { data } = await supabase.auth.getSession();
+      token = token ?? data.session?.access_token ?? undefined;
+    }
+    return token ? { Authorization: `Bearer ${token}` } : null;
+  };
 
   // SDK quirk: FunctionsHttpError has no .json() — parse the Response body
   // off .context and surface the fn-level {error} message.
@@ -165,6 +182,12 @@ export default function AdminPaymentsTab() {
     }
     setConfirmingId(s.id);
     setMessage(null);
+    const bearerHeaders = await resolveBearerHeaders();
+    if (!bearerHeaders) {
+      setConfirmingId(null);
+      setMessage({ kind: 'err', text: 'Admin session expired — please sign in again and retry.' });
+      return;
+    }
     const { data, error } = await supabase.functions.invoke(
       'upi-manual-confirm',
       {
@@ -215,6 +238,12 @@ export default function AdminPaymentsTab() {
     }
     setRejecting(true);
     setRejectError(null);
+    const bearerHeaders = await resolveBearerHeaders();
+    if (!bearerHeaders) {
+      setRejecting(false);
+      setRejectError('Admin session expired — please sign in again and retry.');
+      return;
+    }
     const { data, error } = await supabase.functions.invoke(
       'upi-reject-payment',
       {
