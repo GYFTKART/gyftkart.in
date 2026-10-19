@@ -22,6 +22,8 @@ interface UpiDirectProps {
   buyerEmail: string;
   disabled?: boolean;
   onSuccess?: (order: OrderRow) => void;
+  /** Fired when payment proof / UTR is submitted by the user. */
+  onProofSubmitted?: () => void;
   /** Fired when a top-up session is CONFIRMED server-side (balance credited there). */
   onTopUpCompleted?: () => void;
   onError?: (message: string) => void;
@@ -54,6 +56,7 @@ export default function UpiDirectCheckoutButton({
   buyerEmail,
   disabled,
   onSuccess,
+  onProofSubmitted,
   onTopUpCompleted,
   onError,
   onCancel,
@@ -215,13 +218,23 @@ export default function UpiDirectCheckoutButton({
     }
   };
 
-  const cancelSession = () => {
+  const cancelSession = async () => {
     if (pollRef.current) window.clearTimeout(pollRef.current);
+    const draftId = session?.paymentId;
+    const wasProofOk = proofOk;
     setSession(null);
     setPhase('idle');
     setAttempts(0);
     resetProofState();
     onCancel?.();
+
+    if (draftId && !wasProofOk) {
+      try {
+        await supabase.rpc('cancel_upi_draft_session', { p_payment_id: draftId });
+      } catch (err) {
+        console.warn('cancel_upi_draft_session notice:', err);
+      }
+    }
   };
 
   const dismissOutcome = () => {
@@ -393,6 +406,7 @@ export default function UpiDirectCheckoutButton({
               setProofOk(true);
               setProofFile(null);
               toast('Payment submitted for verification!', 'success');
+              onProofSubmitted?.();
               if (fileInputRef.current) fileInputRef.current.value = '';
               return;
             }
@@ -431,6 +445,7 @@ export default function UpiDirectCheckoutButton({
           setProofOk(true);
           setProofFile(null);
           toast('Payment submitted for verification!', 'success');
+          onProofSubmitted?.();
           if (fileInputRef.current) fileInputRef.current.value = '';
           return;
         }
@@ -440,6 +455,7 @@ export default function UpiDirectCheckoutButton({
       setProofOk(true);
       setProofFile(null);
       toast('Payment submitted for verification!', 'success');
+      onProofSubmitted?.();
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
       setProofError(

@@ -93,13 +93,13 @@ const currentMonthStart = () => {
 // ACTIVE no UTR→Awaiting your payment; anything else → raw status.
 const topupStatus = (t: TopupRow): { label: string; cls: string } => {
   if (t.status === 'REVERTED') return { label: 'Reverted', cls: 'bg-slate-100 text-slate-600 border border-slate-200' };
-  if (t.status === 'CONFIRMED' || t.status === 'SUCCESS') return { label: 'Approve', cls: 'bg-emerald-100 text-emerald-700' };
+  if (t.status === 'CONFIRMED' || t.status === 'SUCCESS' || t.status === 'APPROVED' || t.status === 'COMPLETED') {
+    return { label: 'Approve', cls: 'bg-emerald-100 text-emerald-700' };
+  }
   if (t.status === 'REJECTED') return { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' };
   if (t.status === 'CANCELLED') return { label: 'Cancelled', cls: 'bg-slate-100 text-slate-500' };
-  if (t.status === 'ACTIVE') {
-    return t.customer_utr
-      ? { label: 'Pending Verification', cls: 'bg-amber-100 text-amber-700' }
-      : { label: 'Awaiting your payment', cls: 'bg-amber-100 text-amber-700' };
+  if (t.status === 'PENDING_VERIFICATION' || t.status === 'ACTIVE') {
+    return { label: 'Pending Verification', cls: 'bg-amber-100 text-amber-700' };
   }
   return { label: t.status, cls: 'bg-slate-100 text-slate-500' };
 };
@@ -155,7 +155,7 @@ export default function WalletLedgerPanel() {
       const label = topupStatus(t).label;
       if (statusFilter === 'confirmed') return label === 'Confirmed' || label === 'Approve';
       if (statusFilter === 'rejected') return label === 'Rejected' || label === 'Reverted';
-      return label === 'Pending Verification' || label === 'Awaiting your payment';
+      return label === 'Pending Verification';
     }
     const credit = t.type === 'CREDIT';
     if (statusFilter === 'confirmed') return credit;
@@ -243,16 +243,32 @@ export default function WalletLedgerPanel() {
       return;
     }
     setTopupsLoading(true);
+    // Strict query filter: only fetch submitted top-up requests with a valid UTR,
+    // explicitly excluding draft / unsubmitted statuses ('AWAITING_PAYMENT', 'DRAFT', 'QR_GENERATED').
     const { data, error: err } = await supabase
       .from('upi_payment_sessions')
       .select('id, amount_paise, status, customer_utr, admin_remark, created_at, completed_at')
       .eq('category', 'TOPUP')
+      .not('customer_utr', 'is', null)
+      .neq('customer_utr', '')
+      .neq('customer_utr', '-')
+      .not('status', 'in', '("AWAITING_PAYMENT","DRAFT","QR_GENERATED")')
+      .in('status', ['PENDING_VERIFICATION', 'CONFIRMED', 'SUCCESS', 'APPROVED', 'COMPLETED', 'REJECTED', 'REVERTED'])
       .order('created_at', { ascending: false })
       .limit(100);
     if (err) {
       setError(err.message || 'Could not load top-up requests.');
     } else {
-      setTopups((data ?? []) as TopupRow[]);
+      // In-memory defensive filtering: ensure every row has a valid 10-18 digit UTR
+      // and is in an approved / pending verification / completed / rejected status.
+      const validRows = ((data ?? []) as TopupRow[]).filter((t) => {
+        const utr = (t.customer_utr ?? '').trim();
+        if (!utr || utr === '-' || utr.length < 10) return false;
+        const st = (t.status || '').toUpperCase();
+        if (st === 'AWAITING_PAYMENT' || st === 'DRAFT' || st === 'QR_GENERATED') return false;
+        return ['PENDING_VERIFICATION', 'CONFIRMED', 'SUCCESS', 'APPROVED', 'COMPLETED', 'REJECTED', 'REVERTED'].includes(st);
+      });
+      setTopups(validRows);
     }
     setTopupsLoading(false);
   }, []);
@@ -374,13 +390,19 @@ export default function WalletLedgerPanel() {
                 buyerName={authSession?.name ?? ''}
                 buyerEmail={authSession?.email ?? ''}
                 onError={setAmountError}
+                onProofSubmitted={() => {
+                  void loadTopups();
+                }}
                 onTopUpCompleted={() => {
                   void loadWallet();
                   void loadLedger();
                   void loadTopups();
                   setTopupKey((k) => k + 1);
                 }}
-                onCancel={() => setTopupKey((k) => k + 1)}
+                onCancel={() => {
+                  void loadTopups();
+                  setTopupKey((k) => k + 1);
+                }}
                 label={`Add ${inr(rupees)} via UPI`}
               />
               <p className="mt-2 text-[11px] text-amber-700">
