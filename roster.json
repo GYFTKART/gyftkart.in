@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "savedAt": "2026-10-19T05:41:37.897Z",
+  "savedAt": "2026-10-19T06:40:53.726Z",
   "agents": [
     {
       "id": "god",
@@ -11,8 +11,8 @@
       "project": "hive",
       "tmuxTarget": "",
       "cwd": "/Users/mohdsaad/Documents/Website/GyftKart/project-bolt-sb1-oqncpyjw",
-      "status": "working",
-      "action": "explored 1 file (handoff.md) (ctrl+o to expand)",
+      "status": "idle",
+      "action": "awaiting",
       "progress": 0,
       "currentStation": "desk",
       "ptyId": "pty-god",
@@ -30,8 +30,8 @@
       "project": "project-bolt-sb1-oqncpyjw",
       "tmuxTarget": "",
       "cwd": "/Users/mohdsaad/Documents/Website/GyftKart/project-bolt-sb1-oqncpyjw",
-      "status": "working",
-      "action": "explored 2 files (handoff.md, memory.md) (ctrl+o to expand)",
+      "status": "idle",
+      "action": "idle",
       "progress": 0,
       "currentStation": "desk",
       "ptyId": "pty-jim-mvchmt6q",
@@ -49,8 +49,8 @@
       "project": "project-bolt-sb1-oqncpyjw",
       "tmuxTarget": "",
       "cwd": "/Users/mohdsaad/Documents/Website/GyftKart/project-bolt-sb1-oqncpyjw",
-      "status": "working",
-      "action": "explored 2 files (handoff.md, memory.md) (ctrl+o to expand)",
+      "status": "idle",
+      "action": "idle",
       "progress": 0,
       "currentStation": "desk",
       "ptyId": "pty-pam-mvddoybt",
@@ -68,8 +68,8 @@
       "project": "project-bolt-sb1-oqncpyjw",
       "tmuxTarget": "",
       "cwd": "/Users/mohdsaad/Documents/Website/GyftKart/project-bolt-sb1-oqncpyjw",
-      "status": "working",
-      "action": "explored 3 files (handoff.md, memory.md, tasks.json) (ctrl+o to expand)",
+      "status": "idle",
+      "action": "idle",
       "progress": 0,
       "currentStation": "desk",
       "ptyId": "pty-dwight-mve0igl2",
@@ -138,5 +138,5 @@
   ],
   "restorable": [],
   "queues": {},
-  "selectedId": "god"
+  "selectedId": "jim-mvchmt6q"
 }
