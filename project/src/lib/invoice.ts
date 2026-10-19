@@ -102,6 +102,20 @@ export function extractInvoiceItems(rawItems: unknown, fallbackAmount: number): 
       ];
 }
 
+export const COMPANY_DETAILS = {
+  legalName: 'Tecticon Technologies Pvt. Ltd.',
+  brandName: 'GyftKart',
+  cin: 'U74999UP2019PTC112218',
+  gstin: '09AAHCT1158J1Z2',
+  pan: 'AAHCT1158J',
+  address: 'H.NO.AN/25, Lautabagh, Azadnagar, Barabanki, Uttar Pradesh – 225001, India',
+  state: 'Uttar Pradesh',
+  stateCode: '09',
+  supportEmail: 'support@gyftkart.in',
+  billingEmail: 'accounts@gyftkart.in',
+  website: 'www.gyftkart.in',
+} as const;
+
 export const GYFTKART_SUPPLIER_STATE_CODE = '09';
 export const GYFTKART_SUPPLIER_STATE = 'Uttar Pradesh';
 

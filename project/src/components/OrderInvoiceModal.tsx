@@ -12,7 +12,11 @@ import {
 } from 'lucide-react';
 import { inrDecimal, formatDateTime, numberToWordsINR } from '@/lib/format';
 import type { InvoiceData } from '@/lib/invoice';
-import { resolvePlaceOfSupply, calculateInvoiceTax } from '@/lib/invoice';
+import {
+  resolvePlaceOfSupply,
+  calculateInvoiceTax,
+  COMPANY_DETAILS,
+} from '@/lib/invoice';
 import { createWhatsAppShareUrl, formatInvoiceWhatsAppMessage } from '@/lib/whatsapp';
 
 export type { InvoiceData, InvoiceItem, InvoiceCustomer } from '@/lib/invoice';
@@ -74,20 +78,20 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
             </span>
           </div>
           <p className="mt-1 text-[13px] font-extrabold text-slate-900">
-            GyftKart Technologies Pvt. Ltd.
+            {COMPANY_DETAILS.legalName}
           </p>
           <p className="mt-0.5 text-[11px] text-slate-600 max-w-sm">
-            123, Tech Commerce Hub, Hazratganj, Lucknow, Uttar Pradesh – 226001, India
+            {COMPANY_DETAILS.address}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-slate-500 font-medium">
             <span>
-              <strong className="text-slate-700">GSTIN:</strong> 09AAACG1234F1Z5
+              <strong className="text-slate-700">GSTIN:</strong> {COMPANY_DETAILS.gstin}
             </span>
             <span>
-              <strong className="text-slate-700">PAN:</strong> AAACG1234F
+              <strong className="text-slate-700">PAN:</strong> {COMPANY_DETAILS.pan}
             </span>
             <span>
-              <strong className="text-slate-700">CIN:</strong> U72900UP2024PTC123456
+              <strong className="text-slate-700">CIN:</strong> {COMPANY_DETAILS.cin}
             </span>
           </div>
           <p className="mt-0.5 text-[10px] text-slate-500">
@@ -387,7 +391,7 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
         <div className="text-center sm:text-right shrink-0">
           <div className="inline-block rounded-xl border border-dashed border-slate-300 p-3 bg-slate-50/50 text-center min-w-[200px]">
             <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-              For GyftKart Technologies Pvt. Ltd.
+              For {COMPANY_DETAILS.legalName}
             </p>
             <div className="my-2 flex items-center justify-center gap-1 text-emerald-700">
               <ShieldCheck className="h-4 w-4" />
@@ -451,7 +455,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Invoice - ${invoice?.invoiceNumber || 'Document'}</title>
+          <title>Invoice - ${invoice?.invoiceNumber || 'Document'} | ${COMPANY_DETAILS.legalName}</title>
           <script src="https://cdn.tailwindcss.com"></script>
           <script>
             tailwind.config = {
