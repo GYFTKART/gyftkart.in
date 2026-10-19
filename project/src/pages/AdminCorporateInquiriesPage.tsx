@@ -6,7 +6,6 @@ import {
   X,
   FileSpreadsheet,
   RefreshCw,
-  ArrowLeft,
   ChevronRight,
   ChevronLeft,
   Mail,
@@ -234,7 +233,6 @@ export default function AdminCorporateInquiriesPage() {
             <span className="text-slate-900 font-semibold">Corporate Inquiries</span>
           </nav>
           <div className="flex items-center gap-3">
-            <AdminBackButton />
             <button
               onClick={() => loadInquiries(true)}
               disabled={refreshing}
@@ -243,12 +241,7 @@ export default function AdminCorporateInquiriesPage() {
               <RefreshCw className={`h-3.5 w-3.5 text-brand-600 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </button>
-            <Link
-              to="/admin/dashboard"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to Admin Dashboard
-            </Link>
+            <AdminBackButton />
           </div>
         </div>
 
