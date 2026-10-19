@@ -483,23 +483,28 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
           <style>
             @page {
               size: A4 portrait;
-              margin: 10mm 12mm;
+              margin: 8mm;
             }
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            *, *::before, *::after {
+              box-sizing: border-box !important;
+            }
+            html, body {
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
               background: #ffffff !important;
               color: #0f172a !important;
-              margin: 0;
-              padding: 0;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
             .order-invoice-printable {
+              width: 100% !important;
+              max-width: 100% !important;
+              margin: 0 !important;
               padding: 0 !important;
               border: none !important;
               box-shadow: none !important;
-              max-width: 100% !important;
-              width: 100% !important;
             }
             /* Force 2-column side-by-side grids on paper regardless of viewport */
             .grid.grid-cols-1.sm\\:grid-cols-2,
@@ -516,7 +521,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
           </style>
         </head>
         <body>
-          <div style="width: 100%; max-width: 800px; margin: 0 auto;">
+          <div style="width: 100%; max-width: 100%; margin: 0 auto; box-sizing: border-box;">
             ${invoiceEl.outerHTML}
           </div>
           <script>
