@@ -483,7 +483,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
           <style>
             @page {
               size: A4 portrait;
-              margin: 8mm;
+              margin: 8mm 10mm;
             }
             *, *::before, *::after {
               box-sizing: border-box !important;
@@ -494,44 +494,56 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
               padding: 0 !important;
               background: #ffffff !important;
               color: #0f172a !important;
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
             .order-invoice-printable {
               width: 100% !important;
               max-width: 100% !important;
-              margin: 0 !important;
               padding: 0 !important;
+              margin: 0 !important;
               border: none !important;
               box-shadow: none !important;
             }
-            /* Force 2-column side-by-side grids on paper regardless of viewport */
+            /* Force side-by-side layout in print without relying on media queries */
             .grid.grid-cols-1.sm\\:grid-cols-2,
             .grid.grid-cols-1.md\\:grid-cols-2 {
-              display: grid !important;
-              grid-template-columns: 1fr 1fr !important;
-              gap: 1.5rem !important;
+              display: flex !important;
+              flex-direction: row !important;
+              justify-content: space-between !important;
+              gap: 20px !important;
+            }
+            .grid.grid-cols-1.sm\\:grid-cols-2 > div,
+            .grid.grid-cols-1.md\\:grid-cols-2 > div {
+              flex: 1 1 50% !important;
+              max-width: 50% !important;
             }
             .flex-col.sm\\:flex-row {
               display: flex !important;
               flex-direction: row !important;
               justify-content: space-between !important;
             }
+            table {
+              width: 100% !important;
+              table-layout: auto !important;
+            }
           </style>
         </head>
         <body>
-          <div style="width: 100%; max-width: 100%; margin: 0 auto; box-sizing: border-box;">
+          <div style="width: 100%; max-width: 100%; box-sizing: border-box;">
             ${invoiceEl.outerHTML}
           </div>
           <script>
-            setTimeout(() => {
-              window.focus();
-              window.print();
+            window.onload = () => {
               setTimeout(() => {
-                window.frameElement?.remove();
-              }, 1000);
-            }, 350);
+                window.focus();
+                window.print();
+                setTimeout(() => {
+                  window.frameElement?.remove();
+                }, 1000);
+              }, 400);
+            };
           </script>
         </body>
       </html>
