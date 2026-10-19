@@ -248,13 +248,13 @@ export default function AdminCorporateInquiriesPage() {
         {/* Page Title & Overview */}
         <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-2xl font-extrabold text-slate-900 flex items-center gap-2.5">
-              <span className="grid place-items-center h-9 w-9 rounded-xl bg-brand-50 text-brand-700 border border-brand-100 shadow-sm">
-                <Building2 className="h-5 w-5" />
+            <h1 className="font-display text-base font-bold text-slate-900 flex items-center gap-2">
+              <span className="grid place-items-center h-8 w-8 rounded-lg bg-brand-50 text-brand-700 border border-brand-100 shadow-xs">
+                <Building2 className="h-4 w-4" />
               </span>
               Corporate Inquiries
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-0.5">
               Dedicated management table for B2B corporate gifting leads, employee rewards, and bulk orders.
             </p>
           </div>

@@ -742,11 +742,11 @@ export default function AdminCustomersPage() {
         {/* Top Header Bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
-              <Users className="h-7 w-7 text-brand-600" />
+            <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <Users className="h-5 w-5 text-brand-600" />
               Customer Management
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-0.5">
               Complete oversight of retail B2C user accounts, verification flags, and security access.
             </p>
           </div>

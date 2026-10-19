@@ -224,23 +224,23 @@ export default function AdminSubHubPage({ hubKey: propHubKey }: { hubKey?: HubKe
         </div>
 
         {/* Hub Header Card */}
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-3xl border border-slate-200/90 p-6 shadow-soft">
-          <div className="flex items-center gap-4">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-soft">
+          <div className="flex items-center gap-3.5">
             <span
-              className={`grid place-items-center h-14 w-14 rounded-2xl bg-gradient-to-br ${hub.accent} text-white shadow-glow-sm shrink-0`}
+              className={`grid place-items-center h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-gradient-to-br ${hub.accent} text-white shadow-sm shrink-0`}
             >
-              <HubIcon className="h-7 w-7" />
+              <HubIcon className="h-5 w-5" />
             </span>
             <div>
-              <h1 className="font-display text-2xl font-extrabold text-slate-900 tracking-tight">
+              <h1 className="font-display text-base font-bold text-slate-900 tracking-tight">
                 {hub.heading}
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
                 {hub.desc}
               </p>
             </div>
           </div>
-          <span className="self-start sm:self-auto rounded-full bg-slate-100 px-3.5 py-1 text-xs font-bold text-slate-600 shrink-0">
+          <span className="self-start sm:self-auto rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600 shrink-0">
             {hub.subCards.length} {hub.subCards.length === 1 ? 'Sub-module' : 'Sub-modules'}
           </span>
         </div>

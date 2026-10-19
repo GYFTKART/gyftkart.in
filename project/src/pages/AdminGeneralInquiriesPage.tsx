@@ -146,13 +146,13 @@ export default function AdminGeneralInquiriesPage() {
         </div>
 
         {/* Page Header */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="grid place-items-center h-11 w-11 rounded-2xl bg-amber-500 text-white shadow-glow-sm">
-              <HelpCircle className="h-5 w-5" />
+        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="grid place-items-center h-8 w-8 rounded-lg bg-amber-500 text-white shadow-xs">
+              <HelpCircle className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="font-display text-2xl font-extrabold text-slate-900">
+              <h1 className="font-display text-base font-bold text-slate-900">
                 General Enquiries &amp; Customer Support
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">

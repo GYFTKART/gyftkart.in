@@ -163,13 +163,13 @@ export default function AdminWalletManagementPage() {
         </div>
 
         {/* Page Header */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="grid place-items-center h-11 w-11 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 text-white shadow-glow-sm">
-              <Wallet className="h-5 w-5" />
+        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="grid place-items-center h-8 w-8 rounded-lg bg-gradient-to-br from-purple-600 to-indigo-700 text-white shadow-xs">
+              <Wallet className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="font-display text-2xl font-extrabold text-slate-900">
+              <h1 className="font-display text-base font-bold text-slate-900">
                 GyftKart Wallet Management
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">

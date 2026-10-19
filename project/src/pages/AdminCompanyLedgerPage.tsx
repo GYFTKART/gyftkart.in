@@ -575,15 +575,15 @@ export default function AdminCompanyLedgerPage() {
         </div>
 
         {/* Page Title & Actions Toolbar */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
+        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
           <div>
-            <div className="flex items-center gap-2.5">
-              <div className="grid place-items-center h-10 w-10 rounded-2xl bg-brand-600 text-white shadow-glow-sm">
-                <Building2 className="h-5 w-5" />
+            <div className="flex items-center gap-2">
+              <div className="grid place-items-center h-8 w-8 rounded-lg bg-brand-600 text-white shadow-xs">
+                <Building2 className="h-4 w-4" />
               </div>
               <div>
-                <h1 className="font-display text-2xl font-extrabold text-slate-900">Company General Ledger</h1>
-                <p className="text-xs text-slate-500">
+                <h1 className="font-display text-base font-bold text-slate-900">Company General Ledger</h1>
+                <p className="text-xs text-slate-500 mt-0.5">
                   Financial statements, profit &amp; loss breakdown, and Tally-compatible books
                 </p>
               </div>

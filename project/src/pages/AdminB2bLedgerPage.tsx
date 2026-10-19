@@ -524,11 +524,11 @@ export default function AdminB2bLedgerPage() {
               <span className="grid place-items-center h-8 w-8 rounded-lg bg-brand-100 text-brand-700">
                 <Building2 className="h-4 w-4" />
               </span>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-base font-bold text-slate-900 tracking-tight">
                 Corporate B2B Ledger &amp; GST Reconciliation
               </h1>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-0.5">
               Double-entry account statement, corporate voucher debits/credits, and GSTR-1 compliant tax reporting.
             </p>
           </div>

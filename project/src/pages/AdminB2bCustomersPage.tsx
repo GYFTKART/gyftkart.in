@@ -202,11 +202,11 @@ export default function AdminB2bCustomersPage() {
               <span className="grid place-items-center h-8 w-8 rounded-lg bg-brand-100 text-brand-700">
                 <Users className="h-4 w-4" />
               </span>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-base font-bold text-slate-900 tracking-tight">
                 B2B Corporate Customers
               </h1>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-0.5">
               Provision, manage, and audit registered corporate entities, GST accounts, and credit limits.
             </p>
           </div>

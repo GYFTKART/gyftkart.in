@@ -694,11 +694,11 @@ export default function AdminCustomerLedgerPage() {
             <div className="mb-6 rounded-2xl bg-white p-6 shadow-card border border-slate-100">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-xl font-display font-extrabold text-slate-900 flex items-center gap-2">
+                  <h1 className="text-base font-display font-bold text-slate-900 flex items-center gap-2">
                     <Users className="h-5 w-5 text-brand-600" />
                     Customer Directory &amp; Statements
                   </h1>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-0.5 text-xs text-slate-500">
                     Select any registered or B2B corporate customer to inspect their double-entry accounting ledger, balances, and invoices.
                   </p>
                 </div>
