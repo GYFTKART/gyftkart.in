@@ -442,8 +442,8 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
           </script>
           <style>
             @page {
-              size: auto;
-              margin: 12mm;
+              size: A4 portrait;
+              margin: 10mm 12mm;
             }
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -458,20 +458,35 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
               padding: 0 !important;
               border: none !important;
               box-shadow: none !important;
+              max-width: 100% !important;
+              width: 100% !important;
+            }
+            /* Force 2-column side-by-side grids on paper regardless of viewport */
+            .grid.grid-cols-1.sm\\:grid-cols-2,
+            .grid.grid-cols-1.md\\:grid-cols-2 {
+              display: grid !important;
+              grid-template-columns: 1fr 1fr !important;
+              gap: 1.5rem !important;
+            }
+            .flex-col.sm\\:flex-row {
+              display: flex !important;
+              flex-direction: row !important;
+              justify-content: space-between !important;
             }
           </style>
         </head>
         <body>
-          ${invoiceEl.outerHTML}
+          <div style="width: 100%; max-width: 800px; margin: 0 auto;">
+            ${invoiceEl.outerHTML}
+          </div>
           <script>
-            // Ensure tailwind CDN scripts parse before triggering print
             setTimeout(() => {
               window.focus();
               window.print();
               setTimeout(() => {
                 window.frameElement?.remove();
               }, 1000);
-            }, 300);
+            }, 350);
           </script>
         </body>
       </html>
