@@ -392,9 +392,91 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Clean print handler that isolates the invoice document
+  // Dedicated iframe print handler that isolates the invoice document
   const handlePrint = () => {
-    window.print();
+    const invoiceEl = document.getElementById('invoice-printable-area');
+    if (!invoiceEl) return;
+
+    // Create an isolated hidden iframe
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0px';
+    printFrame.style.height = '0px';
+    printFrame.style.border = 'none';
+    document.body.appendChild(printFrame);
+
+    const doc = printFrame.contentWindow?.document;
+    if (!doc) return;
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice - ${invoice?.invoiceNumber || 'Document'}</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <script>
+            tailwind.config = {
+              theme: {
+                extend: {
+                  colors: {
+                    brand: {
+                      50: '#EAF5F1',
+                      100: '#CFE8DF',
+                      200: '#9FD1BF',
+                      300: '#6FBA9F',
+                      400: '#3FA37F',
+                      500: '#17875F',
+                      600: '#0B6E4F',
+                      700: '#0A4A34',
+                      800: '#0A3A2A',
+                      900: '#092E22',
+                      950: '#071F17',
+                    }
+                  }
+                }
+              }
+            };
+          </script>
+          <style>
+            @page {
+              size: auto;
+              margin: 12mm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+              background: #ffffff !important;
+              color: #0f172a !important;
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .order-invoice-printable {
+              padding: 0 !important;
+              border: none !important;
+              box-shadow: none !important;
+            }
+          </style>
+        </head>
+        <body>
+          ${invoiceEl.outerHTML}
+          <script>
+            // Ensure tailwind CDN scripts parse before triggering print
+            setTimeout(() => {
+              window.focus();
+              window.print();
+              setTimeout(() => {
+                window.frameElement?.remove();
+              }, 1000);
+            }, 300);
+          </script>
+        </body>
+      </html>
+    `);
+    doc.close();
   };
 
   const handleCopyInvoiceNumber = () => {
