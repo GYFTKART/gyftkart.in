@@ -31,7 +31,7 @@ import { useAdminAuth } from '@/context/AdminAuthContext';
 import { AdminTopBar, AdminBackButton } from '@/components/AdminHeader';
 import { inrDecimal, formatDateTime } from '@/lib/format';
 import { OrderInvoiceModal } from '@/components/OrderInvoiceModal';
-import { extractInvoiceItems, type InvoiceData } from '@/lib/invoice';
+import { extractInvoiceItems, type InvoiceData, COMPANY_DETAILS } from '@/lib/invoice';
 import ManualWalletCreditModal, { type CustomerSummary } from '@/components/ManualWalletCreditModal';
 
 export type CustomerProfile = {
@@ -651,9 +651,321 @@ export default function AdminCustomerLedgerPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Trigger Print View
+  // Dedicated isolated iframe print handler for customer account statement
   const handlePrint = () => {
-    window.print();
+    if (!selectedCustomer) return;
+
+    // Grab all compiled stylesheets and style tags from the parent document head
+    const parentStyles = Array.from(
+      document.head.querySelectorAll('link[rel="stylesheet"], style')
+    )
+      .map((el) => el.outerHTML)
+      .join('\n');
+
+    // Create an isolated hidden iframe
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0px';
+    printFrame.style.height = '0px';
+    printFrame.style.border = 'none';
+    document.body.appendChild(printFrame);
+
+    const doc = printFrame.contentWindow?.document;
+    if (!doc) return;
+
+    const escapeHtml = (val: unknown): string => {
+      if (typeof val !== 'string') return String(val ?? '');
+      return val
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    const customerName = selectedCustomer.full_name || 'Customer';
+    const periodLabel = fromDate || toDate
+      ? `${fromDate || 'Beginning'} through ${toDate || 'Present'}`
+      : 'All Recorded Transactions';
+    const generatedDateStr = formatDateTime(new Date().toISOString());
+
+    // Generate table rows for ALL sorted transactions in the selected period
+    const tableRowsHtml =
+      sortedTransactions.length === 0
+        ? `
+          <tr>
+            <td colspan="8" style="padding: 24px; text-align: center; color: #64748b; font-size: 11px;">
+              No ledger transactions recorded for this customer in the selected date range.
+            </td>
+          </tr>
+        `
+        : sortedTransactions
+            .map((tx, idx) => {
+              const rowNumber = idx + 1;
+              const isDebit = tx.debit > 0;
+              const isCredit = tx.credit > 0;
+              return `
+                <tr style="border-bottom: 1px solid #e2e8f0; font-size: 10px;">
+                  <td style="padding: 6px 8px; font-family: monospace; color: #64748b;">${rowNumber}</td>
+                  <td style="padding: 6px 8px; font-weight: 500; color: #334155; white-space: nowrap;">${escapeHtml(formatDateTime(tx.date))}</td>
+                  <td style="padding: 6px 8px; white-space: nowrap;">
+                    <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;">
+                      ${escapeHtml(tx.voucherType)}
+                    </span>
+                  </td>
+                  <td style="padding: 6px 8px; font-family: monospace; font-size: 10px; font-weight: 600; color: #0f172a; word-break: break-all;">${escapeHtml(tx.voucherNo)}</td>
+                  <td style="padding: 6px 8px; color: #334155; font-weight: 500;">${escapeHtml(tx.particulars)}</td>
+                  <td style="padding: 6px 8px; text-align: right; font-family: monospace; font-weight: 600; color: ${isDebit ? '#dc2626' : '#94a3b8'}; white-space: nowrap;">
+                    ${isDebit ? inrDecimal(tx.debit) : '—'}
+                  </td>
+                  <td style="padding: 6px 8px; text-align: right; font-family: monospace; font-weight: 600; color: ${isCredit ? '#16a34a' : '#94a3b8'}; white-space: nowrap;">
+                    ${isCredit ? inrDecimal(tx.credit) : '—'}
+                  </td>
+                  <td style="padding: 6px 8px; text-align: right; white-space: nowrap;">
+                    <span style="font-family: monospace; font-weight: 700; color: #0f172a; margin-right: 4px;">${inrDecimal(tx.balance)}</span>
+                    <span style="display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 800; background: ${tx.balanceType === 'Cr' ? '#dcfce7' : '#fee2e2'}; color: ${tx.balanceType === 'Cr' ? '#166534' : '#991b1b'};">
+                      ${tx.balanceType}
+                    </span>
+                  </td>
+                </tr>
+              `;
+            })
+            .join('');
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Customer Statement - ${escapeHtml(customerName)} | ${COMPANY_DETAILS.brandName}</title>
+          ${parentStyles}
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 10mm;
+            }
+            *, *::before, *::after {
+              box-sizing: border-box !important;
+            }
+            html, body {
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              background: #ffffff !important;
+              color: #0f172a !important;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              font-size: 11px;
+              line-height: 1.4;
+            }
+            @media print {
+              body {
+                transform: scale(0.97);
+                transform-origin: top center;
+              }
+            }
+            table {
+              width: 100% !important;
+              border-collapse: collapse !important;
+              page-break-inside: auto;
+            }
+            tr {
+              page-break-inside: avoid;
+              page-break-after: auto;
+            }
+            thead {
+              display: table-header-group;
+            }
+            tfoot {
+              display: table-footer-group;
+            }
+            th, td {
+              word-break: break-word !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div style="width: 100%; max-width: 100%; margin: 0 auto; box-sizing: border-box;">
+            <!-- COMPANY HEADER -->
+            <div style="border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                  <span style="font-size: 20px; font-weight: 900; color: #4338ca; letter-spacing: -0.5px;">GyftKart</span>
+                  <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">· Statement of Account</span>
+                </div>
+                <div style="font-size: 13px; font-weight: 800; color: #0f172a;">${COMPANY_DETAILS.legalName}</div>
+                <div style="font-size: 10px; color: #475569; margin-top: 2px; max-width: 440px;">${COMPANY_DETAILS.address}</div>
+                <div style="font-size: 10px; color: #475569; margin-top: 2px;">
+                  <strong>GSTIN:</strong> ${COMPANY_DETAILS.gstin} &nbsp;|&nbsp; 
+                  <strong>PAN:</strong> ${COMPANY_DETAILS.pan} &nbsp;|&nbsp; 
+                  <strong>CIN:</strong> ${COMPANY_DETAILS.cin}
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div style="display: inline-block; background: #e0e7ff; color: #3730a3; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+                  Customer Ledger
+                </div>
+                <div style="font-size: 10px; color: #64748b;">Statement Date: <strong style="color: #0f172a;">${escapeHtml(generatedDateStr)}</strong></div>
+                <div style="font-size: 10px; color: #64748b; margin-top: 2px;">Period: <strong style="color: #0f172a;">${escapeHtml(periodLabel)}</strong></div>
+                <div style="font-size: 10px; color: #64748b; margin-top: 2px;">Website: <strong style="color: #0f172a;">${COMPANY_DETAILS.website}</strong></div>
+              </div>
+            </div>
+
+            <!-- CUSTOMER DETAILS PANEL -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; font-size: 10px;">
+              <div>
+                <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; margin-bottom: 3px;">Customer Account Information</div>
+                <div style="font-size: 13px; font-weight: 800; color: #0f172a;">${escapeHtml(customerName)}</div>
+                <div style="color: #475569; margin-top: 2px;"><strong>Email:</strong> ${escapeHtml(selectedCustomer.email || 'N/A')}</div>
+                <div style="color: #475569; margin-top: 1px;"><strong>Phone:</strong> ${escapeHtml(selectedCustomer.phone || 'N/A')}</div>
+                <div style="color: #64748b; font-family: monospace; font-size: 9px; margin-top: 2px;"><strong>UUID:</strong> ${escapeHtml(selectedCustomer.id)}</div>
+                ${selectedCustomer.company_name ? `<div style="color: #334155; margin-top: 2px;"><strong>Company:</strong> ${escapeHtml(selectedCustomer.company_name)}</div>` : ''}
+              </div>
+              <div style="text-align: right; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                  <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; margin-bottom: 3px;">Account Category &amp; Status</div>
+                  <div style="font-size: 11px; font-weight: 700; color: #0f172a;">
+                    Customer Type: <span style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 9px;">${escapeHtml(selectedCustomer.customer_type || 'B2C')}</span>
+                  </div>
+                  ${selectedCustomer.gstin ? `<div style="color: #475569; margin-top: 2px;"><strong>GSTIN:</strong> ${escapeHtml(selectedCustomer.gstin)}</div>` : ''}
+                  ${selectedCustomer.pan ? `<div style="color: #475569; margin-top: 1px;"><strong>PAN:</strong> ${escapeHtml(selectedCustomer.pan)}</div>` : ''}
+                </div>
+                <div style="margin-top: 8px;">
+                  <span style="font-size: 10px; color: #64748b;">Current Ledger Balance: </span>
+                  <span style="font-size: 13px; font-weight: 900; color: #0f172a; font-family: monospace;">₹${(selectedCustomer.wallet_balance ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  <span style="display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; background: #dcfce7; color: #166534; margin-left: 3px;">Cr</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- SUMMARY CARDS (4-BOX GRID) -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+              <!-- 1. Opening Balance -->
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;">
+                <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Opening Balance</div>
+                <div style="font-size: 14px; font-weight: 800; color: #0f172a; font-family: monospace; margin-top: 3px;">
+                  ${inrDecimal(openingBalance)}
+                </div>
+                <div style="font-size: 9px; font-weight: 600; color: #64748b; margin-top: 2px;">
+                  Prior to period · <strong style="color: ${openingBalanceType === 'Cr' ? '#16a34a' : '#dc2626'};">${openingBalanceType}</strong>
+                </div>
+              </div>
+
+              <!-- 2. Total Debits (Dr) -->
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;">
+                <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #dc2626; letter-spacing: 0.5px;">Total Debits (Dr)</div>
+                <div style="font-size: 14px; font-weight: 800; color: #dc2626; font-family: monospace; margin-top: 3px;">
+                  ${inrDecimal(periodDebit)}
+                </div>
+                <div style="font-size: 9px; font-weight: 500; color: #64748b; margin-top: 2px;">
+                  Outflows / Purchases
+                </div>
+              </div>
+
+              <!-- 3. Total Credits (Cr) -->
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;">
+                <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #16a34a; letter-spacing: 0.5px;">Total Credits (Cr)</div>
+                <div style="font-size: 14px; font-weight: 800; color: #16a34a; font-family: monospace; margin-top: 3px;">
+                  ${inrDecimal(periodCredit)}
+                </div>
+                <div style="font-size: 9px; font-weight: 500; color: #64748b; margin-top: 2px;">
+                  Inflows / Top-ups
+                </div>
+              </div>
+
+              <!-- 4. Closing Balance -->
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;">
+                <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #4338ca; letter-spacing: 0.5px;">Closing Balance</div>
+                <div style="font-size: 14px; font-weight: 800; color: #0f172a; font-family: monospace; margin-top: 3px;">
+                  ${inrDecimal(closingBalance)}
+                </div>
+                <div style="font-size: 9px; font-weight: 600; color: #64748b; margin-top: 2px;">
+                  Net balance · <strong style="color: ${closingBalanceType === 'Cr' ? '#16a34a' : '#dc2626'};">${closingBalanceType}</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- TRANSACTIONS TABLE -->
+            <table style="width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; margin-bottom: 16px;">
+              <thead>
+                <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">
+                  <th style="padding: 7px 8px; text-align: left; width: 45px;">S. No.</th>
+                  <th style="padding: 7px 8px; text-align: left; width: 130px;">Date &amp; Time</th>
+                  <th style="padding: 7px 8px; text-align: left; width: 110px;">Voucher / Type</th>
+                  <th style="padding: 7px 8px; text-align: left; width: 130px;">Ref / UTR / Voucher</th>
+                  <th style="padding: 7px 8px; text-align: left;">Particulars / Narration</th>
+                  <th style="padding: 7px 8px; text-align: right; width: 85px;">Debit (₹)</th>
+                  <th style="padding: 7px 8px; text-align: right; width: 85px;">Credit (₹)</th>
+                  <th style="padding: 7px 8px; text-align: right; width: 100px;">Balance (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRowsHtml}
+              </tbody>
+              <tfoot>
+                <tr style="background: #f8fafc; border-top: 2px solid #0f172a; font-weight: 800; font-size: 10px; color: #0f172a;">
+                  <td colspan="5" style="padding: 8px 8px; text-align: right; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">
+                    Total for Selected Period:
+                  </td>
+                  <td style="padding: 8px 8px; text-align: right; font-family: monospace; font-size: 11px; color: #dc2626;">
+                    ${inrDecimal(periodDebit)}
+                  </td>
+                  <td style="padding: 8px 8px; text-align: right; font-family: monospace; font-size: 11px; color: #16a34a;">
+                    ${inrDecimal(periodCredit)}
+                  </td>
+                  <td style="padding: 8px 8px; text-align: right; font-family: monospace; font-size: 11px; color: #0f172a;">
+                    ${inrDecimal(closingBalance)}
+                    <span style="font-size: 8px; font-weight: 800; color: #166534; margin-left: 2px;">${closingBalanceType}</span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <!-- STATEMENT FOOTER & AUTHENTICATION -->
+            <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px; margin-top: 12px; font-size: 9px; color: #64748b; display: flex; justify-content: space-between; align-items: flex-end;">
+              <div>
+                <p style="margin: 0 0 2px 0;">
+                  This is a computer-generated statement issued by <strong>${COMPANY_DETAILS.legalName}</strong> (${COMPANY_DETAILS.brandName}).
+                </p>
+                <p style="margin: 0 0 2px 0;">
+                  Registered Office: ${COMPANY_DETAILS.address}
+                </p>
+                <p style="margin: 0;">
+                  For any reconciliation or billing inquiries, contact <strong>${COMPANY_DETAILS.billingEmail}</strong> or call our support desk.
+                </p>
+              </div>
+              <div style="text-align: right; min-width: 180px;">
+                <div style="font-size: 10px; font-weight: 800; color: #0f172a; margin-bottom: 2px;">Digitally Authorized Record</div>
+                <div style="font-size: 9px; color: #475569;">System Timestamp: ${escapeHtml(generatedDateStr)}</div>
+                <div style="font-size: 8px; color: #94a3b8; font-family: monospace; margin-top: 2px;">AUTH-STMT-VERIFIED-OK</div>
+              </div>
+            </div>
+          </div>
+
+          <script>
+            const triggerPrint = () => {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+                setTimeout(() => {
+                  window.frameElement?.remove();
+                }, 1000);
+              }, 250);
+            };
+
+            if (document.readyState === 'complete') {
+              triggerPrint();
+            } else {
+              window.onload = triggerPrint;
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    doc.close();
   };
 
   const handleCopyId = (id: string) => {
