@@ -12,20 +12,23 @@ import {
   ShieldCheck,
   QrCode,
   Users,
+  PlusCircle,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { AdminTopBar } from '@/components/AdminHeader';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/components/Toast';
 import { supabase } from '@/lib/supabase';
 import { inrDecimal } from '@/lib/format';
+import ManualWalletCreditModal, { type CustomerSummary } from '@/components/ManualWalletCreditModal';
 
 interface WalletTxRow {
   id: string;
   user_id: string;
   user_email?: string;
   type: 'CREDIT' | 'DEBIT';
-  category: 'TOPUP' | 'VOUCHER_PURCHASE' | 'REFUND';
-  amount: number; // in paise or rupees
+  category: string;
+  amount: number; // in paise
   balance_after: number;
   reference_id?: string;
   order_id?: string;
@@ -40,7 +43,9 @@ export default function AdminWalletManagementPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'TOPUP' | 'VOUCHER_PURCHASE' | 'REFUND'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'TOPUP' | 'VOUCHER_PURCHASE' | 'REFUND' | 'MANUAL_ADJUSTMENT'>('ALL');
+  const [adjustModalOpen, setAdjustModalOpen] = useState(false);
+  const [adjustCustomer, setAdjustCustomer] = useState<CustomerSummary | null>(null);
 
   const [metrics, setMetrics] = useState({
     totalWallets: 0,
@@ -129,7 +134,11 @@ export default function AdminWalletManagementPage() {
       (tx.order_id && tx.order_id.toLowerCase().includes(searchQuery.toLowerCase())) ||
       tx.category.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesCategory = categoryFilter === 'ALL' || tx.category === categoryFilter;
+    const matchesCategory =
+      categoryFilter === 'ALL' ||
+      (categoryFilter === 'MANUAL_ADJUSTMENT'
+        ? tx.category === 'Manual Adjustment' || tx.category === 'ADJUSTMENT'
+        : tx.category === categoryFilter);
     return matchesSearch && matchesCategory;
   });
 
@@ -176,6 +185,15 @@ export default function AdminWalletManagementPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => {
+                setAdjustCustomer(null);
+                setAdjustModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:from-emerald-700 hover:to-teal-800 transition"
+            >
+              <PlusCircle className="h-3.5 w-3.5" /> Credit / Adjust Balance
+            </button>
             <Link
               to="/admin/customer-ledger"
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-xs"
@@ -280,17 +298,23 @@ export default function AdminWalletManagementPage() {
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto">
-            {(['ALL', 'TOPUP', 'VOUCHER_PURCHASE', 'REFUND'] as const).map((cat) => (
+            {([
+              { id: 'ALL', label: 'All Transactions' },
+              { id: 'TOPUP', label: 'Top-ups' },
+              { id: 'VOUCHER_PURCHASE', label: 'Voucher Purchases' },
+              { id: 'REFUND', label: 'Refunds' },
+              { id: 'MANUAL_ADJUSTMENT', label: 'Manual Adjustments' },
+            ] as const).map((cat) => (
               <button
-                key={cat}
-                onClick={() => setCategoryFilter(cat)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-                  categoryFilter === cat
+                key={cat.id}
+                onClick={() => setCategoryFilter(cat.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors shrink-0 ${
+                  categoryFilter === cat.id
                     ? 'bg-brand-600 text-white shadow-xs'
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                {cat === 'ALL' ? 'All Transactions' : cat.replace('_', ' ')}
+                {cat.label}
               </button>
             ))}
           </div>
@@ -312,7 +336,7 @@ export default function AdminWalletManagementPage() {
               <p className="text-xs text-slate-400 mt-1">
                 {searchQuery || categoryFilter !== 'ALL'
                   ? 'No wallet transactions match the current filters.'
-                  : 'Customer top-ups and voucher purchases will be listed here.'}
+                  : 'Customer top-ups, voucher purchases, and balance adjustments will be listed here.'}
               </p>
             </div>
           ) : (
@@ -326,6 +350,7 @@ export default function AdminWalletManagementPage() {
                     <th className="px-5 py-3.5 text-right">Amount</th>
                     <th className="px-5 py-3.5 text-right">Balance After</th>
                     <th className="px-5 py-3.5 text-right">Date &amp; Time</th>
+                    <th className="px-5 py-3.5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -346,7 +371,13 @@ export default function AdminWalletManagementPage() {
                               <ArrowUpRight className="h-3 w-3" /> Debit
                             </span>
                           )}
-                          <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                          <span
+                            className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                              tx.category === 'Manual Adjustment' || tx.category === 'ADJUSTMENT'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
                             {tx.category.replace('_', ' ')}
                           </span>
                         </div>
@@ -371,6 +402,24 @@ export default function AdminWalletManagementPage() {
                           minute: '2-digit',
                         })}
                       </td>
+                      <td className="px-5 py-4 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdjustCustomer({
+                              id: tx.user_id,
+                              email: tx.user_email,
+                              wallet_balance: tx.balance_after / 100,
+                            });
+                            setAdjustModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition shadow-2xs"
+                          title="Adjust customer balance"
+                        >
+                          <SlidersHorizontal className="h-3 w-3 text-brand-600" />
+                          Adjust
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -379,6 +428,14 @@ export default function AdminWalletManagementPage() {
           )}
         </div>
       </main>
+
+      {/* Manual Wallet Credit / Adjust Balance Modal */}
+      <ManualWalletCreditModal
+        isOpen={adjustModalOpen}
+        onClose={() => setAdjustModalOpen(false)}
+        onSuccess={() => void loadWalletData(true)}
+        initialCustomer={adjustCustomer}
+      />
     </div>
   );
 }

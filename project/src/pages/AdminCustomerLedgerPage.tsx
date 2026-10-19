@@ -23,6 +23,8 @@ import {
   Building2,
   Users,
   RefreshCw,
+  PlusCircle,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
@@ -30,6 +32,7 @@ import { AdminTopBar } from '@/components/AdminHeader';
 import { inrDecimal, formatDateTime } from '@/lib/format';
 import { OrderInvoiceModal } from '@/components/OrderInvoiceModal';
 import { extractInvoiceItems, type InvoiceData } from '@/lib/invoice';
+import ManualWalletCreditModal, { type CustomerSummary } from '@/components/ManualWalletCreditModal';
 
 export type CustomerProfile = {
   id: string;
@@ -165,6 +168,10 @@ export default function AdminCustomerLedgerPage() {
   // Invoice modal state
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceData | null>(null);
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+
+  // Manual adjust modal state
+  const [adjustModalOpen, setAdjustModalOpen] = useState(false);
+  const [adjustCustomer, setAdjustCustomer] = useState<CustomerSummary | null>(null);
 
   const handleOpenLedgerInvoice = (tx: LedgerTransaction) => {
     if (!selectedCustomer) return;
@@ -899,13 +906,35 @@ export default function AdminCustomerLedgerPage() {
 
                             {/* 7. ACTION */}
                             <td className="px-4 py-3.5 text-right pr-6 whitespace-nowrap">
-                              <Link
-                                to={`/admin/customer-ledger/${c.id}`}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-700 transition"
-                              >
-                                View Ledger
-                                <ChevronRight className="h-3 w-3" />
-                              </Link>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAdjustCustomer({
+                                      id: c.id,
+                                      email: c.email,
+                                      full_name: c.full_name,
+                                      phone: c.phone,
+                                      customer_type: c.customer_type,
+                                      company_name: c.company_name,
+                                      wallet_balance: balance,
+                                    });
+                                    setAdjustModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition shadow-2xs"
+                                  title="Manual Credit / Adjust Wallet Balance"
+                                >
+                                  <SlidersHorizontal className="h-3 w-3 text-brand-600" />
+                                  Adjust
+                                </button>
+                                <Link
+                                  to={`/admin/customer-ledger/${c.id}`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-700 transition"
+                                >
+                                  View Ledger
+                                  <ChevronRight className="h-3 w-3" />
+                                </Link>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1097,6 +1126,25 @@ export default function AdminCustomerLedgerPage() {
                         <span className="text-[10px] font-bold text-emerald-700">Cr</span>
                       </span>
                     </div>
+
+                    <button
+                      onClick={() => {
+                        setAdjustCustomer({
+                          id: selectedCustomer.id,
+                          email: selectedCustomer.email,
+                          full_name: selectedCustomer.full_name,
+                          phone: selectedCustomer.phone,
+                          customer_type: selectedCustomer.customer_type,
+                          company_name: selectedCustomer.company_name,
+                          wallet_balance: selectedCustomer.wallet_balance ?? 0,
+                        });
+                        setAdjustModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:from-emerald-700 hover:to-teal-800 transition"
+                      title="Credit or adjust customer wallet balance"
+                    >
+                      <PlusCircle className="h-3.5 w-3.5" /> Adjust / Credit Wallet
+                    </button>
 
                     <button
                       onClick={handleExportCsv}
@@ -1529,6 +1577,20 @@ export default function AdminCustomerLedgerPage() {
               isOpen={isInvoiceOpen}
               onClose={() => setIsInvoiceOpen(false)}
               invoice={selectedInvoice}
+            />
+
+            {/* Manual Wallet Credit / Adjust Balance Modal */}
+            <ManualWalletCreditModal
+              isOpen={adjustModalOpen}
+              onClose={() => setAdjustModalOpen(false)}
+              onSuccess={() => {
+                void loadCustomers();
+                const targetId = routeCustomerId || selectedCustomer?.id;
+                if (targetId) {
+                  void loadLedgerData(targetId);
+                }
+              }}
+              initialCustomer={adjustCustomer}
             />
           </div>
         )}
