@@ -483,7 +483,7 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
           <style>
             @page {
               size: A4 portrait;
-              margin: 8mm 10mm;
+              margin: 6mm 8mm;
             }
             *, *::before, *::after {
               box-sizing: border-box !important;
@@ -498,13 +498,22 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
+            @media print {
+              body {
+                transform: scale(0.97);
+                transform-origin: top center;
+              }
+            }
             .order-invoice-printable {
-              width: 100% !important;
-              max-width: 100% !important;
+              width: 98% !important;
+              max-width: 98% !important;
+              margin: 0 auto !important;
               padding: 0 !important;
-              margin: 0 !important;
               border: none !important;
               box-shadow: none !important;
+              box-sizing: border-box !important;
+              overflow: hidden !important;
+              word-break: break-word !important;
             }
             /* Force side-by-side layout in print without relying on media queries */
             .grid.grid-cols-1.sm\\:grid-cols-2,
@@ -512,26 +521,41 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
               display: flex !important;
               flex-direction: row !important;
               justify-content: space-between !important;
-              gap: 20px !important;
+              gap: 16px !important;
+              width: 100% !important;
             }
             .grid.grid-cols-1.sm\\:grid-cols-2 > div,
             .grid.grid-cols-1.md\\:grid-cols-2 > div {
               flex: 1 1 50% !important;
               max-width: 50% !important;
+              min-width: 0 !important;
+              box-sizing: border-box !important;
             }
             .flex-col.sm\\:flex-row {
               display: flex !important;
               flex-direction: row !important;
               justify-content: space-between !important;
+              width: 100% !important;
             }
             table {
               width: 100% !important;
+              max-width: 100% !important;
               table-layout: auto !important;
+              border-collapse: collapse !important;
+            }
+            th, td {
+              word-break: break-word !important;
+            }
+            th.w-10, th.w-14, th.w-20, th.w-24, th.w-28 {
+              width: auto !important;
+            }
+            .overflow-x-auto {
+              overflow: visible !important;
             }
           </style>
         </head>
         <body>
-          <div style="width: 100%; max-width: 100%; box-sizing: border-box;">
+          <div style="width: 100%; max-width: 100%; margin: 0 auto; box-sizing: border-box; overflow: hidden;">
             ${invoiceEl.outerHTML}
           </div>
           <script>
