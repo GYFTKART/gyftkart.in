@@ -437,6 +437,13 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
     const invoiceEl = document.getElementById('invoice-printable-area');
     if (!invoiceEl) return;
 
+    // Grab all compiled stylesheets and style tags from the parent document head
+    const parentStyles = Array.from(
+      document.head.querySelectorAll('link[rel="stylesheet"], style')
+    )
+      .map((el) => el.outerHTML)
+      .join('\n');
+
     // Create an isolated hidden iframe
     const printFrame = document.createElement('iframe');
     printFrame.style.position = 'fixed';
@@ -456,34 +463,11 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
       <html>
         <head>
           <title>Invoice - ${invoice?.invoiceNumber || 'Document'} | ${COMPANY_DETAILS.legalName}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <script>
-            tailwind.config = {
-              theme: {
-                extend: {
-                  colors: {
-                    brand: {
-                      50: '#EAF5F1',
-                      100: '#CFE8DF',
-                      200: '#9FD1BF',
-                      300: '#6FBA9F',
-                      400: '#3FA37F',
-                      500: '#17875F',
-                      600: '#0B6E4F',
-                      700: '#0A4A34',
-                      800: '#0A3A2A',
-                      900: '#092E22',
-                      950: '#071F17',
-                    }
-                  }
-                }
-              }
-            };
-          </script>
+          ${parentStyles}
           <style>
             @page {
               size: A4 portrait;
-              margin: 6mm 8mm;
+              margin: 8mm;
             }
             *, *::before, *::after {
               box-sizing: border-box !important;
@@ -559,15 +543,21 @@ export const OrderInvoiceModal: React.FC<OrderInvoiceModalProps> = ({
             ${invoiceEl.outerHTML}
           </div>
           <script>
-            window.onload = () => {
+            const triggerPrint = () => {
               setTimeout(() => {
                 window.focus();
                 window.print();
                 setTimeout(() => {
                   window.frameElement?.remove();
                 }, 1000);
-              }, 400);
+              }, 250);
             };
+
+            if (document.readyState === 'complete') {
+              triggerPrint();
+            } else {
+              window.onload = triggerPrint;
+            }
           </script>
         </body>
       </html>
