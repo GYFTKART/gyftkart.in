@@ -655,29 +655,38 @@ export default function AdminCustomerLedgerPage() {
   const handlePrint = () => {
     if (!selectedCustomer) return;
 
-    // Grab all compiled stylesheets and style tags from the parent document head
-    const parentStyles = Array.from(
-      document.head.querySelectorAll('link[rel="stylesheet"], style')
-    )
-      .map((el) => el.outerHTML)
-      .join('\n');
+    // Remove any previous print frame to avoid stale DOM accumulation
+    const oldFrame = document.getElementById('gyftkart-customer-ledger-print-frame');
+    if (oldFrame) {
+      try {
+        oldFrame.remove();
+      } catch {
+        // ignore
+      }
+    }
 
-    // Create an isolated hidden iframe
+    // Create an isolated iframe with explicit dimensions so Chrome never collapses to 0x0
     const printFrame = document.createElement('iframe');
+    printFrame.id = 'gyftkart-customer-ledger-print-frame';
     printFrame.style.position = 'fixed';
-    printFrame.style.right = '0';
-    printFrame.style.bottom = '0';
-    printFrame.style.width = '0px';
-    printFrame.style.height = '0px';
+    printFrame.style.top = '0';
+    printFrame.style.left = '0';
+    printFrame.style.width = '1000px';
+    printFrame.style.height = '1000px';
     printFrame.style.border = 'none';
+    printFrame.style.zIndex = '-9999';
+    printFrame.style.opacity = '0.01';
+    printFrame.style.pointerEvents = 'none';
     document.body.appendChild(printFrame);
 
-    const doc = printFrame.contentWindow?.document;
-    if (!doc) return;
+    const frameWindow = printFrame.contentWindow;
+    if (!frameWindow) return;
+
+    const doc = frameWindow.document;
 
     const escapeHtml = (val: unknown): string => {
-      if (typeof val !== 'string') return String(val ?? '');
-      return val
+      if (val === null || val === undefined) return '';
+      return String(val)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -696,7 +705,7 @@ export default function AdminCustomerLedgerPage() {
       sortedTransactions.length === 0
         ? `
           <tr>
-            <td colspan="8" style="padding: 24px; text-align: center; color: #64748b; font-size: 11px;">
+            <td colspan="8" style="border: 1px solid #cbd5e1; padding: 24px; text-align: center; color: #64748b; font-size: 11px;">
               No ledger transactions recorded for this customer in the selected date range.
             </td>
           </tr>
@@ -706,26 +715,27 @@ export default function AdminCustomerLedgerPage() {
               const rowNumber = idx + 1;
               const isDebit = tx.debit > 0;
               const isCredit = tx.credit > 0;
+              const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
               return `
-                <tr style="border-bottom: 1px solid #e2e8f0; font-size: 10px;">
-                  <td style="padding: 6px 8px; font-family: monospace; color: #64748b;">${rowNumber}</td>
-                  <td style="padding: 6px 8px; font-weight: 500; color: #334155; white-space: nowrap;">${escapeHtml(formatDateTime(tx.date))}</td>
-                  <td style="padding: 6px 8px; white-space: nowrap;">
-                    <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;">
+                <tr style="background-color: ${rowBg}; border-bottom: 1px solid #cbd5e1; font-size: 10px;">
+                  <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-family: monospace; color: #64748b; text-align: center;">${rowNumber}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-weight: 500; color: #1e293b; white-space: nowrap;">${escapeHtml(formatDateTime(tx.date))}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 6px 8px; white-space: nowrap;">
+                    <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; background-color: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1;">
                       ${escapeHtml(tx.voucherType)}
                     </span>
                   </td>
-                  <td style="padding: 6px 8px; font-family: monospace; font-size: 10px; font-weight: 600; color: #0f172a; word-break: break-all;">${escapeHtml(tx.voucherNo)}</td>
-                  <td style="padding: 6px 8px; color: #334155; font-weight: 500;">${escapeHtml(tx.particulars)}</td>
-                  <td style="padding: 6px 8px; text-align: right; font-family: monospace; font-weight: 600; color: ${isDebit ? '#dc2626' : '#94a3b8'}; white-space: nowrap;">
+                  <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-family: monospace; font-size: 10px; font-weight: 600; color: #0f172a; word-break: break-all;">${escapeHtml(tx.voucherNo)}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 6px 8px; color: #1e293b; font-weight: 500;">${escapeHtml(tx.particulars)}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 6px 8px; text-align: right; font-family: monospace; font-weight: 600; color: ${isDebit ? '#b91c1c' : '#94a3b8'}; white-space: nowrap;">
                     ${isDebit ? inrDecimal(tx.debit) : '—'}
                   </td>
-                  <td style="padding: 6px 8px; text-align: right; font-family: monospace; font-weight: 600; color: ${isCredit ? '#16a34a' : '#94a3b8'}; white-space: nowrap;">
+                  <td style="border: 1px solid #cbd5e1; padding: 6px 8px; text-align: right; font-family: monospace; font-weight: 600; color: ${isCredit ? '#15803d' : '#94a3b8'}; white-space: nowrap;">
                     ${isCredit ? inrDecimal(tx.credit) : '—'}
                   </td>
-                  <td style="padding: 6px 8px; text-align: right; white-space: nowrap;">
+                  <td style="border: 1px solid #cbd5e1; padding: 6px 8px; text-align: right; white-space: nowrap;">
                     <span style="font-family: monospace; font-weight: 700; color: #0f172a; margin-right: 4px;">${inrDecimal(tx.balance)}</span>
-                    <span style="display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 800; background: ${tx.balanceType === 'Cr' ? '#dcfce7' : '#fee2e2'}; color: ${tx.balanceType === 'Cr' ? '#166534' : '#991b1b'};">
+                    <span style="display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 800; background-color: ${tx.balanceType === 'Cr' ? '#dcfce7' : '#fee2e2'}; color: ${tx.balanceType === 'Cr' ? '#166534' : '#991b1b'};">
                       ${tx.balanceType}
                     </span>
                   </td>
@@ -734,13 +744,12 @@ export default function AdminCustomerLedgerPage() {
             })
             .join('');
 
-    doc.open();
-    doc.write(`
+    const statementHtml = `
       <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="utf-8" />
           <title>Customer Statement - ${escapeHtml(customerName)} | ${COMPANY_DETAILS.brandName}</title>
-          ${parentStyles}
           <style>
             @page {
               size: A4 portrait;
@@ -753,13 +762,13 @@ export default function AdminCustomerLedgerPage() {
               width: 100% !important;
               margin: 0 !important;
               padding: 0 !important;
-              background: #ffffff !important;
+              background-color: #ffffff !important;
               color: #0f172a !important;
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+              font-size: 11px !important;
+              line-height: 1.4 !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
-              font-size: 11px;
-              line-height: 1.4;
             }
             @media print {
               body {
@@ -805,7 +814,7 @@ export default function AdminCustomerLedgerPage() {
                 </div>
               </div>
               <div style="text-align: right;">
-                <div style="display: inline-block; background: #e0e7ff; color: #3730a3; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+                <div style="display: inline-block; background-color: #e0e7ff; color: #3730a3; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
                   Customer Ledger
                 </div>
                 <div style="font-size: 10px; color: #64748b;">Statement Date: <strong style="color: #0f172a;">${escapeHtml(generatedDateStr)}</strong></div>
@@ -815,49 +824,49 @@ export default function AdminCustomerLedgerPage() {
             </div>
 
             <!-- CUSTOMER DETAILS PANEL -->
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; font-size: 10px;">
-              <div>
+            <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; gap: 12px; font-size: 10px;">
+              <div style="flex: 1;">
                 <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; margin-bottom: 3px;">Customer Account Information</div>
                 <div style="font-size: 13px; font-weight: 800; color: #0f172a;">${escapeHtml(customerName)}</div>
-                <div style="color: #475569; margin-top: 2px;"><strong>Email:</strong> ${escapeHtml(selectedCustomer.email || 'N/A')}</div>
-                <div style="color: #475569; margin-top: 1px;"><strong>Phone:</strong> ${escapeHtml(selectedCustomer.phone || 'N/A')}</div>
+                <div style="color: #334155; margin-top: 2px;"><strong>Email:</strong> ${escapeHtml(selectedCustomer.email || 'N/A')}</div>
+                <div style="color: #334155; margin-top: 1px;"><strong>Phone:</strong> ${escapeHtml(selectedCustomer.phone || 'N/A')}</div>
                 <div style="color: #64748b; font-family: monospace; font-size: 9px; margin-top: 2px;"><strong>UUID:</strong> ${escapeHtml(selectedCustomer.id)}</div>
                 ${selectedCustomer.company_name ? `<div style="color: #334155; margin-top: 2px;"><strong>Company:</strong> ${escapeHtml(selectedCustomer.company_name)}</div>` : ''}
               </div>
-              <div style="text-align: right; display: flex; flex-direction: column; justify-content: space-between;">
+              <div style="text-align: right; display: flex; flex-direction: column; justify-content: space-between; min-width: 220px;">
                 <div>
                   <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; margin-bottom: 3px;">Account Category &amp; Status</div>
                   <div style="font-size: 11px; font-weight: 700; color: #0f172a;">
-                    Customer Type: <span style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 9px;">${escapeHtml(selectedCustomer.customer_type || 'B2C')}</span>
+                    Customer Type: <span style="background-color: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 9px;">${escapeHtml(selectedCustomer.customer_type || 'B2C')}</span>
                   </div>
-                  ${selectedCustomer.gstin ? `<div style="color: #475569; margin-top: 2px;"><strong>GSTIN:</strong> ${escapeHtml(selectedCustomer.gstin)}</div>` : ''}
-                  ${selectedCustomer.pan ? `<div style="color: #475569; margin-top: 1px;"><strong>PAN:</strong> ${escapeHtml(selectedCustomer.pan)}</div>` : ''}
+                  ${selectedCustomer.gstin ? `<div style="color: #334155; margin-top: 2px;"><strong>GSTIN:</strong> ${escapeHtml(selectedCustomer.gstin)}</div>` : ''}
+                  ${selectedCustomer.pan ? `<div style="color: #334155; margin-top: 1px;"><strong>PAN:</strong> ${escapeHtml(selectedCustomer.pan)}</div>` : ''}
                 </div>
                 <div style="margin-top: 8px;">
                   <span style="font-size: 10px; color: #64748b;">Current Ledger Balance: </span>
                   <span style="font-size: 13px; font-weight: 900; color: #0f172a; font-family: monospace;">₹${(selectedCustomer.wallet_balance ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  <span style="display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; background: #dcfce7; color: #166534; margin-left: 3px;">Cr</span>
+                  <span style="display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 800; background-color: #dcfce7; color: #166534; margin-left: 3px;">Cr</span>
                 </div>
               </div>
             </div>
 
-            <!-- SUMMARY CARDS (4-BOX GRID) -->
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+            <!-- SUMMARY CARDS (4-BOX INLINE GRID) -->
+            <div style="display: flex; gap: 10px; margin-bottom: 16px;">
               <!-- 1. Opening Balance -->
-              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;">
+              <div style="flex: 1; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px;">
                 <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Opening Balance</div>
                 <div style="font-size: 14px; font-weight: 800; color: #0f172a; font-family: monospace; margin-top: 3px;">
                   ${inrDecimal(openingBalance)}
                 </div>
                 <div style="font-size: 9px; font-weight: 600; color: #64748b; margin-top: 2px;">
-                  Prior to period · <strong style="color: ${openingBalanceType === 'Cr' ? '#16a34a' : '#dc2626'};">${openingBalanceType}</strong>
+                  Prior to period · <strong style="color: ${openingBalanceType === 'Cr' ? '#15803d' : '#b91c1c'};">${openingBalanceType}</strong>
                 </div>
               </div>
 
               <!-- 2. Total Debits (Dr) -->
-              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;">
-                <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #dc2626; letter-spacing: 0.5px;">Total Debits (Dr)</div>
-                <div style="font-size: 14px; font-weight: 800; color: #dc2626; font-family: monospace; margin-top: 3px;">
+              <div style="flex: 1; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px;">
+                <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #b91c1c; letter-spacing: 0.5px;">Total Debits (Dr)</div>
+                <div style="font-size: 14px; font-weight: 800; color: #b91c1c; font-family: monospace; margin-top: 3px;">
                   ${inrDecimal(periodDebit)}
                 </div>
                 <div style="font-size: 9px; font-weight: 500; color: #64748b; margin-top: 2px;">
@@ -866,9 +875,9 @@ export default function AdminCustomerLedgerPage() {
               </div>
 
               <!-- 3. Total Credits (Cr) -->
-              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;">
-                <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #16a34a; letter-spacing: 0.5px;">Total Credits (Cr)</div>
-                <div style="font-size: 14px; font-weight: 800; color: #16a34a; font-family: monospace; margin-top: 3px;">
+              <div style="flex: 1; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px;">
+                <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #15803d; letter-spacing: 0.5px;">Total Credits (Cr)</div>
+                <div style="font-size: 14px; font-weight: 800; color: #15803d; font-family: monospace; margin-top: 3px;">
                   ${inrDecimal(periodCredit)}
                 </div>
                 <div style="font-size: 9px; font-weight: 500; color: #64748b; margin-top: 2px;">
@@ -877,46 +886,46 @@ export default function AdminCustomerLedgerPage() {
               </div>
 
               <!-- 4. Closing Balance -->
-              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;">
+              <div style="flex: 1; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px;">
                 <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #4338ca; letter-spacing: 0.5px;">Closing Balance</div>
                 <div style="font-size: 14px; font-weight: 800; color: #0f172a; font-family: monospace; margin-top: 3px;">
                   ${inrDecimal(closingBalance)}
                 </div>
                 <div style="font-size: 9px; font-weight: 600; color: #64748b; margin-top: 2px;">
-                  Net balance · <strong style="color: ${closingBalanceType === 'Cr' ? '#16a34a' : '#dc2626'};">${closingBalanceType}</strong>
+                  Net balance · <strong style="color: ${closingBalanceType === 'Cr' ? '#15803d' : '#b91c1c'};">${closingBalanceType}</strong>
                 </div>
               </div>
             </div>
 
             <!-- TRANSACTIONS TABLE -->
-            <table style="width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; margin-bottom: 16px;">
+            <table style="width: 100%; border: 1px solid #0f172a; border-collapse: collapse; margin-bottom: 16px;">
               <thead>
-                <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">
-                  <th style="padding: 7px 8px; text-align: left; width: 45px;">S. No.</th>
-                  <th style="padding: 7px 8px; text-align: left; width: 130px;">Date &amp; Time</th>
-                  <th style="padding: 7px 8px; text-align: left; width: 110px;">Voucher / Type</th>
-                  <th style="padding: 7px 8px; text-align: left; width: 130px;">Ref / UTR / Voucher</th>
-                  <th style="padding: 7px 8px; text-align: left;">Particulars / Narration</th>
-                  <th style="padding: 7px 8px; text-align: right; width: 85px;">Debit (₹)</th>
-                  <th style="padding: 7px 8px; text-align: right; width: 85px;">Credit (₹)</th>
-                  <th style="padding: 7px 8px; text-align: right; width: 100px;">Balance (₹)</th>
+                <tr style="background-color: #f1f5f9; border-bottom: 2px solid #0f172a; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a;">
+                  <th style="border: 1px solid #cbd5e1; padding: 7px 8px; text-align: center; width: 45px;">S. No.</th>
+                  <th style="border: 1px solid #cbd5e1; padding: 7px 8px; text-align: left; width: 130px;">Date &amp; Time</th>
+                  <th style="border: 1px solid #cbd5e1; padding: 7px 8px; text-align: left; width: 110px;">Voucher / Type</th>
+                  <th style="border: 1px solid #cbd5e1; padding: 7px 8px; text-align: left; width: 130px;">Ref / UTR / Voucher</th>
+                  <th style="border: 1px solid #cbd5e1; padding: 7px 8px; text-align: left;">Particulars / Narration</th>
+                  <th style="border: 1px solid #cbd5e1; padding: 7px 8px; text-align: right; width: 85px;">Debit (₹)</th>
+                  <th style="border: 1px solid #cbd5e1; padding: 7px 8px; text-align: right; width: 85px;">Credit (₹)</th>
+                  <th style="border: 1px solid #cbd5e1; padding: 7px 8px; text-align: right; width: 100px;">Balance (₹)</th>
                 </tr>
               </thead>
               <tbody>
                 ${tableRowsHtml}
               </tbody>
               <tfoot>
-                <tr style="background: #f8fafc; border-top: 2px solid #0f172a; font-weight: 800; font-size: 10px; color: #0f172a;">
-                  <td colspan="5" style="padding: 8px 8px; text-align: right; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">
+                <tr style="background-color: #f8fafc; border-top: 2px solid #0f172a; font-weight: 800; font-size: 10px; color: #0f172a;">
+                  <td colspan="5" style="border: 1px solid #cbd5e1; padding: 8px 8px; text-align: right; text-transform: uppercase; letter-spacing: 0.5px; color: #334155;">
                     Total for Selected Period:
                   </td>
-                  <td style="padding: 8px 8px; text-align: right; font-family: monospace; font-size: 11px; color: #dc2626;">
+                  <td style="border: 1px solid #cbd5e1; padding: 8px 8px; text-align: right; font-family: monospace; font-size: 11px; color: #b91c1c;">
                     ${inrDecimal(periodDebit)}
                   </td>
-                  <td style="padding: 8px 8px; text-align: right; font-family: monospace; font-size: 11px; color: #16a34a;">
+                  <td style="border: 1px solid #cbd5e1; padding: 8px 8px; text-align: right; font-family: monospace; font-size: 11px; color: #15803d;">
                     ${inrDecimal(periodCredit)}
                   </td>
-                  <td style="padding: 8px 8px; text-align: right; font-family: monospace; font-size: 11px; color: #0f172a;">
+                  <td style="border: 1px solid #cbd5e1; padding: 8px 8px; text-align: right; font-family: monospace; font-size: 11px; color: #0f172a;">
                     ${inrDecimal(closingBalance)}
                     <span style="font-size: 8px; font-weight: 800; color: #166534; margin-left: 2px;">${closingBalanceType}</span>
                   </td>
@@ -925,10 +934,10 @@ export default function AdminCustomerLedgerPage() {
             </table>
 
             <!-- STATEMENT FOOTER & AUTHENTICATION -->
-            <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px; margin-top: 12px; font-size: 9px; color: #64748b; display: flex; justify-content: space-between; align-items: flex-end;">
+            <div style="border-top: 1px dashed #94a3b8; padding-top: 12px; margin-top: 12px; font-size: 9px; color: #64748b; display: flex; justify-content: space-between; align-items: flex-end;">
               <div>
                 <p style="margin: 0 0 2px 0;">
-                  This is a computer-generated statement issued by <strong>${COMPANY_DETAILS.legalName}</strong> (${COMPANY_DETAILS.brandName}).
+                  This is an electronically generated statement issued by <strong>${COMPANY_DETAILS.legalName}</strong> (${COMPANY_DETAILS.brandName}).
                 </p>
                 <p style="margin: 0 0 2px 0;">
                   Registered Office: ${COMPANY_DETAILS.address}
@@ -944,28 +953,40 @@ export default function AdminCustomerLedgerPage() {
               </div>
             </div>
           </div>
-
-          <script>
-            const triggerPrint = () => {
-              setTimeout(() => {
-                window.focus();
-                window.print();
-                setTimeout(() => {
-                  window.frameElement?.remove();
-                }, 1000);
-              }, 250);
-            };
-
-            if (document.readyState === 'complete') {
-              triggerPrint();
-            } else {
-              window.onload = triggerPrint;
-            }
-          </script>
         </body>
       </html>
-    `);
+    `;
+
+    doc.open();
+    doc.write(statementHtml);
     doc.close();
+
+    const executePrint = () => {
+      try {
+        frameWindow.focus();
+        frameWindow.print();
+      } catch (err) {
+        console.error('Failed to trigger statement print:', err);
+      }
+    };
+
+    // Clean up iframe after user closes print dialog
+    frameWindow.onafterprint = () => {
+      try {
+        printFrame.remove();
+      } catch {
+        // ignore
+      }
+    };
+
+    // Wait for document ready + 300ms paint buffer before invoking print
+    if (doc.readyState === 'complete') {
+      setTimeout(executePrint, 300);
+    } else {
+      frameWindow.onload = () => {
+        setTimeout(executePrint, 300);
+      };
+    }
   };
 
   const handleCopyId = (id: string) => {
@@ -977,12 +998,10 @@ export default function AdminCustomerLedgerPage() {
   if (!admin) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 print:bg-white print:p-0">
-      <div className="print:hidden">
-        <AdminTopBar />
-      </div>
+    <div className="min-h-screen bg-slate-50">
+      <AdminTopBar />
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 print:p-0 print:max-w-none">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         {/* ========================================================================= */}
         {/* VIEW 1: CUSTOMER DIRECTORY LIST (WHEN NO SPECIFIC CUSTOMER IS SELECTED)   */}
         {/* ========================================================================= */}
@@ -1304,7 +1323,7 @@ export default function AdminCustomerLedgerPage() {
         {activeCustomerId && (
           <div>
             {/* Top Navigation & Breadcrumbs */}
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm print:hidden">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm">
               <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-slate-500 font-medium">
                 <Link to="/admin/dashboard" className="hover:text-brand-700 transition-colors">
                   Admin
@@ -1350,25 +1369,9 @@ export default function AdminCustomerLedgerPage() {
               </div>
             )}
 
-            {/* Print-Only Header */}
-            {selectedCustomer && (
-              <div className="hidden print:block mb-8 border-b border-slate-300 pb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-2xl font-black text-slate-900">GYFTKART TECHNOLOGIES</h1>
-                    <p className="text-xs text-slate-600 font-medium">Customer Statement &amp; Double-Entry Reconciliation Ledger</p>
-                  </div>
-                  <div className="text-right text-xs text-slate-600">
-                    <p>Statement Generated: {new Date().toLocaleString('en-IN')}</p>
-                    <p className="font-semibold text-slate-800">Accounting / Tally Export View</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Customer Header Card */}
             {selectedCustomer && (
-              <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100 print:hidden">
+              <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   {/* Left: Customer Identity */}
                   <div className="flex items-start sm:items-center gap-3 min-w-0">
@@ -1470,30 +1473,6 @@ export default function AdminCustomerLedgerPage() {
               </div>
             )}
 
-            {/* Print-Only Customer Statement Banner */}
-            {selectedCustomer && (
-              <div className="hidden print:block mb-6 rounded-xl border border-slate-300 p-4">
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Customer Details</p>
-                    <p className="font-extrabold text-sm text-slate-900">{selectedCustomer.full_name}</p>
-                    <p className="text-slate-600">{selectedCustomer.email} {selectedCustomer.phone ? `· ${selectedCustomer.phone}` : ''}</p>
-                    <p className="font-mono text-[10px] text-slate-500">ID: {selectedCustomer.id}</p>
-                    {selectedCustomer.company_name && (
-                      <p className="text-slate-700 font-semibold mt-1">Company: {selectedCustomer.company_name}</p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Statement Period</p>
-                    <p className="font-bold text-slate-800">
-                      {fromDate || toDate ? `${fromDate || 'Beginning'} through ${toDate || 'Present'}` : 'All Recorded Transactions'}
-                    </p>
-                    <p className="text-slate-600">Current Ledger Balance: <span className="font-bold text-slate-900">{inrDecimal(selectedCustomer.wallet_balance ?? 0)} Cr</span></p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Financial KPI Summary Cards (4 Cards) */}
             {selectedCustomer && (
               <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1563,7 +1542,7 @@ export default function AdminCustomerLedgerPage() {
 
             {/* Date Range Presets & Voucher Search Filter */}
             {selectedCustomer && (
-              <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100 print:hidden">
+              <div className="mb-6 rounded-2xl bg-white p-5 shadow-card border border-slate-100">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   {/* Quick Presets */}
                   <div>
@@ -1659,7 +1638,7 @@ export default function AdminCustomerLedgerPage() {
             {selectedCustomer && (
               <div className="rounded-3xl border border-slate-100 bg-white shadow-card overflow-hidden">
                 {/* Table Header Controls */}
-                <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-slate-100 print:hidden">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-slate-100">
                   <div className="flex items-center gap-3">
                     <h3 className="font-display text-sm font-extrabold text-slate-900">
                       Statement Transactions ({sortedTransactions.length})
@@ -1706,7 +1685,7 @@ export default function AdminCustomerLedgerPage() {
                         <th className="px-4 py-3 text-right w-[110px]">DEBIT (₹)</th>
                         <th className="px-4 py-3 text-right w-[110px]">CREDIT (₹)</th>
                         <th className="px-4 py-3 text-right w-[130px]">BALANCE (₹)</th>
-                        <th className="px-4 py-3 text-center w-[90px] print:hidden">ACTION</th>
+                        <th className="px-4 py-3 text-center w-[90px]">ACTION</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-sans">
@@ -1780,7 +1759,7 @@ export default function AdminCustomerLedgerPage() {
                                   {tx.balanceType}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-center whitespace-nowrap print:hidden">
+                              <td className="px-4 py-3 text-center whitespace-nowrap">
                                 <button
                                   onClick={() => handleOpenLedgerInvoice(tx)}
                                   className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-xs hover:border-brand-500 hover:bg-brand-50/60 hover:text-brand-700 transition"
@@ -1813,7 +1792,7 @@ export default function AdminCustomerLedgerPage() {
                             {inrDecimal(closingBalance)}{' '}
                             <span className="text-[10px] font-bold text-emerald-700">{closingBalanceType}</span>
                           </td>
-                          <td className="print:hidden"></td>
+                          <td></td>
                         </tr>
                       </tfoot>
                     )}
@@ -1822,7 +1801,7 @@ export default function AdminCustomerLedgerPage() {
 
                 {/* Pagination Footer */}
                 {!ledgerLoading && sortedTransactions.length > 0 && (
-                  <div className="border-t border-slate-100 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden">
+                  <div className="border-t border-slate-100 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
                     <p className="text-xs text-slate-500">
                       Showing {(currentPage - 1) * pageSize + 1} to{' '}
                       {Math.min(currentPage * pageSize, sortedTransactions.length)} of {sortedTransactions.length} records
@@ -1865,14 +1844,6 @@ export default function AdminCustomerLedgerPage() {
                 )}
               </div>
             )}
-
-            {/* Printable Footer Note */}
-            <div className="hidden print:block mt-8 text-[11px] text-slate-500 border-t border-slate-200 pt-3">
-              <p>
-                This statement is a computer-generated double-entry customer ledger prepared for auditing, Tally import, and accounting reconciliation.
-                All debits represent customer spending or debit adjustments; all credits represent customer fund inflows, top-ups, or refunds.
-              </p>
-            </div>
 
             {/* Tax Invoice / Receipt Modal */}
             <OrderInvoiceModal
