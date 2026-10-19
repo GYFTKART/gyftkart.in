@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
-import { AdminTopBar } from '@/components/AdminHeader';
+import { AdminTopBar, AdminBackButton } from '@/components/AdminHeader';
 import { inr, inrDecimal, formatDateTime, formatDate } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 import type { CompanyLedgerEntry, CompanyTransactionType } from '@/lib/types';
@@ -554,6 +554,7 @@ export default function AdminCompanyLedgerPage() {
             <span className="text-slate-900 font-semibold">Company Ledger</span>
           </nav>
           <div className="flex items-center gap-3">
+            <AdminBackButton />
             <Link
               to="/admin/dashboard"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"

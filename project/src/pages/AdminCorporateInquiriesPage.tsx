@@ -23,7 +23,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/components/Toast';
-import { AdminTopBar } from '@/components/AdminHeader';
+import { AdminTopBar, AdminBackButton } from '@/components/AdminHeader';
 import { formatDateTime } from '@/lib/format';
 
 export type Inquiry = {
@@ -234,6 +234,7 @@ export default function AdminCorporateInquiriesPage() {
             <span className="text-slate-900 font-semibold">Corporate Inquiries</span>
           </nav>
           <div className="flex items-center gap-3">
+            <AdminBackButton />
             <button
               onClick={() => loadInquiries(true)}
               disabled={refreshing}

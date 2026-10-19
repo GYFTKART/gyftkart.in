@@ -20,7 +20,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/components/Toast';
-import { AdminTopBar } from '@/components/AdminHeader';
+import { AdminTopBar, AdminBackButton } from '@/components/AdminHeader';
 import { inr, inrDecimal, formatDateTime } from '@/lib/format';
 import { OrderInvoiceModal } from '@/components/OrderInvoiceModal';
 import { type InvoiceData } from '@/lib/invoice';
@@ -296,6 +296,7 @@ export default function AdminGiftCardSalesPage() {
             <span className="text-slate-900 font-semibold">Gift Card Sales</span>
           </nav>
           <div className="flex items-center gap-3">
+            <AdminBackButton />
             <button
               onClick={() => loadPurchases(true)}
               disabled={refreshing}

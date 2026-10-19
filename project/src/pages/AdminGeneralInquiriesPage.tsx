@@ -14,7 +14,7 @@ import {
   AlertCircle,
   MessageSquare,
 } from 'lucide-react';
-import { AdminTopBar } from '@/components/AdminHeader';
+import { AdminTopBar, AdminBackButton } from '@/components/AdminHeader';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useToast } from '@/components/Toast';
 import { supabase } from '@/lib/supabase';
@@ -142,6 +142,7 @@ export default function AdminGeneralInquiriesPage() {
             <span className="text-slate-900 font-semibold">General Enquiries</span>
           </nav>
           <div className="flex items-center gap-3">
+            <AdminBackButton />
             <Link
               to="/admin/dashboard"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"

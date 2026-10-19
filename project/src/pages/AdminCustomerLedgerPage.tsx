@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
-import { AdminTopBar } from '@/components/AdminHeader';
+import { AdminTopBar, AdminBackButton } from '@/components/AdminHeader';
 import { inrDecimal, formatDateTime } from '@/lib/format';
 import { OrderInvoiceModal } from '@/components/OrderInvoiceModal';
 import { extractInvoiceItems, type InvoiceData } from '@/lib/invoice';
@@ -686,6 +686,7 @@ export default function AdminCustomerLedgerPage() {
                 <span className="text-slate-900 font-semibold">Customer Ledger Directory</span>
               </nav>
               <div className="flex items-center gap-3">
+                <AdminBackButton />
                 <Link
                   to="/admin/dashboard"
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"
@@ -1012,11 +1013,18 @@ export default function AdminCustomerLedgerPage() {
                 </span>
               </nav>
               <div className="flex items-center gap-3">
+                <AdminBackButton />
                 <Link
                   to="/admin/customer-ledger"
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 hover:underline transition-colors bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" /> Back to Customer Directory
+                </Link>
+                <Link
+                  to="/admin/dashboard"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-brand-700 hover:underline transition-colors"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
                 </Link>
               </div>
             </div>

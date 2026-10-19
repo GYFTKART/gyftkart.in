@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminAuth } from '@/context/AdminAuthContext';
-import { AdminTopBar } from '@/components/AdminHeader';
+import { AdminTopBar, AdminBackButton } from '@/components/AdminHeader';
 import { inr } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 
@@ -192,6 +192,7 @@ export default function AdminB2bCustomersPage() {
             <span className="text-slate-900 font-semibold">B2B Customers</span>
           </nav>
           <div className="flex items-center gap-3">
+            <AdminBackButton />
             <Link
               to="/admin/dashboard"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline transition-colors"
