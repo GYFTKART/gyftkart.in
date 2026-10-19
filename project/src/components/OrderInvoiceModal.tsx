@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { inrDecimal, formatDateTime, numberToWordsINR } from '@/lib/format';
 import type { InvoiceData } from '@/lib/invoice';
+import { resolvePlaceOfSupply, calculateInvoiceTax } from '@/lib/invoice';
 import { createWhatsAppShareUrl, formatInvoiceWhatsAppMessage } from '@/lib/whatsapp';
 
 export type { InvoiceData, InvoiceItem, InvoiceCustomer } from '@/lib/invoice';
@@ -40,6 +41,20 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
   const isB2B =
     invoice.customer.customerType === 'B2B' ||
     Boolean(invoice.customer.gstin || invoice.customer.companyName);
+
+  const pos = resolvePlaceOfSupply(invoice.customer);
+  const totalTax = invoice.tax ?? 0;
+  const effectiveTaxRate =
+    totalTax > 0 && invoice.subtotal > 0
+      ? Number(((totalTax / invoice.subtotal) * 100).toFixed(2))
+      : 0;
+
+  const taxBreakdown = calculateInvoiceTax(
+    invoice.subtotal,
+    totalTax,
+    invoice.customer,
+    effectiveTaxRate
+  );
 
   return (
     <div
@@ -108,7 +123,13 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
             <p>
               <span className="text-slate-500 font-sans">Place of Supply:</span>{' '}
               <span className="text-slate-900 font-semibold">
-                {invoice.customer.billingState || 'Uttar Pradesh (09)'}
+                {pos.placeOfSupplyLabel}
+              </span>
+            </p>
+            <p>
+              <span className="text-slate-500 font-sans">Supply Type:</span>{' '}
+              <span className="text-slate-900 font-semibold">
+                {taxBreakdown.isIntraState ? 'Intra-State (CGST + SGST)' : 'Inter-State (IGST)'}
               </span>
             </p>
             <p>
@@ -261,7 +282,11 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
                   {inrDecimal(item.denomination ?? item.unitPrice ?? 0)}
                 </td>
                 <td className="px-3 py-3 text-center text-[10px] font-semibold text-slate-500">
-                  0.00%
+                  {effectiveTaxRate > 0
+                    ? taxBreakdown.isIntraState
+                      ? `${taxBreakdown.cgstRate + taxBreakdown.sgstRate}%`
+                      : `${taxBreakdown.igstRate}%`
+                    : '0.00%'}
                 </td>
                 <td className="px-3 py-3 text-right font-mono font-bold text-slate-900">
                   {inrDecimal(item.total ?? item.totalPrice ?? 0)}
@@ -304,18 +329,29 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
             <span className="font-sans">Subtotal (Taxable Value):</span>
             <span>{inrDecimal(invoice.subtotal)}</span>
           </div>
-          <div className="flex justify-between py-1 text-slate-500">
-            <span className="font-sans">Central GST (CGST 0%):</span>
-            <span>₹0.00</span>
-          </div>
-          <div className="flex justify-between py-1 text-slate-500">
-            <span className="font-sans">State GST (SGST 0%):</span>
-            <span>₹0.00</span>
-          </div>
-          <div className="flex justify-between py-1 text-slate-500">
-            <span className="font-sans">Integrated GST (IGST 0%):</span>
-            <span>₹0.00</span>
-          </div>
+          {taxBreakdown.isIntraState ? (
+            <>
+              <div className="flex justify-between py-1 text-slate-500">
+                <span className="font-sans">
+                  Central GST (CGST {taxBreakdown.cgstRate}%):
+                </span>
+                <span>{inrDecimal(taxBreakdown.cgstAmount)}</span>
+              </div>
+              <div className="flex justify-between py-1 text-slate-500">
+                <span className="font-sans">
+                  State GST (SGST {taxBreakdown.sgstRate}%):
+                </span>
+                <span>{inrDecimal(taxBreakdown.sgstAmount)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between py-1 text-slate-500">
+              <span className="font-sans">
+                Integrated GST (IGST {taxBreakdown.igstRate}%):
+              </span>
+              <span>{inrDecimal(taxBreakdown.igstAmount)}</span>
+            </div>
+          )}
           {invoice.discount ? (
             <div className="flex justify-between py-1 text-emerald-600 font-semibold">
               <span className="font-sans">Discount:</span>
